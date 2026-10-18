@@ -1,7 +1,7 @@
 # Story 004: Récompenses et vol d'attaque
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -72,3 +72,10 @@
 
 - Depends on: Story 003 must be DONE
 - Unlocks: Story 005
+
+## Completion Notes
+**Completed**: 2026-10-18
+**Criteria**: 5/5 passing. Real mouse play on this version (reward screen, deck viewer, Passer) confirmed by the developer.
+**Deviations**: ADVISORY — player HP never recovers yet (healing arrives with the Pokémon Center in stories 005/006); no pause between the killing blow and the reward screen; user-facing French strings (incl. rarity names/colours in `card_view.gd`) still hardcoded; `BattleScreen` still carries unused `COLOR_TEXT_*` constants. Scope additions: `src/main.gd` now owns GameData/RunState/RNGs and screen switching (UI no longer owns state, per the story 001 review); shared `src/ui/card_view.gd`; 9 enemies each teach 1–2 attack cards; reward pool = 28 non-starter cards. Design choices: stolen card is picked uniformly from all cards taught by the beaten Pokémon, the other slots by rarity weight (60/30/10); offers are shuffled; `battles_won` counts survived battles.
+**Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-004-recompenses-vol-attaque/` (8 PNGs + README.md). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720). 1208/1208 throwaway headless assertions pass (run state, reward generator, data validation) plus the 202 type assertions from story 003.
+**Code Review**: Skipped (solo mode).
