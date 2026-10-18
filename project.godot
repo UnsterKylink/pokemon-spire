@@ -1,15 +1,21 @@
 ; Engine configuration file.
 ; Created by /setup-engine. Open this folder in Godot 4.6 to edit the project.
-; run/main_scene is intentionally unset: /dev-story (or you) sets it once a scene exists.
 
 config_version=5
 
 [application]
 
 config/name="Pokémon Spire"
+run/main_scene="res://src/ui/battle_screen.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"

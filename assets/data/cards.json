@@ -1,0 +1,14 @@
+{
+	"cards": {
+		"griffe": {"name": "Griffe", "cost": 1, "kind": "attack", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"abri": {"name": "Abri", "cost": 1, "kind": "skill", "damage": 0, "block": 5, "description": "Gagne 5 points de protection."},
+		"flammeche": {"name": "Flammèche", "cost": 2, "kind": "attack", "damage": 8, "block": 0, "description": "Inflige 8 dégâts."},
+		"rugissement": {"name": "Rugissement", "cost": 0, "kind": "skill", "damage": 0, "block": 3, "description": "Gagne 3 points de protection."},
+		"danse_flamme": {"name": "Danse-Flamme", "cost": 2, "kind": "attack", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"vive_attaque": {"name": "Vive-Attaque", "cost": 0, "kind": "attack", "damage": 3, "block": 0, "description": "Inflige 3 dégâts."},
+		"crocs_feu": {"name": "Crocs Feu", "cost": 1, "kind": "attack", "damage": 8, "block": 0, "description": "Inflige 8 dégâts."},
+		"mur_de_fumee": {"name": "Mur de Fumée", "cost": 2, "kind": "skill", "damage": 0, "block": 12, "description": "Gagne 12 points de protection."},
+		"draco_griffe": {"name": "Draco-Griffe", "cost": 2, "kind": "attack", "damage": 11, "block": 0, "description": "Inflige 11 dégâts."},
+		"mimi_queue": {"name": "Mimi-Queue", "cost": 1, "kind": "skill", "damage": 0, "block": 7, "description": "Gagne 7 points de protection."}
+	}
+}

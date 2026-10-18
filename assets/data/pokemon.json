@@ -1,0 +1,17 @@
+{
+	"player": {
+		"salameche": {
+			"name": "Salamèche",
+			"max_hp": 75,
+			"sprite": "res://assets/sprites/pokemon/charmander.png",
+			"energy_per_turn": 3,
+			"hand_size": 5,
+			"starter_deck": {"griffe": 5, "abri": 4, "flammeche": 1}
+		}
+	},
+	"enemies": {
+		"rattata": {"name": "Rattata", "max_hp": 30, "attack_damage": 7, "sprite": "res://assets/sprites/pokemon/rattata.png"},
+		"pidgey": {"name": "Roucool", "max_hp": 28, "attack_damage": 6, "sprite": "res://assets/sprites/pokemon/pidgey.png"},
+		"caterpie": {"name": "Chenipan", "max_hp": 24, "attack_damage": 5, "sprite": "res://assets/sprites/pokemon/caterpie.png"}
+	}
+}
