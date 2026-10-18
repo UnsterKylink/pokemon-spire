@@ -2,6 +2,7 @@
 	"player": {
 		"salameche": {
 			"name": "Salamèche",
+			"type": "fire",
 			"max_hp": 75,
 			"sprite": "res://assets/sprites/pokemon/charmander.png",
 			"energy_per_turn": 3,
@@ -9,25 +10,39 @@
 			"starter_deck": {"griffe": 5, "abri": 4, "flammeche": 1}
 		}
 	},
-	"_enemies_doc": "pattern: 'sequence' (actions in order, looping) or 'weighted' (random pick by 'weight'). Action: type attack|block|buff, value > 0 (buff = +value strength: all later attacks +value), weight > 0 (weighted only).",
+	"_enemies_doc": "type: id de types.json (obligatoire, joueur et ennemis). pattern: 'sequence' (actions in order, looping) or 'weighted' (random pick by 'weight'). Action: type attack|block|buff, value > 0 (buff = +value strength: all later attacks +value), weight > 0 (weighted only).",
 	"enemies": {
-		"rattata": {"name": "Rattata", "max_hp": 30, "sprite": "res://assets/sprites/pokemon/rattata.png", "pattern": "weighted", "actions": [
+		"rattata": {"name": "Rattata", "type": "normal", "max_hp": 30, "sprite": "res://assets/sprites/pokemon/rattata.png", "pattern": "weighted", "actions": [
 			{"type": "attack", "value": 7, "weight": 4},
 			{"type": "block", "value": 5, "weight": 1}]},
-		"pidgey": {"name": "Roucool", "max_hp": 28, "sprite": "res://assets/sprites/pokemon/pidgey.png", "pattern": "weighted", "actions": [
+		"pidgey": {"name": "Roucool", "type": "flying", "max_hp": 28, "sprite": "res://assets/sprites/pokemon/pidgey.png", "pattern": "weighted", "actions": [
 			{"type": "attack", "value": 6, "weight": 3},
 			{"type": "block", "value": 5, "weight": 1}]},
-		"caterpie": {"name": "Chenipan", "max_hp": 24, "sprite": "res://assets/sprites/pokemon/caterpie.png", "pattern": "sequence", "actions": [
+		"caterpie": {"name": "Chenipan", "type": "bug", "max_hp": 24, "sprite": "res://assets/sprites/pokemon/caterpie.png", "pattern": "sequence", "actions": [
 			{"type": "attack", "value": 5},
 			{"type": "attack", "value": 5},
 			{"type": "block", "value": 6}]},
-		"weedle": {"name": "Aspicot", "max_hp": 26, "sprite": "res://assets/sprites/pokemon/weedle.png", "pattern": "sequence", "actions": [
+		"weedle": {"name": "Aspicot", "type": "bug", "max_hp": 26, "sprite": "res://assets/sprites/pokemon/weedle.png", "pattern": "sequence", "actions": [
 			{"type": "attack", "value": 4},
 			{"type": "buff", "value": 2},
 			{"type": "attack", "value": 4}]},
-		"zubat": {"name": "Nosferapti", "max_hp": 22, "sprite": "res://assets/sprites/pokemon/zubat.png", "pattern": "weighted", "actions": [
+		"zubat": {"name": "Nosferapti", "type": "poison", "max_hp": 22, "sprite": "res://assets/sprites/pokemon/zubat.png", "pattern": "weighted", "actions": [
 			{"type": "attack", "value": 6, "weight": 3},
-			{"type": "buff", "value": 1, "weight": 1}]}
+			{"type": "buff", "value": 1, "weight": 1}]},
+		"geodude": {"name": "Racaillou", "type": "rock", "max_hp": 34, "sprite": "res://assets/sprites/pokemon/geodude.png", "pattern": "sequence", "actions": [
+			{"type": "attack", "value": 6},
+			{"type": "block", "value": 6},
+			{"type": "attack", "value": 8}]},
+		"poliwag": {"name": "Ptitard", "type": "water", "max_hp": 26, "sprite": "res://assets/sprites/pokemon/poliwag.png", "pattern": "weighted", "actions": [
+			{"type": "attack", "value": 6, "weight": 3},
+			{"type": "block", "value": 4, "weight": 1}]},
+		"oddish": {"name": "Mystherbe", "type": "grass", "max_hp": 27, "sprite": "res://assets/sprites/pokemon/oddish.png", "pattern": "sequence", "actions": [
+			{"type": "attack", "value": 5},
+			{"type": "buff", "value": 1},
+			{"type": "attack", "value": 6}]},
+		"pikachu": {"name": "Pikachu", "type": "electric", "max_hp": 28, "sprite": "res://assets/sprites/pokemon/pikachu.png", "pattern": "weighted", "actions": [
+			{"type": "attack", "value": 7, "weight": 3},
+			{"type": "buff", "value": 2, "weight": 1}]}
 	},
 	"encounters": {
 		"solo": ["rattata"],
@@ -39,7 +54,13 @@
 		"duo_insectes": ["caterpie", "weedle"],
 		"duo_nuit": ["rattata", "zubat"],
 		"trio": ["rattata", "zubat", "caterpie"],
-		"trio_vol": ["pidgey", "zubat", "weedle"]
+		"trio_vol": ["pidgey", "zubat", "weedle"],
+		"solo_racaillou": ["geodude"],
+		"solo_ptitard": ["poliwag"],
+		"solo_mystherbe": ["oddish"],
+		"solo_pikachu": ["pikachu"],
+		"duo_elements": ["poliwag", "geodude"],
+		"trio_mix": ["oddish", "pikachu", "geodude"]
 	},
-	"encounter_order": ["solo", "duo", "trio", "solo_roucool", "solo_chenipan", "solo_aspicot", "solo_nosferapti", "duo_insectes", "duo_nuit", "trio_vol"]
+	"encounter_order": ["solo", "duo", "trio", "solo_roucool", "solo_chenipan", "solo_aspicot", "solo_nosferapti", "duo_insectes", "duo_nuit", "trio_vol", "solo_racaillou", "solo_ptitard", "solo_mystherbe", "solo_pikachu", "duo_elements", "trio_mix"]
 }

@@ -1,7 +1,8 @@
 class_name BattleScreen
 extends Control
 ## Playable battle screen (mouse only). UI is built from containers in code; all logic lives in Battle.
-## Implements: story-001-combat-de-base (écran jouable), story-002-intentions-et-multi-ennemis.
+## Implements: story-001-combat-de-base (écran jouable), story-002-intentions-et-multi-ennemis,
+## story-003-types (type badges, "Super efficace !" feedback).
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
 
 const PLAYER_ID: String = "salameche"
@@ -23,6 +24,26 @@ const COLOR_INTENT_BUFF: Color = Color(1.0, 0.9, 0.3)
 const COLOR_KO: Color = Color(0.6, 0.6, 0.6)
 const MODULATE_KO: Color = Color(0.45, 0.45, 0.45, 0.55)
 const MODULATE_TARGETABLE: Color = Color(1.0, 0.9, 0.6)
+const COLOR_TEXT_LIGHT: Color = Color(1.0, 1.0, 1.0)
+const COLOR_TEXT_DARK: Color = Color(0.1, 0.1, 0.12)
+const COLOR_SUPER_EFFECTIVE: Color = Color(0.35, 1.0, 0.4)
+const COLOR_NOT_VERY_EFFECTIVE: Color = Color(0.72, 0.72, 0.76)
+const TEXT_SUPER_EFFECTIVE: String = "Super efficace !"
+const TEXT_NOT_VERY_EFFECTIVE: String = "Ce n'est pas très efficace…"
+## Effectiveness feedback: total visible time (s), final fade (s), upward drift (px).
+const FLOAT_DURATION: float = 1.2
+const FLOAT_FADE: float = 0.4
+const FLOAT_RISE: float = 24.0
+const FLOAT_SCREEN_MARGIN: float = 8.0
+const FLOAT_FONT_SIZE: int = 22
+
+
+## A floating feedback label and its running tween (one per target, reused).
+class FloatText extends RefCounted:
+	var label: Label
+	var tween: Tween
+	## Bumped on every show/hide so a deferred show that was superseded does nothing.
+	var serial: int = 0
 
 
 ## Widgets of one enemy slot (typed refs, no find_child).
@@ -34,6 +55,8 @@ class EnemyView extends RefCounted:
 	var hp_bar: ProgressBar
 	var hp_label: Label
 	var block_label: Label
+	var type_badge: PanelContainer
+	var float_text: FloatText
 
 
 var _battle: Battle
@@ -47,6 +70,9 @@ var _encounter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var _background: ColorRect
 var _player_name: Label
+var _player_type_badge: PanelContainer
+var _player_float: FloatText
+var _float_layer: Control
 var _player_sprite: TextureRect
 var _player_hp_bar: ProgressBar
 var _player_hp_label: Label
@@ -103,6 +129,18 @@ func get_encounter_id() -> String:
 	return _encounter_id
 
 
+## Text of the effectiveness label currently shown over enemy enemy_index ("" if none).
+func get_enemy_float_text(enemy_index: int) -> String:
+	if enemy_index < 0 or enemy_index >= _enemy_views.size():
+		return ""
+	return _visible_float_text(_enemy_views[enemy_index].float_text)
+
+
+## Text of the effectiveness label currently shown over the player ("" if none).
+func get_player_float_text() -> String:
+	return _visible_float_text(_player_float)
+
+
 ## Starts a fresh battle (fresh player) on the given encounter id.
 func start_encounter(encounter_id: String) -> void:
 	if _data == null or not _encounter_order.has(encounter_id):
@@ -116,13 +154,17 @@ func start_encounter(encounter_id: String) -> void:
 	if player == null or enemies.is_empty():
 		return
 	_battle = Battle.new(player, enemies, _data.get_starter_deck(PLAYER_ID),
-			_data.get_energy_per_turn(PLAYER_ID), _data.get_hand_size(PLAYER_ID), _rng)
+			_data.get_energy_per_turn(PLAYER_ID), _data.get_hand_size(PLAYER_ID), _rng,
+			_data.get_type_chart())
 	_build_enemy_views(_battle.enemies)
 	_player_name.text = player.display_name
+	_set_badge(_player_type_badge, player.type_id)
+	_hide_float(_player_float)
 	_player_sprite.texture = _load_texture(player.sprite_path)
 	_end_box.visible = false
 	_end_dim.visible = false
 	_battle.state_changed.connect(_refresh)
+	_battle.hit_resolved.connect(_on_hit_resolved)
 	_battle.start()
 	_refresh()
 
@@ -225,6 +267,8 @@ func _build_ui() -> void:
 	arena.add_child(player_box)
 	_player_name = _make_label(28)
 	player_box.add_child(_player_name)
+	_player_type_badge = _make_type_badge()
+	player_box.add_child(_player_type_badge)
 	_player_sprite = _make_sprite_holder("PlayerSprite", PLAYER_SPRITE_SCALE)
 	player_box.add_child(_player_sprite)
 	_player_hp_bar = _make_hp_bar(COLOR_HP_PLAYER, PLAYER_SPRITE_SCALE)
@@ -302,6 +346,16 @@ func _build_ui() -> void:
 	_restart_button.pressed.connect(restart)
 	_end_box.add_child(_restart_button)
 
+	# Floating feedback layer (never intercepts the mouse). It sits just below the
+	# end-of-battle dim so the Victoire / Défaite message always stays on top.
+	_float_layer = Control.new()
+	_float_layer.name = "FloatLayer"
+	_float_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_float_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_float_layer)
+	move_child(_float_layer, _end_dim.get_index())
+	_player_float = _make_float_text()
+
 
 func _make_label(font_size: int) -> Label:
 	var l := Label.new()
@@ -309,6 +363,48 @@ func _make_label(font_size: int) -> Label:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", font_size)
 	return l
+
+
+## Small rounded badge (PanelContainer + Label "Text") coloured by type; see _set_badge.
+func _make_type_badge(font_size: int = 16) -> PanelContainer:
+	var badge := PanelContainer.new()
+	badge.name = "TypeBadge"
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var text := _make_label(font_size)
+	text.name = "Text"
+	badge.add_child(text)
+	return badge
+
+
+## Fills a badge with the type's French name and colour (hidden when the type is empty/unknown).
+func _set_badge(badge: PanelContainer, type_id: String) -> void:
+	var chart: TypeChart = _data.get_type_chart()
+	badge.visible = chart.is_known_type(type_id)
+	if not badge.visible:
+		return
+	var color: Color = chart.get_type_color(type_id)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.set_corner_radius_all(9)
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	sb.content_margin_top = 1.0
+	sb.content_margin_bottom = 1.0
+	badge.add_theme_stylebox_override("panel", sb)
+	var text: Label = badge.get_node("Text") as Label
+	text.text = chart.get_type_name(type_id)
+	text.add_theme_color_override("font_color", COLOR_TEXT_DARK if color.get_luminance() > 0.5 else COLOR_TEXT_LIGHT)
+
+
+func _make_float_text() -> FloatText:
+	var f := FloatText.new()
+	f.label = _make_label(FLOAT_FONT_SIZE)
+	f.label.add_theme_color_override("font_outline_color", Color.BLACK)
+	f.label.add_theme_constant_override("outline_size", 8)
+	f.label.visible = false
+	_float_layer.add_child(f.label)
+	return f
 
 
 func _make_hp_bar(fill_color: Color, sprite_scale: float) -> ProgressBar:
@@ -345,6 +441,8 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 	for child: Node in _enemies_box.get_children():
 		_enemies_box.remove_child(child)
 		child.queue_free()
+	for old: EnemyView in _enemy_views:
+		_free_float(old.float_text)
 	_enemy_views.clear()
 	var scale_index: int = clampi(enemies.size(), 1, ENEMY_SPRITE_SCALES.size()) - 1
 	var sprite_scale: float = ENEMY_SPRITE_SCALES[scale_index]
@@ -360,6 +458,9 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.name_label = _make_label(24)
 		v.name_label.text = enemies[i].display_name
 		v.panel.add_child(v.name_label)
+		v.type_badge = _make_type_badge()
+		_set_badge(v.type_badge, enemies[i].type_id)
+		v.panel.add_child(v.type_badge)
 		v.intent_label = _make_label(22)
 		v.panel.add_child(v.intent_label)
 		v.sprite = _make_sprite_holder("EnemySprite%d" % i, sprite_scale)
@@ -372,7 +473,81 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.block_label = _make_label(18)
 		v.block_label.add_theme_color_override("font_color", COLOR_INTENT_BLOCK)
 		v.panel.add_child(v.block_label)
+		v.float_text = _make_float_text()
 		_enemy_views.append(v)
+
+
+# --- Effectiveness feedback ------------------------------------------------
+
+func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> void:
+	if is_equal_approx(multiplier, 1.0):
+		return
+	var f: FloatText = null
+	var anchor: Control = null
+	if target == _battle.player:
+		f = _player_float
+		anchor = _player_sprite
+	else:
+		var idx: int = _battle.enemies.find(target)
+		if idx < 0 or idx >= _enemy_views.size():
+			return
+		f = _enemy_views[idx].float_text
+		anchor = _enemy_views[idx].sprite
+	_show_float(f, anchor, multiplier > 1.0)
+
+
+## Shows the floating label over `anchor` for FLOAT_DURATION s (drifts up, fades at the end).
+## Any previous tween of the same label is killed first; nothing here blocks input or logic.
+func _show_float(f: FloatText, anchor: Control, super_effective: bool) -> void:
+	if f.tween != null and f.tween.is_valid():
+		f.tween.kill()
+	f.label.text = TEXT_SUPER_EFFECTIVE if super_effective else TEXT_NOT_VERY_EFFECTIVE
+	f.label.add_theme_color_override("font_color",
+			COLOR_SUPER_EFFECTIVE if super_effective else COLOR_NOT_VERY_EFFECTIVE)
+	f.serial += 1
+	var my_serial: int = f.serial
+	f.label.visible = false
+	# Wait one frame so container layout has settled (e.g. right after a new encounter
+	# rebuilt the enemy slots); otherwise the anchor rect is stale.
+	await get_tree().process_frame
+	if my_serial != f.serial or not is_instance_valid(f.label) or not is_instance_valid(anchor):
+		return
+	f.label.modulate = Color.WHITE
+	f.label.visible = true
+	f.label.reset_size()
+	var r: Rect2 = anchor.get_global_rect()
+	var start: Vector2 = Vector2(r.get_center().x - f.label.size.x * 0.5, r.position.y + 8.0)
+	# Keep the whole text on screen (the rightmost enemy slot is near the edge).
+	var screen_w: float = get_viewport_rect().size.x
+	start.x = clampf(start.x, FLOAT_SCREEN_MARGIN, maxf(FLOAT_SCREEN_MARGIN, screen_w - f.label.size.x - FLOAT_SCREEN_MARGIN))
+	f.label.global_position = start
+	f.tween = f.label.create_tween()
+	f.tween.set_parallel(true)
+	f.tween.tween_property(f.label, "global_position:y", start.y - FLOAT_RISE, FLOAT_DURATION)
+	f.tween.tween_property(f.label, "modulate:a", 0.0, FLOAT_FADE).set_delay(FLOAT_DURATION - FLOAT_FADE)
+	f.tween.chain().tween_callback(f.label.hide)
+
+
+func _hide_float(f: FloatText) -> void:
+	if f == null:
+		return
+	f.serial += 1
+	if f.tween != null and f.tween.is_valid():
+		f.tween.kill()
+	f.label.visible = false
+
+
+func _free_float(f: FloatText) -> void:
+	if f == null:
+		return
+	_hide_float(f)
+	f.label.queue_free()
+
+
+func _visible_float_text(f: FloatText) -> String:
+	if f == null or not f.label.visible:
+		return ""
+	return f.label.text
 
 
 func _load_texture(path: String) -> Texture2D:
@@ -448,9 +623,7 @@ func _rebuild_hand() -> void:
 		var card: CardData = _battle.hand[i]
 		var b := Button.new()
 		b.custom_minimum_size = CARD_SIZE
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.clip_text = false
-		b.text = "%s\nCoût : %d\n\n%s" % [card.display_name, card.cost, card.description]
+		_fill_card_content(b, card)
 		b.disabled = not _battle.can_play(i)
 		var kind_color: Color = COLOR_SKILL if card.kind == CardData.KIND_SKILL else COLOR_ATTACK
 		var sb := StyleBoxFlat.new()
@@ -472,7 +645,43 @@ func _rebuild_hand() -> void:
 		b.add_theme_stylebox_override("pressed", sb)
 		b.add_theme_stylebox_override("disabled", sb_disabled)
 		b.pressed.connect(select_card.bind(i))
+		var content: Control = b.get_node("Content") as Control
+		content.modulate = Color(1, 1, 1, 0.45) if b.disabled else Color.WHITE
 		_hand_box.add_child(b)
+
+
+## Builds the visual content of a card button from child controls (all ignore the mouse so the
+## Button keeps click/hover/disabled): name, cost, type badge (attacks), description.
+func _fill_card_content(b: Button, card: CardData) -> void:
+	var margin := MarginContainer.new()
+	margin.name = "Content"
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side: String in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 8)
+	b.add_child(margin)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", 4)
+	margin.add_child(box)
+	var name_label := _make_label(18)
+	name_label.name = "CardName"
+	name_label.text = card.display_name
+	box.add_child(name_label)
+	var cost_label := _make_label(16)
+	cost_label.text = "Coût : %d" % card.cost
+	box.add_child(cost_label)
+	if not card.type_id.is_empty():
+		var badge := _make_type_badge(14)
+		_set_badge(badge, card.type_id)
+		box.add_child(badge)
+	var desc := _make_label(15)
+	desc.name = "CardDescription"
+	desc.text = card.description
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	box.add_child(desc)
 
 
 # --- Input -----------------------------------------------------------------

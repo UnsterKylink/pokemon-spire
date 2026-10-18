@@ -1,0 +1,28 @@
+{
+	"_doc": "Table des types. 'multipliers': facteur applique aux degats de base (super_effective, not_very_effective, neutral), chacun > 0. 'types': id -> {name: nom francais affiche, color: '#RRGGBB'}. 'chart': id du type ATTAQUANT -> {super_effective: [ids defenseurs], not_very_effective: [ids defenseurs]}; tout couple non liste est neutre; un defenseur ne peut pas etre dans les deux listes ni deux fois dans une liste. Degats finaux = floor(degats de base * multiplicateur), appliques avant la protection. Table simplifiee : pas d'immunites, x1.5 au lieu de x2.",
+	"multipliers": {"super_effective": 1.5, "not_very_effective": 0.5, "neutral": 1.0},
+	"types": {
+		"normal": {"name": "Normal", "color": "#A8A77A"},
+		"fire": {"name": "Feu", "color": "#EE8130"},
+		"water": {"name": "Eau", "color": "#6390F0"},
+		"electric": {"name": "Électrik", "color": "#F7D02C"},
+		"grass": {"name": "Plante", "color": "#7AC74C"},
+		"poison": {"name": "Poison", "color": "#A33EA1"},
+		"ground": {"name": "Sol", "color": "#E2BF65"},
+		"flying": {"name": "Vol", "color": "#A98FF3"},
+		"bug": {"name": "Insecte", "color": "#A6B91A"},
+		"rock": {"name": "Roche", "color": "#B6A136"}
+	},
+	"chart": {
+		"normal": {"super_effective": [], "not_very_effective": ["rock"]},
+		"fire": {"super_effective": ["grass", "bug"], "not_very_effective": ["fire", "water", "rock"]},
+		"water": {"super_effective": ["fire", "ground", "rock"], "not_very_effective": ["water", "grass"]},
+		"electric": {"super_effective": ["water", "flying"], "not_very_effective": ["electric", "grass", "ground"]},
+		"grass": {"super_effective": ["water", "ground", "rock"], "not_very_effective": ["fire", "grass", "poison", "flying", "bug"]},
+		"poison": {"super_effective": ["grass"], "not_very_effective": ["poison", "ground", "rock"]},
+		"ground": {"super_effective": ["fire", "electric", "poison", "rock"], "not_very_effective": ["grass", "bug", "flying"]},
+		"flying": {"super_effective": ["grass", "bug"], "not_very_effective": ["electric", "rock"]},
+		"bug": {"super_effective": ["grass"], "not_very_effective": ["fire", "poison", "flying"]},
+		"rock": {"super_effective": ["fire", "flying", "bug"], "not_very_effective": ["ground"]}
+	}
+}

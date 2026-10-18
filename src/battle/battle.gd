@@ -2,7 +2,7 @@ class_name Battle
 extends RefCounted
 ## Pure combat logic (no nodes/scenes): 1 player Pokémon vs 1..3 enemies with data-driven intents.
 ## Implements: design/game-brief.md MVP features 1-2, story-001-combat-de-base,
-## story-002-intentions-et-multi-ennemis.
+## story-002-intentions-et-multi-ennemis, story-003-types.
 
 enum State { PLAYER_TURN, WON, LOST }
 
@@ -13,6 +13,9 @@ signal state_changed
 signal turn_started
 signal card_played(card: CardData)
 signal enemy_acted(enemy: Combatant, intent: EnemyIntent)
+## Emitted for every damaging hit (card or enemy attack) AFTER state changes. `amount` is the
+## final damage (strength and type multiplier applied) BEFORE block; `multiplier` is the type factor.
+signal hit_resolved(target: Combatant, amount: int, multiplier: float)
 signal battle_won
 signal battle_lost
 
@@ -27,13 +30,17 @@ var hand: Array[CardData] = []
 var discard_pile: Array[CardData] = []
 
 var _rng: RandomNumberGenerator
+var _type_chart: TypeChart
 
 
 ## Starts a battle. rng is injected so shuffles and weighted intents are seedable.
 ## Expects 1..3 enemies: extra enemies are ignored, an empty list is reported (push_error).
+## type_chart is injected; null means no types (every hit neutral).
 func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Array[CardData],
-		energy_per_turn: int, cards_per_turn: int, rng: RandomNumberGenerator) -> void:
+		energy_per_turn: int, cards_per_turn: int, rng: RandomNumberGenerator,
+		type_chart: TypeChart = null) -> void:
 	player = player_combatant
+	_type_chart = type_chart if type_chart != null else TypeChart.neutral_chart()
 	for e: Combatant in enemy_list:
 		if e != null and enemies.size() < MAX_ENEMIES:
 			enemies.append(e)
@@ -88,13 +95,20 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	energy -= card.cost
 	hand.remove_at(index)
 	discard_pile.append(card)
+	var hit_target: Combatant = null
+	var hit_amount: int = 0
+	var hit_mult: float = 1.0
 	if card.damage > 0:
-		var target: Combatant = enemies[target_index]
-		target.take_damage(card.damage)
-		if not target.is_alive():
-			target.intent = null  # a K.O. enemy no longer acts
+		hit_target = enemies[target_index]
+		hit_mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_id)
+		hit_amount = _type_chart.final_damage(card.damage, card.type_id, hit_target.type_id)
+		hit_target.take_damage(hit_amount)  # block absorbs AFTER the type multiplier
+		if not hit_target.is_alive():
+			hit_target.intent = null  # a K.O. enemy no longer acts
 	if card.block > 0:
 		player.add_block(card.block)
+	if hit_target != null:
+		hit_resolved.emit(hit_target, hit_amount, hit_mult)
 	card_played.emit(card)
 	if first_living_enemy() < 0:
 		state = State.WON
@@ -133,18 +147,23 @@ func end_turn() -> bool:
 func _execute_intent(enemy: Combatant) -> void:
 	var intent: EnemyIntent = enemy.intent
 	enemy.reset_block()  # block from the previous round expires when the enemy acts
+	var hit: bool = false
 	match intent.type:
 		EnemyIntent.TYPE_ATTACK:
+			# intent.value is already the FINAL damage vs the player (strength + type applied).
 			player.take_damage(intent.value)
+			hit = true
 		EnemyIntent.TYPE_BLOCK:
 			enemy.add_block(intent.value)
 		EnemyIntent.TYPE_BUFF:
 			enemy.strength += intent.value
+	if hit:
+		hit_resolved.emit(player, intent.value, _type_chart.damage_multiplier(enemy.type_id, player.type_id))
 	enemy_acted.emit(enemy, intent)
 
 
 ## Chooses the enemy's next action from its data (sequence or weighted). Attack values
-## include the enemy's current strength, so the displayed intent is exactly what runs.
+## include the enemy's strength and the type multiplier vs the player, so the displayed intent is exactly what runs.
 func _roll_intent(enemy: Combatant) -> void:
 	if not enemy.is_alive() or enemy.actions.is_empty():
 		enemy.intent = null
@@ -165,7 +184,11 @@ func _roll_intent(enemy: Combatant) -> void:
 		chosen = enemy.actions[enemy.sequence_index % enemy.actions.size()]
 		enemy.sequence_index = (enemy.sequence_index + 1) % enemy.actions.size()
 	var bonus: int = enemy.strength if chosen.type == EnemyIntent.TYPE_ATTACK else 0
-	enemy.intent = chosen.with_bonus(bonus)
+	var rolled: EnemyIntent = chosen.with_bonus(bonus)
+	if rolled.type == EnemyIntent.TYPE_ATTACK:
+		# Strength is added BEFORE the type multiplier; the displayed value is the final one.
+		rolled.value = _type_chart.final_damage(rolled.value, enemy.type_id, player.type_id)
+	enemy.intent = rolled
 
 
 func _start_player_turn() -> void:

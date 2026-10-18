@@ -10,6 +10,8 @@ const PATTERN_WEIGHTED: String = "weighted"
 var id: String = ""
 var display_name: String = ""
 var sprite_path: String = ""
+## Type id from types.json (story 003); empty = typeless (always neutral).
+var type_id: String = ""
 var max_hp: int = 1
 var hp: int = 1
 var block: int = 0
@@ -37,6 +39,7 @@ static func from_dict(combatant_id: String, d: Dictionary) -> Combatant:
 	c.max_hp = int(d["max_hp"])
 	c.hp = c.max_hp
 	c.sprite_path = String(d["sprite"])
+	c.type_id = String(d.get("type", ""))
 	if d.has("pattern"):
 		c.pattern = String(d["pattern"])
 		if c.pattern != PATTERN_SEQUENCE and c.pattern != PATTERN_WEIGHTED:

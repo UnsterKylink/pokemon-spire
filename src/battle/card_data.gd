@@ -1,7 +1,7 @@
 class_name CardData
 extends RefCounted
 ## Immutable definition of a card, loaded from assets/data/cards.json.
-## Implements: design/game-brief.md (MVP: combat à cartes), story-001.
+## Implements: design/game-brief.md (MVP: combat à cartes), story-001, story-003 (type_id).
 
 const KIND_ATTACK: String = "attack"
 const KIND_SKILL: String = "skill"
@@ -13,6 +13,8 @@ var kind: String = KIND_ATTACK
 var damage: int = 0
 var block: int = 0
 var description: String = ""
+## Type id from types.json; empty for skill cards (they deal no damage).
+var type_id: String = ""
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -36,6 +38,7 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	card.damage = int(d["damage"])
 	card.block = int(d["block"])
 	card.description = String(d["description"])
+	card.type_id = String(d.get("type", ""))
 	return card
 
 

@@ -1,10 +1,14 @@
 class_name GameData
 extends RefCounted
-## Loads and validates the JSON data files (cards, Pokémon, encounters). No gameplay value lives in code.
+## Loads and validates the JSON data files (types, cards, Pokémon, encounters). No gameplay value lives in code.
 
 const DEFAULT_CARDS_PATH: String = "res://assets/data/cards.json"
 const DEFAULT_POKEMON_PATH: String = "res://assets/data/pokemon.json"
+const DEFAULT_TYPES_PATH: String = "res://assets/data/types.json"
+## Minimum number of types the type table must define (story 003).
+const MIN_TYPES: int = 10
 
+var _type_chart: TypeChart = TypeChart.neutral_chart()
 var _cards: Dictionary = {}    # String -> CardData
 var _players: Dictionary = {}  # String -> Dictionary (raw definition)
 var _enemies: Dictionary = {}  # String -> Dictionary (raw definition)
@@ -12,23 +16,49 @@ var _encounters: Dictionary = {}  # String -> Array (enemy ids)
 var _encounter_order: Array[String] = []
 
 
-## Loads both files. Returns false (after push_error) if anything is missing or invalid.
-func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH) -> bool:
+## Loads all three files. Returns false (after push_error) if anything is missing or invalid.
+func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
+		types_path: String = DEFAULT_TYPES_PATH) -> bool:
+	_type_chart = TypeChart.neutral_chart()
 	_cards.clear()
 	_players.clear()
 	_enemies.clear()
 	_encounters.clear()
 	_encounter_order.clear()
+	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
-	if cards_root.is_empty() or pokemon_root.is_empty():
+	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty():
 		return false
+	var chart: TypeChart = TypeChart.from_dict(types_root)
+	if chart == null:
+		return false
+	if chart.get_type_ids().size() < MIN_TYPES:
+		push_error("GameData: types file defines %d types, at least %d are required"
+				% [chart.get_type_ids().size(), MIN_TYPES])
+		return false
+	_type_chart = chart
 	var ok: bool = true
 	ok = _load_cards(cards_root) and ok
 	ok = _load_players(pokemon_root) and ok
 	ok = _load_enemies(pokemon_root) and ok
 	ok = _load_encounters(pokemon_root) and ok
 	return ok
+
+
+## The type table (multipliers + names/colours). Neutral/empty until load_all succeeds.
+func get_type_chart() -> TypeChart:
+	return _type_chart
+
+
+## French display name of a type id ("" if unknown).
+func get_type_name(type_id: String) -> String:
+	return _type_chart.get_type_name(type_id)
+
+
+## Display colour of a type id (white if unknown).
+func get_type_color(type_id: String) -> Color:
+	return _type_chart.get_type_color(type_id)
 
 
 ## Returns the card or null (with push_error) if the id is unknown.
@@ -127,6 +157,10 @@ func _load_cards(cards_root: Dictionary) -> bool:
 		var card: CardData = null
 		if def is Dictionary:
 			card = CardData.from_dict(card_id, def)
+			# Attacks must have a type; a skill may omit it but, if given, it must be known.
+			if card != null and not _check_type_ref("card '%s'" % card_id, card.type_id,
+					card.kind == CardData.KIND_ATTACK):
+				card = null
 		else:
 			push_error("GameData: card '%s' must be an object" % card_id)
 		if card == null:
@@ -150,6 +184,8 @@ func _load_players(pokemon_root: Dictionary) -> bool:
 			ok = false
 			continue
 		var def: Dictionary = def_v
+		if not _check_type_ref("player '%s'" % pid, String(def.get("type", "")), true):
+			ok = false
 		for key: String in ["energy_per_turn", "hand_size"]:
 			if not _is_positive_int(def.get(key, null)):
 				push_error("GameData: player '%s' needs a positive integer '%s'" % [pid, key])
@@ -184,6 +220,8 @@ func _load_enemies(pokemon_root: Dictionary) -> bool:
 			ok = false
 			continue
 		var def: Dictionary = def_v
+		if not _check_type_ref("enemy '%s'" % eid, String(def.get("type", "")), true):
+			ok = false
 		if not _is_positive_int(def.get("max_hp", null)):
 			push_error("GameData: enemy '%s' needs a positive integer 'max_hp'" % eid)
 			ok = false
@@ -256,6 +294,19 @@ func _load_encounters(pokemon_root: Dictionary) -> bool:
 		else:
 			_encounter_order.append(enc_id)
 	return ok
+
+
+## Checks a `type` reference against the loaded chart. `required`: an empty type is an error.
+func _check_type_ref(owner_label: String, type_id: String, required: bool) -> bool:
+	if type_id.is_empty():
+		if required:
+			push_error("GameData: %s needs a 'type'" % owner_label)
+			return false
+		return true
+	if not _type_chart.is_known_type(type_id):
+		push_error("GameData: %s has unknown type '%s'" % [owner_label, type_id])
+		return false
+	return true
 
 
 ## True for an int, or a float with no fractional part (JSON numbers parse as float), > 0.

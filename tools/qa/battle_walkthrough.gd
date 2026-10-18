@@ -1,8 +1,9 @@
 extends SceneTree
-## QA harness: drives BattleScreen through the 3 encounters (solo, duo, trio) and saves screenshots.
+## QA harness: drives BattleScreen through the type scenarios (trio_mix, fire vs grass/rock, water vs fire player,
+## victory) and saves screenshots.
 ## Run (needs a display, not --headless):
 ##   godot --path . --windowed --resolution 1280x720 -s res://tools/qa/battle_walkthrough.gd -- <out_dir>
-## Story: pokemon-spire 001, 002
+## Story: pokemon-spire 001, 002, 003
 
 var _screen: BattleScreen
 var _out_dir: String = "user://qa"
@@ -32,7 +33,8 @@ func _shot(shot_name: String) -> void:
 		intents.append(e.intent.display_text() if e.intent != null else "-")
 	print("shot ", shot_name, " | enc=", _screen.get_encounter_id(), " hp=", b.player.hp,
 		" enemies=", hps, " intents=", intents, " energy=", b.energy,
-		" block=", b.player.block, " state=", b.state)
+		" block=", b.player.block, " state=", b.state,
+		" float_player='", _screen.get_player_float_text(), "'")
 
 
 func _index_of(kind: String) -> int:
@@ -64,38 +66,63 @@ func _win_battle() -> void:
 		_kill_enemy(k)
 
 
+## Index of the first playable hand card with this id, or -1.
+func _index_of_id(card_id: String) -> int:
+	var b: Battle = _screen.get_battle()
+	for i: int in b.hand.size():
+		if b.hand[i].id == card_id and b.can_play(i):
+			return i
+	return -1
+
+
+## Restarts the encounter (fresh shuffle) until the card is playable in hand. Bounded.
+func _start_with_card(encounter_id: String, card_id: String) -> bool:
+	for attempt: int in 60:
+		_screen.start_encounter(encounter_id)
+		if _index_of_id(card_id) >= 0:
+			# Let the freshly built enemy slots get laid out so the floating label is positioned right.
+			await process_frame
+			await process_frame
+			return true
+	push_error("walkthrough: card '%s' never drawn on '%s'" % [card_id, encounter_id])
+	return false
+
+
+## Selects the card then clicks the enemy (the real UI path).
+func _play_on(card_id: String, enemy_index: int) -> void:
+	_screen.select_card(_index_of_id(card_id))
+	_screen.click_enemy(enemy_index)
+
+
 func _run() -> void:
-	var order: Array[String] = ["solo", "duo", "trio"]
-	# Solo: intents visible, then a win.
-	_screen.start_encounter(order[0])
-	await _shot("01-solo-debut")
-	_win_battle()
-	await _shot("02-solo-victoire")
-	# Duo.
-	_screen.start_encounter(order[1])
-	await _shot("03-duo-debut")
-	_win_battle()
-	await _shot("04-duo-victoire")
-	# Trio: selection, one KO, then a win.
-	_screen.start_encounter(order[2])
-	await _shot("05-trio-debut")
-	var a: int = _index_of(CardData.KIND_ATTACK)
-	_screen.select_card(a)
-	await _shot("06-trio-carte-selectionnee")
-	_screen.click_background()
-	_kill_enemy(1)
-	await _shot("07-trio-un-ko")
-	_win_battle()
-	await _shot("08-trio-victoire")
-	# Rejouer after a victory goes to the next encounter (wraps to solo).
-	_screen.restart()
-	await _shot("09-rejouer-apres-victoire")
-	# Defeat: only end turns, then Rejouer repeats the same encounter.
+	# 1. trio_mix: types visible on the cards and on the 3 enemies + the player.
+	_screen.start_encounter("trio_mix")
+	await _shot("01-trio-mix-debut-types")
+	# 2. Fire attack on the grass enemy (Mystherbe, slot 0): "Super efficace !".
+	if await _start_with_card("trio_mix", "flammeche"):
+		_play_on("flammeche", 0)
+		print("float text enemy0 = '", _screen.get_enemy_float_text(0), "'")
+		await _shot("02-feu-sur-plante-super-efficace")
+	# 3. Fire attack on the rock enemy (Racaillou, slot 2): "Ce n'est pas très efficace…".
+	if await _start_with_card("trio_mix", "flammeche"):
+		_play_on("flammeche", 2)
+		print("float text enemy2 = '", _screen.get_enemy_float_text(2), "'")
+		await _shot("03-feu-sur-roche-pas-tres-efficace")
+	# 4. Enemy super-effective hit: Ptitard (water) attacks the fire player.
+	_screen.start_encounter("solo_ptitard")
 	var guard: int = 0
-	while _screen.get_battle().state == Battle.State.PLAYER_TURN and guard < 60:
+	while guard < 40 and _screen.get_battle().state == Battle.State.PLAYER_TURN:
 		guard += 1
+		var intent: EnemyIntent = _screen.get_battle().enemies[0].intent
+		if intent != null and intent.type == EnemyIntent.TYPE_ATTACK:
+			await _shot("04a-ptitard-intention-attaque-9")
+			_screen.press_end_turn()
+			break
 		_screen.press_end_turn()
-	await _shot("10-defaite")
-	_screen.restart()
-	await _shot("11-rejouer-apres-defaite")
+	print("float text player = '", _screen.get_player_float_text(), "'")
+	await _shot("04b-ptitard-touche-le-joueur-super-efficace")
+	# 5. Victory.
+	_screen.start_encounter("solo_racaillou")
+	_win_battle()
+	await _shot("05-victoire")
 	quit(0)
