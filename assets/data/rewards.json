@@ -1,0 +1,14 @@
+{
+	"_doc": "offer_count: nombre de cartes proposees apres une victoire. rarity_weights: poids de tirage par rarete (> 0). player_pool: id du joueur -> reserve de cartes (ids de cards.json) dans laquelle on tire les cartes de recompense (sans doublon). Une carte volee a un Pokemon battu (champ 'teaches' dans pokemon.json) est ajoutee en plus, puis le reste est tire selon les poids.",
+	"offer_count": 3,
+	"rarity_weights": {
+		"common": 60,
+		"uncommon": 30,
+		"rare": 10
+	},
+	"player_pool": {
+		"salameche": [
+			"rugissement", "danse_flamme", "vive_attaque", "crocs_feu", "mur_de_fumee", "draco_griffe", "mimi_queue", "pistolet_a_o", "tranch_herbe", "eclair", "jet_de_pierres", "etincelle", "bulle_d_o", "dard_nuee", "piqure", "dard_venin", "cru_aile", "croc_fatal", "fouet_lianes", "tornade", "eboulement", "tunnel", "lance_flammes", "tonnerre", "hydrocanon", "seisme", "bombe_beurk", "forteresse"
+		]
+	}
+}

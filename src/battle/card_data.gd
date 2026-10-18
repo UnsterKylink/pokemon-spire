@@ -5,6 +5,12 @@ extends RefCounted
 
 const KIND_ATTACK: String = "attack"
 const KIND_SKILL: String = "skill"
+const RARITY_STARTER: String = "starter"
+const RARITY_COMMON: String = "common"
+const RARITY_UNCOMMON: String = "uncommon"
+const RARITY_RARE: String = "rare"
+## Every rarity value a card may declare in cards.json (story 004).
+const RARITIES: Array[String] = ["starter", "common", "uncommon", "rare"]
 
 var id: String = ""
 var display_name: String = ""
@@ -15,6 +21,8 @@ var block: int = 0
 var description: String = ""
 ## Type id from types.json; empty for skill cards (they deal no damage).
 var type_id: String = ""
+## One of RARITIES (story 004); validated by GameData ("" if the file omits it).
+var rarity: String = ""
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -39,6 +47,7 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	card.block = int(d["block"])
 	card.description = String(d["description"])
 	card.type_id = String(d.get("type", ""))
+	card.rarity = String(d.get("rarity", ""))
 	return card
 
 

@@ -3,15 +3,20 @@ extends Control
 ## Playable battle screen (mouse only). UI is built from containers in code; all logic lives in Battle.
 ## Implements: story-001-combat-de-base (écran jouable), story-002-intentions-et-multi-ennemis,
 ## story-003-types (type badges, "Super efficace !" feedback).
+## Story 004: the screen no longer owns game state; Main gives it a Battle (built from RunState) via
+## setup() and listens to battle_won / restart_requested.
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
 
-const PLAYER_ID: String = "salameche"
+## Emitted when the player wins; carries the ids of the enemies of this battle (all defeated).
+signal battle_won(defeated_ids: Array[String])
+## Emitted by the "Rejouer" button after a defeat.
+signal restart_requested
+
 const SPRITE_SOURCE_SIZE: float = 96.0
 ## Enemy sprite scale by number of enemies (index 0 = 1 enemy). Chosen so 3 enemies fit 1280x720.
 const ENEMY_SPRITE_SCALES: Array[float] = [2.5, 2.0, 1.6]
 const PLAYER_SPRITE_SCALE: float = 2.5
 const CARD_SIZE: Vector2 = Vector2(170, 200)
-const ENCOUNTER_ARG_PREFIX: String = "--encounter="
 const COLOR_HP_PLAYER: Color = Color(0.3, 0.8, 0.35)
 const COLOR_HP_ENEMY: Color = Color(0.9, 0.3, 0.3)
 const COLOR_ATTACK: Color = Color(0.85, 0.35, 0.3)
@@ -61,12 +66,10 @@ class EnemyView extends RefCounted:
 
 var _battle: Battle
 var _selected_index: int = -1
-var _encounter_order: Array[String] = []
+var _deck_size: int = 0
 var _encounter_id: String = ""
 
 var _data: GameData
-var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
-var _encounter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var _background: ColorRect
 var _player_name: Label
@@ -83,6 +86,7 @@ var _encounter_label: Label
 var _energy_label: Label
 var _draw_label: Label
 var _discard_label: Label
+var _deck_label: Label
 var _end_turn_button: Button
 var _hand_box: HBoxContainer
 var _end_box: VBoxContainer
@@ -93,25 +97,7 @@ var _hint_label: Label
 
 
 func _ready() -> void:
-	_data = GameData.new()
-	if not _data.load_all():
-		push_error("BattleScreen: could not load game data")
-		return
-	_encounter_order = _data.get_encounter_order()
-	if _encounter_order.is_empty():
-		push_error("BattleScreen: no encounter defined")
-		return
 	_build_ui()
-	_encounter_rng.randomize()
-	var first_id: String = _pick_random_encounter("")
-	for arg: String in OS.get_cmdline_user_args():
-		if arg.begins_with(ENCOUNTER_ARG_PREFIX):
-			var requested: String = arg.substr(ENCOUNTER_ARG_PREFIX.length())
-			if _encounter_order.has(requested):
-				first_id = requested
-			else:
-				push_error("BattleScreen: unknown encounter '%s' in --encounter, using '%s'" % [requested, first_id])
-	start_encounter(first_id)
 
 
 ## Read-only access for the QA harness.
@@ -141,21 +127,15 @@ func get_player_float_text() -> String:
 	return _visible_float_text(_player_float)
 
 
-## Starts a fresh battle (fresh player) on the given encounter id.
-func start_encounter(encounter_id: String) -> void:
-	if _data == null or not _encounter_order.has(encounter_id):
-		push_error("BattleScreen: unknown encounter '%s'" % encounter_id)
-		return
+## Displays `battle` (built by Main from RunState) and starts it. Call once, after add_child.
+## `run` is only read, for the deck size shown in the info row.
+func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) -> void:
+	_data = data
+	_battle = battle
+	_deck_size = run.deck.size()
 	_selected_index = -1
 	_encounter_id = encounter_id
-	_rng.randomize()
-	var player: Combatant = _data.create_player(PLAYER_ID)
-	var enemies: Array[Combatant] = _data.create_enemies(encounter_id)
-	if player == null or enemies.is_empty():
-		return
-	_battle = Battle.new(player, enemies, _data.get_starter_deck(PLAYER_ID),
-			_data.get_energy_per_turn(PLAYER_ID), _data.get_hand_size(PLAYER_ID), _rng,
-			_data.get_type_chart())
+	var player: Combatant = _battle.player
 	_build_enemy_views(_battle.enemies)
 	_player_name.text = player.display_name
 	_set_badge(_player_type_badge, player.type_id)
@@ -165,24 +145,21 @@ func start_encounter(encounter_id: String) -> void:
 	_end_dim.visible = false
 	_battle.state_changed.connect(_refresh)
 	_battle.hit_resolved.connect(_on_hit_resolved)
+	_battle.battle_won.connect(_on_battle_won)
 	_battle.start()
 	_refresh()
 
 
-## Rejouer: a random encounter, never the same one twice in a row. Fresh player.
-func restart() -> void:
-	start_encounter(_pick_random_encounter(_encounter_id))
+## Presses "Rejouer" (QA harness / button): asks Main for a new run.
+func press_restart() -> void:
+	restart_requested.emit()
 
 
-## Picks a random encounter id from encounter_order, different from `exclude` when possible.
-func _pick_random_encounter(exclude: String) -> String:
-	var pool: Array[String] = []
-	for id: String in _encounter_order:
-		if id != exclude:
-			pool.append(id)
-	if pool.is_empty():
-		return _encounter_order[0]
-	return pool[_encounter_rng.randi_range(0, pool.size() - 1)]
+func _on_battle_won() -> void:
+	var ids: Array[String] = []
+	for e: Combatant in _battle.enemies:
+		ids.append(e.id)
+	battle_won.emit(ids)
 
 
 ## Selects (or deselects if already selected) hand card index; cards without target play immediately.
@@ -304,6 +281,8 @@ func _build_ui() -> void:
 	info.add_child(_draw_label)
 	_discard_label = _make_label(18)
 	info.add_child(_discard_label)
+	_deck_label = _make_label(18)
+	info.add_child(_deck_label)
 	_hint_label = _make_label(18)
 	_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_child(_hint_label)
@@ -343,7 +322,7 @@ func _build_ui() -> void:
 	_restart_button = Button.new()
 	_restart_button.text = "Rejouer"
 	_restart_button.custom_minimum_size = Vector2(200, 56)
-	_restart_button.pressed.connect(restart)
+	_restart_button.pressed.connect(press_restart)
 	_end_box.add_child(_restart_button)
 
 	# Floating feedback layer (never intercepts the mouse). It sits just below the
@@ -358,43 +337,15 @@ func _build_ui() -> void:
 
 
 func _make_label(font_size: int) -> Label:
-	var l := Label.new()
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", font_size)
-	return l
+	return CardView.make_label(font_size)
 
 
-## Small rounded badge (PanelContainer + Label "Text") coloured by type; see _set_badge.
 func _make_type_badge(font_size: int = 16) -> PanelContainer:
-	var badge := PanelContainer.new()
-	badge.name = "TypeBadge"
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var text := _make_label(font_size)
-	text.name = "Text"
-	badge.add_child(text)
-	return badge
+	return CardView.make_type_badge(font_size)
 
 
-## Fills a badge with the type's French name and colour (hidden when the type is empty/unknown).
 func _set_badge(badge: PanelContainer, type_id: String) -> void:
-	var chart: TypeChart = _data.get_type_chart()
-	badge.visible = chart.is_known_type(type_id)
-	if not badge.visible:
-		return
-	var color: Color = chart.get_type_color(type_id)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color
-	sb.set_corner_radius_all(9)
-	sb.content_margin_left = 10.0
-	sb.content_margin_right = 10.0
-	sb.content_margin_top = 1.0
-	sb.content_margin_bottom = 1.0
-	badge.add_theme_stylebox_override("panel", sb)
-	var text: Label = badge.get_node("Text") as Label
-	text.text = chart.get_type_name(type_id)
-	text.add_theme_color_override("font_color", COLOR_TEXT_DARK if color.get_luminance() > 0.5 else COLOR_TEXT_LIGHT)
+	CardView.set_badge(badge, type_id, _data.get_type_chart())
 
 
 func _make_float_text() -> FloatText:
@@ -510,7 +461,7 @@ func _show_float(f: FloatText, anchor: Control, super_effective: bool) -> void:
 	# Wait one frame so container layout has settled (e.g. right after a new encounter
 	# rebuilt the enemy slots); otherwise the anchor rect is stale.
 	await get_tree().process_frame
-	if my_serial != f.serial or not is_instance_valid(f.label) or not is_instance_valid(anchor):
+	if not is_inside_tree() or my_serial != f.serial or not is_instance_valid(f.label) or not is_instance_valid(anchor):
 		return
 	f.label.modulate = Color.WHITE
 	f.label.visible = true
@@ -581,6 +532,7 @@ func _refresh() -> void:
 	_energy_label.text = "Énergie %d/%d" % [_battle.energy, _battle.max_energy]
 	_draw_label.text = "Pioche : %d" % _battle.draw_pile.size()
 	_discard_label.text = "Défausse : %d" % _battle.discard_pile.size()
+	_deck_label.text = "Deck : %d cartes" % _deck_size
 
 	var over: bool = _battle.state != Battle.State.PLAYER_TURN
 	_end_turn_button.disabled = over
@@ -588,10 +540,11 @@ func _refresh() -> void:
 	for i: int in _enemy_views.size():
 		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 	_rebuild_hand()
-	if over:
+	# Victory goes straight to the reward screen (Main); the overlay is for defeat only.
+	if _battle.state == Battle.State.LOST:
 		_end_box.visible = true
 		_end_dim.visible = true
-		_message_label.text = "Victoire !" if _battle.state == Battle.State.WON else "Défaite…"
+		_message_label.text = "Défaite…"
 
 
 func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
@@ -650,38 +603,9 @@ func _rebuild_hand() -> void:
 		_hand_box.add_child(b)
 
 
-## Builds the visual content of a card button from child controls (all ignore the mouse so the
-## Button keeps click/hover/disabled): name, cost, type badge (attacks), description.
+## Builds the visual content of a card button (shared look, see CardView).
 func _fill_card_content(b: Button, card: CardData) -> void:
-	var margin := MarginContainer.new()
-	margin.name = "Content"
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 8)
-	b.add_child(margin)
-	var box := VBoxContainer.new()
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_theme_constant_override("separation", 4)
-	margin.add_child(box)
-	var name_label := _make_label(18)
-	name_label.name = "CardName"
-	name_label.text = card.display_name
-	box.add_child(name_label)
-	var cost_label := _make_label(16)
-	cost_label.text = "Coût : %d" % card.cost
-	box.add_child(cost_label)
-	if not card.type_id.is_empty():
-		var badge := _make_type_badge(14)
-		_set_badge(badge, card.type_id)
-		box.add_child(badge)
-	var desc := _make_label(15)
-	desc.name = "CardDescription"
-	desc.text = card.description
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	box.add_child(desc)
+	CardView.fill_card_content(b, card, _data.get_type_chart())
 
 
 # --- Input -----------------------------------------------------------------

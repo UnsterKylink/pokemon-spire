@@ -1,11 +1,11 @@
 extends SceneTree
-## QA harness: drives BattleScreen through the type scenarios (trio_mix, fire vs grass/rock, water vs fire player,
-## victory) and saves screenshots.
-## Run (needs a display, not --headless):
+## QA harness: drives Main through the story-004 flow (battle -> reward screen -> deck overlay -> pick ->
+## next battle with persisted HP/deck -> pass path -> defeat -> Rejouer = fresh run) and saves screenshots.
+## Run (needs a display, not --headless for screenshots):
 ##   godot --path . --windowed --resolution 1280x720 -s res://tools/qa/battle_walkthrough.gd -- <out_dir>
-## Story: pokemon-spire 001, 002, 003
+## Story: pokemon-spire 001-004
 
-var _screen: BattleScreen
+var _main: Main
 var _out_dir: String = "user://qa"
 
 
@@ -14,8 +14,8 @@ func _initialize() -> void:
 	if args.size() > 0:
 		_out_dir = args[0]
 	DirAccess.make_dir_recursive_absolute(_out_dir)
-	_screen = (load("res://src/ui/battle_screen.tscn") as PackedScene).instantiate() as BattleScreen
-	root.add_child(_screen)
+	_main = (load("res://src/main.tscn") as PackedScene).instantiate() as Main
+	root.add_child(_main)
 	_run.call_deferred()
 
 
@@ -25,104 +25,98 @@ func _shot(shot_name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img: Image = root.get_texture().get_image()
 	img.save_png(_out_dir.path_join(shot_name + ".png"))
-	var b: Battle = _screen.get_battle()
-	var hps: PackedStringArray = PackedStringArray()
-	var intents: PackedStringArray = PackedStringArray()
-	for e: Combatant in b.enemies:
-		hps.append(str(e.hp))
-		intents.append(e.intent.display_text() if e.intent != null else "-")
-	print("shot ", shot_name, " | enc=", _screen.get_encounter_id(), " hp=", b.player.hp,
-		" enemies=", hps, " intents=", intents, " energy=", b.energy,
-		" block=", b.player.block, " state=", b.state,
-		" float_player='", _screen.get_player_float_text(), "'")
+	var run: RunState = _main.get_run_state()
+	var line: String = "shot %s | screen=%s run_hp=%d/%d deck=%d won=%d" % [shot_name,
+			_main.get_current_screen_name(), run.hp, run.max_hp, run.deck.size(), run.battles_won]
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null:
+		var b: Battle = bs.get_battle()
+		line += " enc=%s hp=%d energy=%d state=%d hand=%s" % [bs.get_encounter_id(), b.player.hp, b.energy, b.state, _hand_ids(b)]
+	for o: RewardOffer in _main.get_reward_offers():
+		line += " [%s%s]" % [o.card.id, "*" + o.source_pokemon_name if o.stolen else ""]
+	print(line)
 
 
-func _index_of(kind: String) -> int:
-	var b: Battle = _screen.get_battle()
-	for i: int in b.hand.size():
-		if b.hand[i].kind == kind and b.can_play(i):
-			return i
-	return -1
+func _hand_ids(b: Battle) -> PackedStringArray:
+	var ids: PackedStringArray = PackedStringArray()
+	for c: CardData in b.hand:
+		ids.append(c.id)
+	return ids
 
 
-## Attacks the given enemy (selection + click) until it faints or the turn runs out of attacks.
-func _kill_enemy(enemy_index: int) -> void:
-	var b: Battle = _screen.get_battle()
-	var guard: int = 0
-	while b.state == Battle.State.PLAYER_TURN and b.enemies[enemy_index].is_alive() and guard < 60:
-		guard += 1
-		var i: int = _index_of(CardData.KIND_ATTACK)
-		if i < 0:
-			_screen.press_end_turn()
-			continue
-		_screen.select_card(i)
-		_screen.click_enemy(enemy_index)
-
-
-## Kills every enemy, left to right.
+## Plays attacks (select + click, the real UI path) until every enemy is dead or the guard runs out.
 func _win_battle() -> void:
-	var b: Battle = _screen.get_battle()
-	for k: int in b.enemies.size():
-		_kill_enemy(k)
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var guard: int = 0
+	while bs != null and b.state == Battle.State.PLAYER_TURN and guard < 120:
+		guard += 1
+		var played: bool = false
+		for i: int in b.hand.size():
+			if b.hand[i].kind == CardData.KIND_ATTACK and b.can_play(i):
+				bs.select_card(i)
+				bs.click_enemy(b.first_living_enemy())
+				played = true
+				break
+		if not played:
+			bs.press_end_turn()
 
 
-## Index of the first playable hand card with this id, or -1.
-func _index_of_id(card_id: String) -> int:
-	var b: Battle = _screen.get_battle()
-	for i: int in b.hand.size():
-		if b.hand[i].id == card_id and b.can_play(i):
-			return i
-	return -1
-
-
-## Restarts the encounter (fresh shuffle) until the card is playable in hand. Bounded.
-func _start_with_card(encounter_id: String, card_id: String) -> bool:
-	for attempt: int in 60:
-		_screen.start_encounter(encounter_id)
-		if _index_of_id(card_id) >= 0:
-			# Let the freshly built enemy slots get laid out so the floating label is positioned right.
-			await process_frame
-			await process_frame
-			return true
-	push_error("walkthrough: card '%s' never drawn on '%s'" % [card_id, encounter_id])
-	return false
-
-
-## Selects the card then clicks the enemy (the real UI path).
-func _play_on(card_id: String, enemy_index: int) -> void:
-	_screen.select_card(_index_of_id(card_id))
-	_screen.click_enemy(enemy_index)
+## Ends turns without playing until the player is dead (bounded).
+func _lose_battle() -> void:
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var guard: int = 0
+	while b.state == Battle.State.PLAYER_TURN and guard < 200:
+		guard += 1
+		bs.press_end_turn()
 
 
 func _run() -> void:
-	# 1. trio_mix: types visible on the cards and on the 3 enemies + the player.
-	_screen.start_encounter("trio_mix")
-	await _shot("01-trio-mix-debut-types")
-	# 2. Fire attack on the grass enemy (Mystherbe, slot 0): "Super efficace !".
-	if await _start_with_card("trio_mix", "flammeche"):
-		_play_on("flammeche", 0)
-		print("float text enemy0 = '", _screen.get_enemy_float_text(0), "'")
-		await _shot("02-feu-sur-plante-super-efficace")
-	# 3. Fire attack on the rock enemy (Racaillou, slot 2): "Ce n'est pas très efficace…".
-	if await _start_with_card("trio_mix", "flammeche"):
-		_play_on("flammeche", 2)
-		print("float text enemy2 = '", _screen.get_enemy_float_text(2), "'")
-		await _shot("03-feu-sur-roche-pas-tres-efficace")
-	# 4. Enemy super-effective hit: Ptitard (water) attacks the fire player.
-	_screen.start_encounter("solo_ptitard")
-	var guard: int = 0
-	while guard < 40 and _screen.get_battle().state == Battle.State.PLAYER_TURN:
-		guard += 1
-		var intent: EnemyIntent = _screen.get_battle().enemies[0].intent
-		if intent != null and intent.type == EnemyIntent.TYPE_ATTACK:
-			await _shot("04a-ptitard-intention-attaque-9")
-			_screen.press_end_turn()
-			break
-		_screen.press_end_turn()
-	print("float text player = '", _screen.get_player_float_text(), "'")
-	await _shot("04b-ptitard-touche-le-joueur-super-efficace")
-	# 5. Victory.
-	_screen.start_encounter("solo_racaillou")
+	# 1. Solo fight: take some damage first, then win -> reward screen.
+	_main.start_encounter("solo")
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.press_end_turn()
+	bs.press_end_turn()
 	_win_battle()
-	await _shot("05-victoire")
+	await _shot("01-reward-screen")
+	# 2. Deck overlay.
+	_main.reward_open_deck()
+	await _shot("02-deck-overlay")
+	print("deck lines = ", _main.get_reward_screen().get_deck_lines())
+	_main.reward_close_deck()
+	# 3. Pick the stolen card (or card 0) -> next battle, HP and deck persisted.
+	var pick_index: int = 0
+	var offers: Array[RewardOffer] = _main.get_reward_offers()
+	for i: int in offers.size():
+		if offers[i].stolen:
+			pick_index = i
+	var picked_id: String = offers[pick_index].card.id
+	_main.reward_pick(pick_index)
+	await _shot("03-next-battle")
+	# 3b. A few turns later the new card shows up in hand (bounded: 11 cards cycle within 3 turns).
+	bs = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var turns: int = 0
+	while turns < 4 and b.state == Battle.State.PLAYER_TURN:
+		var in_hand: bool = false
+		for c: CardData in b.hand:
+			if c.id == picked_id:
+				in_hand = true
+		if in_hand:
+			break
+		turns += 1
+		bs.press_end_turn()
+	print("picked '", picked_id, "' seen in hand after ", turns, " end-turns")
+	await _shot("03b-nouvelle-carte-en-main")
+	# 4. Another win, then "Passer": the deck stays at 11.
+	_win_battle()
+	await _shot("04-passer-avant")
+	_main.reward_skip()
+	await _shot("04-passer-apres")
+	# 5. Defeat, then Rejouer: fresh run (75/75, 10 cards).
+	_lose_battle()
+	await _shot("05a-defaite")
+	_main.get_battle_screen().press_restart()
+	await _shot("05-defaite-nouvelle-partie")
 	quit(0)

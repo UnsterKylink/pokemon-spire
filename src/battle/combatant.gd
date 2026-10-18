@@ -28,7 +28,8 @@ var sequence_index: int = 0
 
 
 ## Creates a combatant from a JSON definition. Returns null if invalid.
-static func from_dict(combatant_id: String, d: Dictionary) -> Combatant:
+## current_hp < 0 means full HP; otherwise it is clamped to 0..max_hp (persistent run HP, story 004).
+static func from_dict(combatant_id: String, d: Dictionary, current_hp: int = -1) -> Combatant:
 	for key: String in ["name", "max_hp", "sprite"]:
 		if not d.has(key):
 			push_error("Combatant: '%s' is missing field '%s'" % [combatant_id, key])
@@ -37,7 +38,7 @@ static func from_dict(combatant_id: String, d: Dictionary) -> Combatant:
 	c.id = combatant_id
 	c.display_name = String(d["name"])
 	c.max_hp = int(d["max_hp"])
-	c.hp = c.max_hp
+	c.hp = c.max_hp if current_hp < 0 else clampi(current_hp, 0, c.max_hp)
 	c.sprite_path = String(d["sprite"])
 	c.type_id = String(d.get("type", ""))
 	if d.has("pattern"):
