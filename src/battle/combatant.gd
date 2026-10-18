@@ -1,8 +1,11 @@
 class_name Combatant
 extends RefCounted
-## A fighter (player Pokémon or enemy) with HP and block.
+## A fighter (player Pokémon or enemy) with HP, block and (enemies) a data-driven behaviour.
 
 signal changed
+
+const PATTERN_SEQUENCE: String = "sequence"
+const PATTERN_WEIGHTED: String = "weighted"
 
 var id: String = ""
 var display_name: String = ""
@@ -10,8 +13,16 @@ var sprite_path: String = ""
 var max_hp: int = 1
 var hp: int = 1
 var block: int = 0
-## Fixed attack damage (enemies only; 0 for the player).
-var attack_damage: int = 0
+## Bonus added to all this combatant's attack values (gained through "buff" actions).
+var strength: int = 0
+## Enemy behaviour: "sequence" or "weighted" (empty for the player).
+var pattern: String = ""
+## Possible enemy actions, from data (empty for the player).
+var actions: Array[EnemyIntent] = []
+## Next action this enemy will execute (null for the player and for dead enemies).
+var intent: EnemyIntent = null
+## Position in the action list for the "sequence" pattern.
+var sequence_index: int = 0
 
 
 ## Creates a combatant from a JSON definition. Returns null if invalid.
@@ -26,7 +37,23 @@ static func from_dict(combatant_id: String, d: Dictionary) -> Combatant:
 	c.max_hp = int(d["max_hp"])
 	c.hp = c.max_hp
 	c.sprite_path = String(d["sprite"])
-	c.attack_damage = int(d.get("attack_damage", 0))
+	if d.has("pattern"):
+		c.pattern = String(d["pattern"])
+		if c.pattern != PATTERN_SEQUENCE and c.pattern != PATTERN_WEIGHTED:
+			push_error("Combatant: '%s' has unknown pattern '%s'" % [combatant_id, c.pattern])
+			return null
+		var raw_actions: Variant = d.get("actions", null)
+		if not (raw_actions is Array) or (raw_actions as Array).is_empty():
+			push_error("Combatant: '%s' needs a non-empty 'actions' array" % combatant_id)
+			return null
+		for raw: Variant in (raw_actions as Array):
+			if not (raw is Dictionary):
+				push_error("Combatant: '%s' has a non-object action" % combatant_id)
+				return null
+			var action: EnemyIntent = EnemyIntent.from_dict(raw)
+			if action == null:
+				return null
+			c.actions.append(action)
 	return c
 
 
@@ -48,7 +75,7 @@ func add_block(amount: int) -> void:
 	changed.emit()
 
 
-## Removes all block (called at the start of the player's turn).
+## Removes all block (player: start of its turn; enemy: start of its action).
 func reset_block() -> void:
 	block = 0
 	changed.emit()

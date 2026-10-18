@@ -9,9 +9,30 @@
 			"starter_deck": {"griffe": 5, "abri": 4, "flammeche": 1}
 		}
 	},
+	"_enemies_doc": "pattern: 'sequence' (actions in order, looping) or 'weighted' (random pick by 'weight'). Action: type attack|block|buff, value > 0 (buff = +value strength: all later attacks +value), weight > 0 (weighted only).",
 	"enemies": {
-		"rattata": {"name": "Rattata", "max_hp": 30, "attack_damage": 7, "sprite": "res://assets/sprites/pokemon/rattata.png"},
-		"pidgey": {"name": "Roucool", "max_hp": 28, "attack_damage": 6, "sprite": "res://assets/sprites/pokemon/pidgey.png"},
-		"caterpie": {"name": "Chenipan", "max_hp": 24, "attack_damage": 5, "sprite": "res://assets/sprites/pokemon/caterpie.png"}
-	}
+		"rattata": {"name": "Rattata", "max_hp": 30, "sprite": "res://assets/sprites/pokemon/rattata.png", "pattern": "weighted", "actions": [
+			{"type": "attack", "value": 7, "weight": 4},
+			{"type": "block", "value": 5, "weight": 1}]},
+		"pidgey": {"name": "Roucool", "max_hp": 28, "sprite": "res://assets/sprites/pokemon/pidgey.png", "pattern": "weighted", "actions": [
+			{"type": "attack", "value": 6, "weight": 3},
+			{"type": "block", "value": 5, "weight": 1}]},
+		"caterpie": {"name": "Chenipan", "max_hp": 24, "sprite": "res://assets/sprites/pokemon/caterpie.png", "pattern": "sequence", "actions": [
+			{"type": "attack", "value": 5},
+			{"type": "attack", "value": 5},
+			{"type": "block", "value": 6}]},
+		"weedle": {"name": "Aspicot", "max_hp": 26, "sprite": "res://assets/sprites/pokemon/weedle.png", "pattern": "sequence", "actions": [
+			{"type": "attack", "value": 4},
+			{"type": "buff", "value": 2},
+			{"type": "attack", "value": 4}]},
+		"zubat": {"name": "Nosferapti", "max_hp": 22, "sprite": "res://assets/sprites/pokemon/zubat.png", "pattern": "weighted", "actions": [
+			{"type": "attack", "value": 6, "weight": 3},
+			{"type": "buff", "value": 1, "weight": 1}]}
+	},
+	"encounters": {
+		"solo": ["rattata"],
+		"duo": ["pidgey", "weedle"],
+		"trio": ["rattata", "zubat", "caterpie"]
+	},
+	"encounter_order": ["solo", "duo", "trio"]
 }

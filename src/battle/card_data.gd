@@ -25,6 +25,9 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	if kind_value != KIND_ATTACK and kind_value != KIND_SKILL:
 		push_error("CardData: card '%s' has unknown kind '%s'" % [card_id, kind_value])
 		return null
+	if kind_value == KIND_SKILL and int(d["damage"]) > 0:
+		push_error("CardData: skill card '%s' must not deal damage" % card_id)
+		return null
 	var card := CardData.new()
 	card.id = card_id
 	card.display_name = String(d["name"])
@@ -36,6 +39,6 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	return card
 
 
-## True if the card needs an enemy target to be played.
+## True if the card needs an enemy target to be played (derived from its damage).
 func needs_target() -> bool:
-	return kind == KIND_ATTACK
+	return damage > 0
