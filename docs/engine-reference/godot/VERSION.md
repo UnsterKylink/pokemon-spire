@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Engine Version** | Godot 4.6 |
-| **Installed at pin time** | NOT DETERMINED — `/setup-engine` §3 probes the installed editor and records the result here. |
+| **Installed at pin time** | NOT DETERMINED — 2026-10-18 `/setup-engine` ran in a cloud session with no Godot binary (`godot --version`: command not found). Developer machine is Windows; recommended download is 4.6.3-stable (latest 4.6 patch). |
 | **Release Date** | January 2026 |
 | **Project Pinned** | 2026-02-12 |
 | **Last Docs Verified** | 2026-02-12 |
