@@ -1,7 +1,7 @@
 # Story 003: Types et multiplicateurs
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Estimate**: [fill before starting]
@@ -72,3 +72,10 @@
 
 - Depends on: Story 002 must be DONE
 - Unlocks: Story 004
+
+## Completion Notes
+**Completed**: 2026-10-18
+**Criteria**: 6/6 passing. Real mouse play on this version confirmed by the developer.
+**Deviations**: ADVISORY — when several enemies hit the player in one end-turn, only the last effectiveness label is shown; skill (block) cards carry no type by design; the 4 new attack cards (Pistolet à O, Tranch'Herbe, Éclair, Jet-Pierres) are defined in data but not yet obtainable (story 004); user-facing French strings still hardcoded (no localization system). Scope additions beyond the story text: 4 new enemies (Racaillou, Ptitard, Mystherbe, Pikachu) and 6 encounters (16 total) so every type pairing is reachable; `GameData` now also validates `types.json`.
+**Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-003-types/` (6 PNGs + README.md). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720). 202/202 throwaway headless assertions pass (all 100 type pairs, rounding, multiplier before block, displayed intent == damage dealt, malformed-data rejection).
+**Code Review**: Skipped (solo mode).
