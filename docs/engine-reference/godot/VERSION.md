@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Engine Version** | Godot 4.6 |
-| **Installed at pin time** | NOT DETERMINED — 2026-10-18 `/setup-engine` ran in a cloud session with no Godot binary (`godot --version`: command not found). Developer machine is Windows; recommended download is 4.6.3-stable (latest 4.6 patch). |
+| **Installed at pin time** | Godot 4.6.3-stable (win64) — reported by the developer on 2026-10-18 at `C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe`; not probed (cloud session has no binary). Matches the 4.6 pin. |
 | **Release Date** | January 2026 |
 | **Project Pinned** | 2026-02-12 |
 | **Last Docs Verified** | 2026-02-12 |

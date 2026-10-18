@@ -20,6 +20,7 @@ engine:
   language: "GDScript"
   rendering: "Compatibility"
   physics: "Godot Physics 2D"
+  path: "C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe"   # developer machine (Windows); not on PATH
 
 specialists:
   code: "godot-gdscript-specialist"
@@ -36,12 +37,10 @@ naming:
   scenes: snake_case
 
 commands:
-  # TODO: godot is not on PATH here — set the editor's full path via /settings
-  # (Windows: e.g. "C:/Godot/Godot_v4.6.3-stable_win64.exe").
   # build: [TO BE CONFIGURED] — no export preset exists yet (create one in Project > Export).
-  test: "godot --headless -s -d --remote-debug tcp://127.0.0.1:0 res://addons/gdUnit4/bin/GdUnitCmdTool.gd -a res://tests --ignoreHeadlessMode"
-  run: "godot --path . --windowed --resolution 1280x720"
-  smoke: "godot --headless --quit-after 5"
+  test: '"C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe" --headless -s -d --remote-debug tcp://127.0.0.1:0 res://addons/gdUnit4/bin/GdUnitCmdTool.gd -a res://tests --ignoreHeadlessMode'
+  run: '"C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe" --path . --windowed --resolution 1280x720'
+  smoke: '"C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe" --headless --quit-after 5'
 
 # NOTE: this template ships with no `modes:` block, and the six knobs below must
 # never be added to one.
