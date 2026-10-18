@@ -10,7 +10,7 @@
 
 | # | Story | Type | Status | ADR |
 |---|-------|------|--------|-----|
-| 001 | Combat de base contre 1 ennemi | Logic | Ready | N/A |
+| 001 | Combat de base contre 1 ennemi | Logic | Complete | N/A |
 | 002 | Intentions des ennemis et combats à plusieurs | Logic | Ready | N/A |
 | 003 | Types et multiplicateurs | Logic | Ready | N/A |
 | 004 | Récompenses et vol d'attaque | Integration | Ready | N/A |
