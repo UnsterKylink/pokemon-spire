@@ -43,6 +43,7 @@ var _encounter_id: String = ""
 
 var _data: GameData
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _encounter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var _background: ColorRect
 var _player_name: Label
@@ -75,7 +76,8 @@ func _ready() -> void:
 		push_error("BattleScreen: no encounter defined")
 		return
 	_build_ui()
-	var first_id: String = _encounter_order[0]
+	_encounter_rng.randomize()
+	var first_id: String = _pick_random_encounter("")
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with(ENCOUNTER_ARG_PREFIX):
 			var requested: String = arg.substr(ENCOUNTER_ARG_PREFIX.length())
@@ -125,13 +127,20 @@ func start_encounter(encounter_id: String) -> void:
 	_refresh()
 
 
-## Rejouer: next encounter (wrapping) after a victory, same encounter otherwise. Fresh player.
+## Rejouer: a random encounter, never the same one twice in a row. Fresh player.
 func restart() -> void:
-	var id: String = _encounter_id
-	if _battle != null and _battle.state == Battle.State.WON:
-		var next: int = (_encounter_order.find(_encounter_id) + 1) % _encounter_order.size()
-		id = _encounter_order[next]
-	start_encounter(id)
+	start_encounter(_pick_random_encounter(_encounter_id))
+
+
+## Picks a random encounter id from encounter_order, different from `exclude` when possible.
+func _pick_random_encounter(exclude: String) -> String:
+	var pool: Array[String] = []
+	for id: String in _encounter_order:
+		if id != exclude:
+			pool.append(id)
+	if pool.is_empty():
+		return _encounter_order[0]
+	return pool[_encounter_rng.randi_range(0, pool.size() - 1)]
 
 
 ## Selects (or deselects if already selected) hand card index; cards without target play immediately.
@@ -392,7 +401,8 @@ func _refresh() -> void:
 	_player_hp_bar.value = p.hp
 	_player_hp_label.text = "PV %d/%d" % [p.hp, p.max_hp]
 	_player_block.text = "Protection %d" % p.block
-	_encounter_label.text = "Combat %d/%d" % [_encounter_order.find(_encounter_id) + 1, _encounter_order.size()]
+	var count: int = _battle.enemies.size()
+	_encounter_label.text = "Combat : %d ennemi%s" % [count, "s" if count > 1 else ""]
 	_energy_label.text = "Énergie %d/%d" % [_battle.energy, _battle.max_energy]
 	_draw_label.text = "Pioche : %d" % _battle.draw_pile.size()
 	_discard_label.text = "Défausse : %d" % _battle.discard_pile.size()

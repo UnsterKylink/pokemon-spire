@@ -31,8 +31,15 @@
 	},
 	"encounters": {
 		"solo": ["rattata"],
+		"solo_roucool": ["pidgey"],
+		"solo_chenipan": ["caterpie"],
+		"solo_aspicot": ["weedle"],
+		"solo_nosferapti": ["zubat"],
 		"duo": ["pidgey", "weedle"],
-		"trio": ["rattata", "zubat", "caterpie"]
+		"duo_insectes": ["caterpie", "weedle"],
+		"duo_nuit": ["rattata", "zubat"],
+		"trio": ["rattata", "zubat", "caterpie"],
+		"trio_vol": ["pidgey", "zubat", "weedle"]
 	},
-	"encounter_order": ["solo", "duo", "trio"]
+	"encounter_order": ["solo", "duo", "trio", "solo_roucool", "solo_chenipan", "solo_aspicot", "solo_nosferapti", "duo_insectes", "duo_nuit", "trio_vol"]
 }
