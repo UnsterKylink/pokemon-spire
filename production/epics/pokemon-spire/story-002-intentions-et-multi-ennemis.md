@@ -1,7 +1,7 @@
 # Story 002: Intentions des ennemis et combats à plusieurs
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Estimate**: [fill before starting]
@@ -73,3 +73,10 @@
 
 - Depends on: Story 001 must be DONE
 - Unlocks: Story 003
+
+## Completion Notes
+**Completed**: 2026-10-18
+**Criteria**: 6/6 passing. Real mouse play (select card, click enemy, end turn) confirmed by the developer.
+**Deviations**: ADVISORY — a K.O.'d enemy shows "K.O." in the intent slot (not blank); if the player dies mid enemy phase the remaining enemies do not act; the end-of-battle message overlaps an enemy HP bar slightly (dimmed backdrop keeps it readable); user-facing French strings still hardcoded (no localization system); `tools/qa` assertions in the scratchpad expect the 3 original encounters (10 exist now). Extra, from play-test feedback: encounters are picked at random (10 defined) instead of a fixed order.
+**Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-002-intentions-et-multi-ennemis/` (11 PNGs + README.md). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720). 39/42 throwaway assertions pass; the 3 failures are stale expectations of the old 3-encounter list, GameData still rejects a bad encounter order (checked separately).
+**Code Review**: Skipped (solo mode).

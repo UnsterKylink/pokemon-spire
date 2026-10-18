@@ -81,7 +81,7 @@
 
 ## Completion Notes
 **Completed**: 2026-10-18
-**Criteria**: 8/8 met — criterion 7 (real mouse clicks) DEFERRED to the developer's own play test; all other criteria verified by retained screenshots and a re-run of headless logic assertions (16 PASS, 0 FAIL).
+**Criteria**: 8/8 met — criterion 7 (real mouse clicks) confirmed by the developer's own play test on 2026-10-18 (recorded when closing story 002); all other criteria verified by retained screenshots and a re-run of headless logic assertions (16 PASS, 0 FAIL).
 **Deviations**: ADVISORY — user-facing French strings hardcoded in `src/ui/battle_screen.gd` (no localization system yet); `PLAYER_ID` / `ENEMY_ID` constants live in the UI (stories 002/004 make them variable); `Battle` holds a single `enemy` (story 002 moves to a list); player HP/deck are rebuilt on `restart()` (story 004 adds persistent run state).
 **Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-001-combat-de-base/` (7 PNGs + README.md). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720).
 **Code Review**: Skipped (solo mode); `godot-gdscript-specialist` read-only review found no MUST FIX.
