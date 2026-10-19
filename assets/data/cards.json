@@ -7,6 +7,7 @@
 		"rugissement": {"name": "Rugissement", "cost": 0, "kind": "skill", "rarity": "common", "damage": 0, "block": 3, "description": "Gagne 3 points de protection."},
 		"danse_flamme": {"name": "Danse-Flamme", "cost": 2, "kind": "attack", "pokemon": "salameche", "rarity": "uncommon", "type": "fire", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
 		"vive_attaque": {"name": "Vive-Attaque", "cost": 0, "kind": "attack", "pokemon": "rattata", "rarity": "common", "type": "normal", "damage": 3, "block": 0, "description": "Inflige 3 dégâts."},
+		"morsure": {"name": "Morsure", "cost": 1, "kind": "attack", "damage": 7, "block": 0, "description": "Inflige 7 dégâts.", "type": "dark", "pokemon": "poochyena", "rarity": "common"},
 		"crocs_feu": {"name": "Crocs Feu", "cost": 1, "kind": "attack", "pokemon": "salameche", "rarity": "common", "type": "fire", "damage": 8, "block": 0, "description": "Inflige 8 dégâts."},
 		"mur_de_fumee": {"name": "Mur de Fumée", "cost": 2, "kind": "skill", "rarity": "uncommon", "damage": 0, "block": 12, "description": "Gagne 12 points de protection."},
 		"draco_griffe": {"name": "Draco-Griffe", "cost": 2, "kind": "attack", "pokemon": "salameche", "rarity": "uncommon", "type": "normal", "damage": 11, "block": 0, "description": "Inflige 11 dégâts."},
