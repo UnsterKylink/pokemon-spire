@@ -1,9 +1,17 @@
 extends SceneTree
-## QA harness: drives Main through the story-004 flow (battle -> reward screen -> deck overlay -> pick ->
-## next battle with persisted HP/deck -> pass path -> defeat -> Rejouer = fresh run) and saves screenshots.
+## QA harness: drives Main through a whole act (story 005) with a fixed map seed and saves screenshots:
+## map at start -> floor-1 fight -> reward -> map after the fight -> event (before / after choice) ->
+## elite fight + reward -> centre -> boss -> act end. Picks a path through an event and an elite;
+## tries the seeds of SEEDS in order until one has such a path (prints which one was used).
+## Wins use the real select/click path; HP is topped up through Main.qa_set_hp (QA-only cheat).
 ## Run (needs a display, not --headless for screenshots):
 ##   godot --path . --windowed --resolution 1280x720 -s res://tools/qa/battle_walkthrough.gd -- <out_dir>
-## Story: pokemon-spire 001-004
+## Story: pokemon-spire 005 (replaces the 001-004 walkthrough)
+
+const SEEDS: Array[int] = [12345, 777, 4242, 2026, 31337, 8080, 1111, 9001]
+const WANTED_TYPES: Array[String] = ["event", "elite", "center"]
+const MAX_PATHS: int = 200000
+const MAX_BATTLE_STEPS: int = 600
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -26,31 +34,76 @@ func _shot(shot_name: String) -> void:
 	var img: Image = root.get_texture().get_image()
 	img.save_png(_out_dir.path_join(shot_name + ".png"))
 	var run: RunState = _main.get_run_state()
-	var line: String = "shot %s | screen=%s run_hp=%d/%d deck=%d won=%d" % [shot_name,
-			_main.get_current_screen_name(), run.hp, run.max_hp, run.deck.size(), run.battles_won]
+	var line: String = "shot %s | screen=%s run_hp=%d/%d deck=%d won=%d floor=%d visited=%d reachable=%s" % [
+			shot_name, _main.get_current_screen_name(), run.hp, run.max_hp, run.deck.size(), run.battles_won,
+			run.act.current_floor(), run.act.visited.size(), _main.map_reachable_ids()]
 	var bs: BattleScreen = _main.get_battle_screen()
 	if bs != null:
 		var b: Battle = bs.get_battle()
-		line += " enc=%s hp=%d energy=%d state=%d hand=%s" % [bs.get_encounter_id(), b.player.hp, b.energy, b.state, _hand_ids(b)]
+		line += " enc=%s enemies=%s" % [bs.get_encounter_id(), _enemy_summary(b)]
 	for o: RewardOffer in _main.get_reward_offers():
-		line += " [%s%s]" % [o.card.id, "*" + o.source_pokemon_name if o.stolen else ""]
+		line += " [%s/%s%s]" % [o.card.id, o.card.rarity, "*" + o.source_pokemon_name if o.stolen else ""]
+	var ev: Dictionary = _main.get_current_event()
+	if not ev.is_empty():
+		line += " event=%s" % ev.get("id", "")
 	print(line)
 
 
-func _hand_ids(b: Battle) -> PackedStringArray:
-	var ids: PackedStringArray = PackedStringArray()
-	for c: CardData in b.hand:
-		ids.append(c.id)
-	return ids
+func _enemy_summary(b: Battle) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for e: Combatant in b.enemies:
+		out.append("%s %d/%d str%d" % [e.id, e.hp, e.max_hp, e.strength])
+	return out
 
 
-## Plays attacks (select + click, the real UI path) until every enemy is dead or the guard runs out.
-func _win_battle() -> void:
-	var bs: BattleScreen = _main.get_battle_screen()
-	var b: Battle = bs.get_battle()
+## Best start->boss path: one containing as many WANTED_TYPES as possible (bounded DFS).
+func _plan(g: MapGraph) -> Array[String]:
+	var best: Array[String] = []
+	var best_score: int = -1
+	var stack: Array = []
+	for s: String in g.start_node_ids():
+		stack.append([s])
 	var guard: int = 0
-	while bs != null and b.state == Battle.State.PLAYER_TURN and guard < 120:
+	while not stack.is_empty() and guard < MAX_PATHS:
 		guard += 1
+		var path: Array = stack.pop_back()
+		var n: MapNode = g.get_node(path[-1])
+		if n.next.is_empty():
+			var score: int = 0
+			for t: String in WANTED_TYPES:
+				for id: String in path:
+					if g.get_node(id).room_type == t:
+						score += 1
+						break
+			if score > best_score:
+				best_score = score
+				best.assign(path)
+			continue
+		for nx: String in n.next:
+			var p2: Array = path.duplicate()
+			p2.append(nx)
+			stack.append(p2)
+	return best
+
+
+func _path_score(g: MapGraph, path: Array[String]) -> int:
+	var score: int = 0
+	for t: String in WANTED_TYPES:
+		for id: String in path:
+			if g.get_node(id).room_type == t:
+				score += 1
+				break
+	return score
+
+
+## Plays attacks (select + click, the real UI path) until the fight ends; HP topped up each loop (bounded).
+func _win_battle() -> void:
+	var guard: int = 0
+	while _main.get_current_screen_name() == "battle" and guard < MAX_BATTLE_STEPS:
+		guard += 1
+		var bs: BattleScreen = _main.get_battle_screen()
+		var b: Battle = bs.get_battle()
+		_main.qa_set_hp(b.player.max_hp)
 		var played: bool = false
 		for i: int in b.hand.size():
 			if b.hand[i].kind == CardData.KIND_ATTACK and b.can_play(i):
@@ -60,63 +113,71 @@ func _win_battle() -> void:
 				break
 		if not played:
 			bs.press_end_turn()
-
-
-## Ends turns without playing until the player is dead (bounded).
-func _lose_battle() -> void:
-	var bs: BattleScreen = _main.get_battle_screen()
-	var b: Battle = bs.get_battle()
-	var guard: int = 0
-	while b.state == Battle.State.PLAYER_TURN and guard < 200:
-		guard += 1
-		bs.press_end_turn()
+	print("battle finished after %d steps -> %s" % [guard, _main.get_current_screen_name()])
 
 
 func _run() -> void:
-	# 1. Solo fight: take some damage first, then win -> reward screen.
-	_main.start_encounter("solo")
-	var bs: BattleScreen = _main.get_battle_screen()
-	bs.press_end_turn()
-	bs.press_end_turn()
-	_win_battle()
-	await _shot("01-reward-screen")
-	# 2. Deck overlay.
-	_main.reward_open_deck()
-	await _shot("02-deck-overlay")
-	print("deck lines = ", _main.get_reward_screen().get_deck_lines())
-	_main.reward_close_deck()
-	# 3. Pick the stolen card (or card 0) -> next battle, HP and deck persisted.
-	var pick_index: int = 0
-	var offers: Array[RewardOffer] = _main.get_reward_offers()
-	for i: int in offers.size():
-		if offers[i].stolen:
-			pick_index = i
-	var picked_id: String = offers[pick_index].card.id
-	_main.reward_pick(pick_index)
-	await _shot("03-next-battle")
-	# 3b. A few turns later the new card shows up in hand (bounded: 11 cards cycle within 3 turns).
-	bs = _main.get_battle_screen()
-	var b: Battle = bs.get_battle()
-	var turns: int = 0
-	while turns < 4 and b.state == Battle.State.PLAYER_TURN:
-		var in_hand: bool = false
-		for c: CardData in b.hand:
-			if c.id == picked_id:
-				in_hand = true
-		if in_hand:
+	# Pick the first seed whose map has a path through event + elite + centre.
+	var used_seed: int = SEEDS[0]
+	var path: Array[String] = []
+	var best_score: int = -1
+	for s: int in SEEDS:
+		_main.start_new_run(s)
+		var g: MapGraph = _main.get_run_state().act.graph
+		var candidate: Array[String] = _plan(g)
+		var score: int = _path_score(g, candidate)
+		if score > best_score:
+			best_score = score
+			used_seed = s
+			path = candidate
+		if score == WANTED_TYPES.size():
 			break
-		turns += 1
-		bs.press_end_turn()
-	print("picked '", picked_id, "' seen in hand after ", turns, " end-turns")
-	await _shot("03b-nouvelle-carte-en-main")
-	# 4. Another win, then "Passer": the deck stays at 11.
-	_win_battle()
-	await _shot("04-passer-avant")
-	_main.reward_skip()
-	await _shot("04-passer-apres")
-	# 5. Defeat, then Rejouer: fresh run (75/75, 10 cards).
-	_lose_battle()
-	await _shot("05a-defaite")
-	_main.get_battle_screen().press_restart()
-	await _shot("05-defaite-nouvelle-partie")
+	_main.start_new_run(used_seed)
+	var graph: MapGraph = _main.get_run_state().act.graph
+	var types: PackedStringArray = PackedStringArray()
+	for id: String in path:
+		types.append(graph.get_node(id).room_type)
+	print("walkthrough seed = %d, path = %s" % [used_seed, types])
+	await _shot("01-carte-debut")
+	var shot_done: Dictionary = {}
+	for step: int in path.size():
+		var id: String = path[step]
+		var rt: String = graph.get_node(id).room_type
+		if rt == "center":
+			_main.qa_set_hp(_main.get_run_state().max_hp / 2)  # so the centre's heal is visible
+		if not _main.map_choose(id):
+			print("ERROR: could not enter ", id)
+			quit(1)
+			return
+		match rt:
+			"wild", "elite", "boss":
+				if step == 0:
+					await _shot("02-combat-etage-1")
+				elif rt == "elite" and not shot_done.has("elite"):
+					await _shot("06-combat-elite")
+				elif rt == "boss":
+					await _shot("09-boss")
+				_win_battle()
+				if rt == "elite" and not shot_done.has("elite"):
+					shot_done["elite"] = true
+					await _shot("07-recompense-elite")
+				_main.reward_pick(0)
+				if step == 0:
+					await _shot("03-carte-apres-combat")
+			"event":
+				if not shot_done.has("event"):
+					_main.qa_set_hp(_main.get_run_state().max_hp / 2)
+					await _shot("04-evenement")
+				_main.event_choose(0)
+				if not shot_done.has("event"):
+					shot_done["event"] = true
+					await _shot("05-evenement-resultat")
+				_main.event_continue()
+			_:
+				if rt == "center" and not shot_done.has("center"):
+					shot_done["center"] = true
+					await _shot("08-centre")
+				_main.room_continue()
+	await _shot("10-acte-termine")
+	print("missing room types on the path: ", WANTED_TYPES.filter(func(t: String) -> bool: return not shot_done.has(t)))
 	quit(0)
