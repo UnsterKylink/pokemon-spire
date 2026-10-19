@@ -1,0 +1,49 @@
+{
+	"_doc": "Acte 1 (story 005). map: floors (nb d'etages, le dernier = boss), width (colonnes), start_nodes (salles de depart distinctes a l'etage 1), paths (marches aleatoires vers le haut qui construisent le graphe), boss_floor_nodes (doit valoir 1). placement: forced_floors (etage -> type de salle impose; l'etage 'floors' doit etre 'boss', et seul lui), no_consecutive (types qui ne peuvent pas se suivre sur deux salles reliees). room_types: id (wild|elite|center|mart|event|boss) -> name (FR), weight (>= 0, tirage aleatoire; au moins un > 0; boss = 0), min_floor, max_floor (optionnel), encounter_pool (cle de encounter_pools, salles de combat), encounter_pool_overrides (optionnel: [{pool, min_floor, max_floor}], le premier qui correspond a l'etage gagne), modifiers {hp_multiplier > 0, strength_bonus >= 0} (salles de combat), reward {rarity_weights: null ou {rarete: poids > 0} qui remplace rewards.json}. encounter_pools: cle -> [{encounter (id de pokemon.json), weight > 0}]. event_pool: ids de events.json.",
+	"map": {
+		"floors": 15,
+		"width": 7,
+		"start_nodes": 3,
+		"paths": 5,
+		"boss_floor_nodes": 1
+	},
+	"placement": {
+		"forced_floors": {"1": "wild", "14": "center", "15": "boss"},
+		"no_consecutive": ["elite", "center", "mart"]
+	},
+	"room_types": {
+		"wild": {"name": "Combat sauvage", "weight": 45, "min_floor": 1, "encounter_pool": "wild",
+			"encounter_pool_overrides": [{"pool": "wild_early", "min_floor": 1, "max_floor": 3}],
+			"modifiers": {"hp_multiplier": 1.0, "strength_bonus": 0}, "reward": {"rarity_weights": null}},
+		"elite": {"name": "Dresseur élite", "weight": 12, "min_floor": 5, "encounter_pool": "elite",
+			"modifiers": {"hp_multiplier": 1.4, "strength_bonus": 1},
+			"reward": {"rarity_weights": {"common": 20, "uncommon": 45, "rare": 35}}},
+		"center": {"name": "Centre Pokémon", "weight": 10, "min_floor": 4},
+		"mart": {"name": "Poké Mart", "weight": 10, "min_floor": 2},
+		"event": {"name": "Événement", "weight": 20, "min_floor": 2},
+		"boss": {"name": "Champion d'arène", "weight": 0, "min_floor": 15, "encounter_pool": "boss",
+			"modifiers": {"hp_multiplier": 1.5, "strength_bonus": 1}, "reward": {"rarity_weights": null}}
+	},
+	"encounter_pools": {
+		"wild_early": [
+			{"encounter": "solo", "weight": 3}, {"encounter": "solo_roucool", "weight": 3},
+			{"encounter": "solo_chenipan", "weight": 3}, {"encounter": "solo_aspicot", "weight": 3},
+			{"encounter": "solo_nosferapti", "weight": 3}
+		],
+		"wild": [
+			{"encounter": "solo_racaillou", "weight": 2}, {"encounter": "solo_ptitard", "weight": 2},
+			{"encounter": "solo_mystherbe", "weight": 2}, {"encounter": "solo_pikachu", "weight": 2},
+			{"encounter": "duo", "weight": 3}, {"encounter": "duo_insectes", "weight": 3},
+			{"encounter": "duo_nuit", "weight": 3}, {"encounter": "duo_elements", "weight": 3},
+			{"encounter": "trio", "weight": 2}, {"encounter": "trio_vol", "weight": 2},
+			{"encounter": "trio_mix", "weight": 2}
+		],
+		"elite": [
+			{"encounter": "elite_1", "weight": 1}, {"encounter": "elite_2", "weight": 1}, {"encounter": "elite_3", "weight": 1}
+		],
+		"boss": [
+			{"encounter": "boss_champion", "weight": 1}
+		]
+	},
+	"event_pool": ["rattata_affame", "source_chaude", "dresseur_curieux", "herbes_hautes"]
+}

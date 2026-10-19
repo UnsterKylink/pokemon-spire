@@ -7,8 +7,9 @@ extends RefCounted
 
 ## Returns up to offer_count DISTINCT offers (fewer only if the data cannot supply enough cards).
 ## The stolen card (if any) is at a random position. Seedable through the injected rng.
+## `rarity_weights_override` (non-empty) replaces the rarity weights of rewards.json (elite rooms, story 005).
 static func generate(data: GameData, player_id: String, defeated_enemy_ids: Array[String],
-		rng: RandomNumberGenerator) -> Array[RewardOffer]:
+		rng: RandomNumberGenerator, rarity_weights_override: Dictionary = {}) -> Array[RewardOffer]:
 	var offers: Array[RewardOffer] = []
 	var used: Dictionary = {}  # card id -> true
 	var count: int = data.get_offer_count()
@@ -26,7 +27,7 @@ static func generate(data: GameData, player_id: String, defeated_enemy_ids: Arra
 		used[stolen.card.id] = true
 	# 2. Remaining slots from the pool: weighted rarity, then uniform inside the rarity.
 	var pool: Array[CardData] = data.get_reward_pool(player_id)
-	var weights: Dictionary = data.get_rarity_weights()
+	var weights: Dictionary = data.get_rarity_weights() if rarity_weights_override.is_empty() else rarity_weights_override
 	while offers.size() < count:
 		var buckets: Dictionary = {}  # rarity -> Array[CardData]
 		var rest: Array[CardData] = []

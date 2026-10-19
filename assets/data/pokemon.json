@@ -60,7 +60,11 @@
 		"solo_mystherbe": ["oddish"],
 		"solo_pikachu": ["pikachu"],
 		"duo_elements": ["poliwag", "geodude"],
-		"trio_mix": ["oddish", "pikachu", "geodude"]
+		"trio_mix": ["oddish", "pikachu", "geodude"],
+		"elite_1": ["geodude", "pikachu", "poliwag"],
+		"elite_2": ["rattata", "pidgey", "oddish"],
+		"elite_3": ["zubat", "weedle", "geodude"],
+		"boss_champion": ["geodude", "pikachu", "oddish"]
 	},
 	"encounter_order": ["solo", "duo", "trio", "solo_roucool", "solo_chenipan", "solo_aspicot", "solo_nosferapti", "duo_insectes", "duo_nuit", "trio_vol", "solo_racaillou", "solo_ptitard", "solo_mystherbe", "solo_pikachu", "duo_elements", "trio_mix"]
 }

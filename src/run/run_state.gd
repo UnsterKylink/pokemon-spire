@@ -14,6 +14,8 @@ var hand_size: int = 0
 ## The run's own copy of the deck (never the shared starter definition).
 var deck: Array[CardData] = []
 var battles_won: int = 0
+## Progress on the act map (null until start_act is called).
+var act: ActProgress = null
 
 
 ## Starts a run from the player's data: full HP, starter deck copy. Null if the id is unknown.
@@ -86,3 +88,45 @@ func get_deck_entries() -> Array[Dictionary]:
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return (a["card"] as CardData).display_name.naturalnocasecmp_to((b["card"] as CardData).display_name) < 0)
 	return entries
+
+
+## Generates the act map and starts progress on it (seed 0 = random; graph.seed holds the used seed).
+## Returns false if `data` has no valid act config.
+func start_act(data: GameData, act_seed: int = 0) -> bool:
+	var config: Dictionary = data.get_act_config()
+	if config.is_empty():
+		push_error("RunState: no act config loaded")
+		return false
+	act = ActProgress.create(MapGenerator.generate(config, act_seed))
+	return true
+
+
+## Heals `percent` % of max HP (rounded up), never above max HP. Returns the HP actually restored.
+func heal_percent(percent: float) -> int:
+	var before: int = hp
+	hp = mini(max_hp, hp + ceili(max_hp * percent / 100.0))
+	return hp - before
+
+
+## Loses up to `amount` HP but never goes below `min_hp` (events never kill: default 1).
+## Returns the HP actually lost.
+func lose_hp(amount: int, min_hp: int = 1) -> int:
+	var before: int = hp
+	hp = maxi(mini(hp, min_hp), hp - maxi(amount, 0))
+	return before - hp
+
+
+## Raises max HP by `amount` and current HP by the same amount.
+func gain_max_hp(amount: int) -> void:
+	var a: int = maxi(amount, 0)
+	max_hp += a
+	hp += a
+
+
+## Removes ONE copy of the card from the deck. False (no change) if the deck has none.
+func remove_card(card_id: String) -> bool:
+	for i: int in deck.size():
+		if deck[i].id == card_id:
+			deck.remove_at(i)
+			return true
+	return false

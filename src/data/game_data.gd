@@ -6,6 +6,14 @@ const DEFAULT_CARDS_PATH: String = "res://assets/data/cards.json"
 const DEFAULT_POKEMON_PATH: String = "res://assets/data/pokemon.json"
 const DEFAULT_TYPES_PATH: String = "res://assets/data/types.json"
 const DEFAULT_REWARDS_PATH: String = "res://assets/data/rewards.json"
+const DEFAULT_ACT_PATH: String = "res://assets/data/act1.json"
+const DEFAULT_EVENTS_PATH: String = "res://assets/data/events.json"
+## Room type ids the game logic knows (their CONTENT and proportions are data, act1.json).
+const ROOM_TYPES: Array[String] = ["wild", "elite", "center", "mart", "event", "boss"]
+## Room types that start a battle (need encounter_pool + modifiers).
+const FIGHT_ROOM_TYPES: Array[String] = ["wild", "elite", "boss"]
+const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "nothing"]
+const NO_FLOOR_LIMIT: int = 1000000
 ## Minimum number of types the type table must define (story 003).
 const MIN_TYPES: int = 10
 
@@ -18,11 +26,14 @@ var _encounter_order: Array[String] = []
 var _offer_count: int = 0
 var _rarity_weights: Dictionary = {}  # String -> float
 var _reward_pools: Dictionary = {}    # String (player id) -> Array[CardData]
+var _act: Dictionary = {}      # validated act1.json
+var _events: Dictionary = {}   # String -> Dictionary (validated event)
 
 
-## Loads all four files. Returns false (after push_error) if anything is missing or invalid.
+## Loads all six files (act and events last, story 005). Returns false (after push_error) if anything is missing or invalid.
 func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
-		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH) -> bool:
+		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH,
+		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_cards.clear()
 	_players.clear()
@@ -32,11 +43,16 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_offer_count = 0
 	_rarity_weights.clear()
 	_reward_pools.clear()
+	_act = {}
+	_events.clear()
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
 	var rewards_root: Dictionary = _read_json(rewards_path)
-	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty() or rewards_root.is_empty():
+	var act_root: Dictionary = _read_json(act_path)
+	var events_root: Dictionary = _read_json(events_path)
+	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty() or rewards_root.is_empty() \
+			or act_root.is_empty() or events_root.is_empty():
 		return false
 	var chart: TypeChart = TypeChart.from_dict(types_root)
 	if chart == null:
@@ -52,6 +68,8 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_enemies(pokemon_root) and ok
 	ok = _load_encounters(pokemon_root) and ok
 	ok = _load_rewards(rewards_root) and ok
+	ok = _load_events(events_root) and ok
+	ok = _load_act(act_root) and ok
 	return ok
 
 
@@ -140,7 +158,9 @@ func create_enemy(enemy_id: String) -> Combatant:
 
 
 ## Builds fresh enemy Combatants (left to right) for an encounter. Empty if the id is unknown.
-func create_enemies(encounter_id: String) -> Array[Combatant]:
+## Room modifiers (story 005): max HP x `hp_multiplier` (rounded up, HP full) and `strength_bonus`
+## added to Combatant.strength, so battle intents already show the boosted attack values.
+func create_enemies(encounter_id: String, hp_multiplier: float = 1.0, strength_bonus: int = 0) -> Array[Combatant]:
 	var result: Array[Combatant] = []
 	if not _encounters.has(encounter_id):
 		push_error("GameData: unknown encounter id '%s'" % encounter_id)
@@ -151,6 +171,10 @@ func create_enemies(encounter_id: String) -> Array[Combatant]:
 		if enemy == null:
 			result.clear()
 			return result
+		if hp_multiplier != 1.0:
+			enemy.max_hp = maxi(1, ceili(snappedf(enemy.max_hp * hp_multiplier, 0.0001)))
+			enemy.hp = enemy.max_hp
+		enemy.strength += strength_bonus
 		result.append(enemy)
 	return result
 
@@ -195,6 +219,75 @@ func get_enemy_ids() -> Array[String]:
 	for k: String in _enemies.keys():
 		ids.append(k)
 	return ids
+
+
+## Copy of the validated act config (act1.json): map, placement, room_types, encounter_pools, event_pool.
+## Empty until load_all succeeds. Feed it to MapGenerator.generate.
+func get_act_config() -> Dictionary:
+	return _act.duplicate(true)
+
+
+## Room type definition (copy): name, weight, min_floor, ... {} if unknown.
+func get_room_type(room_type: String) -> Dictionary:
+	var rooms: Dictionary = _act.get("room_types", {})
+	if not rooms.has(room_type):
+		return {}
+	return (rooms[room_type] as Dictionary).duplicate(true)
+
+
+## French display name of a room type ("" if unknown).
+func get_room_name(room_type: String) -> String:
+	return String(get_room_type(room_type).get("name", ""))
+
+
+## Fight modifiers of a room type: {"hp_multiplier": float, "strength_bonus": int} (neutral if none).
+func get_room_modifiers(room_type: String) -> Dictionary:
+	var mods: Dictionary = get_room_type(room_type).get("modifiers", {})
+	return {"hp_multiplier": float(mods.get("hp_multiplier", 1.0)), "strength_bonus": int(mods.get("strength_bonus", 0))}
+
+
+## Rarity weights overriding rewards.json for this room's reward (elite); {} = use the default weights.
+func get_room_rarity_weights(room_type: String) -> Dictionary:
+	var reward: Dictionary = get_room_type(room_type).get("reward", {})
+	var w: Variant = reward.get("rarity_weights", null)
+	return (w as Dictionary).duplicate() if w is Dictionary else {}
+
+
+## Picks an encounter id for a fight room at `floor_number` (weighted, from the room's pool for that floor).
+## "" (after push_error) if the room has no pool.
+func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGenerator) -> String:
+	var room: Dictionary = get_room_type(room_type)
+	var pool_id: String = _pool_id_for(room, floor_number)
+	var pools: Dictionary = _act.get("encounter_pools", {})
+	if pool_id.is_empty() or not pools.has(pool_id):
+		push_error("GameData: room type '%s' has no encounter pool" % room_type)
+		return ""
+	var entries: Array = pools[pool_id]
+	var total: float = 0.0
+	for entry: Dictionary in entries:
+		total += float(entry["weight"])
+	var roll: float = rng.randf() * total
+	for entry: Dictionary in entries:
+		if roll < float(entry["weight"]):
+			return String(entry["encounter"])
+		roll -= float(entry["weight"])
+	return String((entries[entries.size() - 1] as Dictionary)["encounter"])
+
+
+## Ids of the events that may appear in event rooms.
+func get_event_pool() -> Array[String]:
+	var ids: Array[String] = []
+	for id: String in _act.get("event_pool", []):
+		ids.append(id)
+	return ids
+
+
+## Event definition (copy): {id, title, text, options:[{label, result_text, effects}]}. {} if unknown.
+func get_event(event_id: String) -> Dictionary:
+	if not _events.has(event_id):
+		push_error("GameData: unknown event id '%s'" % event_id)
+		return {}
+	return (_events[event_id] as Dictionary).duplicate(true)
 
 
 # --- Loading / validation --------------------------------------------------
@@ -428,6 +521,281 @@ func _load_rewards(root: Dictionary) -> bool:
 			push_error("GameData: reward pool '%s' has %d usable cards, offer_count is %d" % [pid, pool.size(), _offer_count])
 			ok = false
 		_reward_pools[pid] = pool
+	return ok
+
+
+func _pool_id_for(room: Dictionary, floor_number: int) -> String:
+	var overrides: Array = room.get("encounter_pool_overrides", [])
+	for o: Dictionary in overrides:
+		if floor_number >= int(o.get("min_floor", 1)) and floor_number <= int(o.get("max_floor", NO_FLOOR_LIMIT)):
+			return String(o["pool"])
+	return String(room.get("encounter_pool", ""))
+
+
+func _is_number(v: Variant) -> bool:
+	return v is int or v is float
+
+
+## Validates a {rarity: weight > 0} object. `label` names the owner in errors.
+func _check_rarity_weights(label: String, w: Dictionary) -> bool:
+	var ok: bool = not w.is_empty()
+	if not ok:
+		push_error("GameData: %s rarity_weights is empty" % label)
+	for rarity: String in w.keys():
+		if rarity not in CardData.RARITIES or not (_is_number(w[rarity]) and w[rarity] > 0):
+			push_error("GameData: %s rarity_weights['%s'] is invalid" % [label, rarity])
+			ok = false
+	return ok
+
+
+func _load_events(root: Dictionary) -> bool:
+	var list_v: Variant = root.get("events", null)
+	if not (list_v is Array) or (list_v as Array).is_empty():
+		push_error("GameData: events file needs a non-empty 'events' array")
+		return false
+	var ok: bool = true
+	for ev_v: Variant in (list_v as Array):
+		if not (ev_v is Dictionary):
+			push_error("GameData: every event must be an object")
+			ok = false
+			continue
+		var ev: Dictionary = ev_v
+		var id: String = String(ev.get("id", "")) if ev.get("id", null) is String else ""
+		if id.is_empty() or _events.has(id):
+			push_error("GameData: event needs a unique non-empty 'id' (got '%s')" % id)
+			ok = false
+			continue
+		var ev_ok: bool = true
+		for key: String in ["title", "text"]:
+			if not (ev.get(key, null) is String) or String(ev[key]).is_empty():
+				push_error("GameData: event '%s' needs a text '%s'" % [id, key])
+				ev_ok = false
+		var opts_v: Variant = ev.get("options", null)
+		if not (opts_v is Array) or (opts_v as Array).size() != 2:
+			push_error("GameData: event '%s' needs exactly 2 options" % id)
+			ok = false
+			continue
+		for o_v: Variant in (opts_v as Array):
+			if not (o_v is Dictionary):
+				push_error("GameData: event '%s' option must be an object" % id)
+				ev_ok = false
+				continue
+			var o: Dictionary = o_v
+			for key: String in ["label", "result_text"]:
+				if not (o.get(key, null) is String) or String(o[key]).is_empty():
+					push_error("GameData: event '%s' option needs a text '%s'" % [id, key])
+					ev_ok = false
+			var effects_v: Variant = o.get("effects", null)
+			if not (effects_v is Array) or (effects_v as Array).is_empty():
+				push_error("GameData: event '%s' option needs a non-empty 'effects' array" % id)
+				ev_ok = false
+				continue
+			for eff_v: Variant in (effects_v as Array):
+				if not _check_effect(id, eff_v):
+					ev_ok = false
+		if ev_ok:
+			_events[id] = ev
+		else:
+			ok = false
+	return ok
+
+
+func _check_effect(event_id: String, eff_v: Variant) -> bool:
+	if not (eff_v is Dictionary):
+		push_error("GameData: event '%s' effect must be an object" % event_id)
+		return false
+	var eff: Dictionary = eff_v
+	var t: String = String(eff.get("type", "")) if eff.get("type", null) is String else ""
+	if t not in EFFECT_TYPES:
+		push_error("GameData: event '%s' has unknown effect type '%s'" % [event_id, t])
+		return false
+	var good: bool = true
+	match t:
+		"heal":
+			var pct: Variant = eff.get("percent", null)
+			good = _is_number(pct) and pct > 0 and pct <= 100
+		"lose_hp", "gain_max_hp":
+			good = _is_positive_int(eff.get("value", null))
+		"add_card", "remove_card":
+			good = eff.get("card", null) is String and _cards.has(eff["card"])
+		"add_random_card":
+			good = eff.get("rarity", null) is String and _rarity_weights.has(eff["rarity"])
+	if not good:
+		push_error("GameData: event '%s' effect '%s' has invalid or unknown parameters" % [event_id, t])
+	return good
+
+
+func _load_act(root: Dictionary) -> bool:
+	var map_v: Variant = root.get("map", null)
+	if not (map_v is Dictionary):
+		push_error("GameData: act file needs a 'map' object")
+		return false
+	var m: Dictionary = map_v
+	for key: String in ["floors", "width", "start_nodes", "paths", "boss_floor_nodes"]:
+		if not _is_positive_int(m.get(key, null)):
+			push_error("GameData: act map needs a positive integer '%s'" % key)
+			return false
+	var floors: int = int(m["floors"])
+	if floors < 3 or int(m["start_nodes"]) > int(m["width"]) or int(m["paths"]) < int(m["start_nodes"]):
+		push_error("GameData: act map needs floors >= 3, start_nodes <= width and paths >= start_nodes")
+		return false
+	if int(m["boss_floor_nodes"]) != 1:
+		push_error("GameData: the boss floor must have a single node (boss_floor_nodes = 1)")
+		return false
+	var ok: bool = true
+	# Room types.
+	var rooms_v: Variant = root.get("room_types", null)
+	if not (rooms_v is Dictionary):
+		push_error("GameData: act file needs a 'room_types' object")
+		return false
+	var rooms: Dictionary = rooms_v
+	for tid: String in rooms.keys():
+		if tid not in ROOM_TYPES:
+			push_error("GameData: unknown room type '%s'" % tid)
+			ok = false
+	for tid: String in ROOM_TYPES:
+		if not rooms.has(tid):
+			push_error("GameData: room type '%s' is missing" % tid)
+			ok = false
+	if not ok:
+		return false
+	var pools_v: Variant = root.get("encounter_pools", null)
+	if not (pools_v is Dictionary):
+		push_error("GameData: act file needs an 'encounter_pools' object")
+		return false
+	var pools: Dictionary = pools_v
+	var any_weight: bool = false
+	for tid: String in rooms.keys():
+		var r_v: Variant = rooms[tid]
+		if not (r_v is Dictionary):
+			push_error("GameData: room type '%s' must be an object" % tid)
+			ok = false
+			continue
+		var r: Dictionary = r_v
+		if not (r.get("name", null) is String) or not _is_number(r.get("weight", null)) or r["weight"] < 0 \
+				or not _is_positive_int(r.get("min_floor", null)) \
+				or (r.has("max_floor") and not _is_positive_int(r["max_floor"])) \
+				or (r.has("max_floor") and _is_positive_int(r["max_floor"]) and r["max_floor"] < r["min_floor"]):
+			push_error("GameData: room type '%s' needs name, weight >= 0, min_floor >= 1 and max_floor >= min_floor" % tid)
+			ok = false
+			continue
+		if tid != "boss" and r["weight"] > 0:
+			any_weight = true
+		if tid == "boss" and r["weight"] != 0:
+			push_error("GameData: the boss room must have weight 0 (it only exists on the boss floor)")
+			ok = false
+		if r.has("reward"):
+			var reward_v: Variant = r["reward"]
+			var rw: Variant = (reward_v as Dictionary).get("rarity_weights", null) if reward_v is Dictionary else 0
+			if rw is Dictionary:
+				ok = _check_rarity_weights("room '%s'" % tid, rw) and ok
+			elif rw != null:
+				push_error("GameData: room '%s' reward.rarity_weights must be null or an object" % tid)
+				ok = false
+		if tid in FIGHT_ROOM_TYPES:
+			var mods_v: Variant = r.get("modifiers", null)
+			if not (mods_v is Dictionary) or not _is_number((mods_v as Dictionary).get("hp_multiplier", null)) \
+					or (mods_v as Dictionary)["hp_multiplier"] <= 0 \
+					or not _is_number((mods_v as Dictionary).get("strength_bonus", null)) \
+					or (mods_v as Dictionary)["strength_bonus"] < 0:
+				push_error("GameData: fight room '%s' needs modifiers {hp_multiplier > 0, strength_bonus >= 0}" % tid)
+				ok = false
+			var used_pools: Array = [r.get("encounter_pool", null)]
+			var overrides_v: Variant = r.get("encounter_pool_overrides", [])
+			if not (overrides_v is Array):
+				push_error("GameData: room '%s' encounter_pool_overrides must be an array" % tid)
+				ok = false
+			else:
+				for o_v: Variant in (overrides_v as Array):
+					if o_v is Dictionary:
+						used_pools.append((o_v as Dictionary).get("pool", null))
+					else:
+						push_error("GameData: room '%s' has an invalid pool override" % tid)
+						ok = false
+			for pool_ref: Variant in used_pools:
+				if not (pool_ref is String) or not pools.has(pool_ref):
+					push_error("GameData: room '%s' references unknown encounter pool '%s'" % [tid, str(pool_ref)])
+					ok = false
+	if not any_weight:
+		push_error("GameData: at least one non-boss room type needs a weight > 0")
+		ok = false
+	for pool_id: String in pools.keys():
+		var list_v: Variant = pools[pool_id]
+		if not (list_v is Array) or (list_v as Array).is_empty():
+			push_error("GameData: encounter pool '%s' must be a non-empty array" % pool_id)
+			ok = false
+			continue
+		for entry_v: Variant in (list_v as Array):
+			if not (entry_v is Dictionary) or not ((entry_v as Dictionary).get("encounter", null) is String) \
+					or not _encounters.has((entry_v as Dictionary)["encounter"]) \
+					or not _is_number((entry_v as Dictionary).get("weight", null)) or (entry_v as Dictionary)["weight"] <= 0:
+				push_error("GameData: encounter pool '%s' has an invalid entry (unknown encounter or weight <= 0)" % pool_id)
+				ok = false
+	# Placement.
+	var place_v: Variant = root.get("placement", null)
+	if not (place_v is Dictionary):
+		push_error("GameData: act file needs a 'placement' object")
+		return false
+	var place: Dictionary = place_v
+	var nc_v: Variant = place.get("no_consecutive", null)
+	if not (nc_v is Array):
+		push_error("GameData: placement needs a 'no_consecutive' array")
+		return false
+	for t: Variant in (nc_v as Array):
+		if not (t is String) or t not in ROOM_TYPES:
+			push_error("GameData: placement.no_consecutive has unknown room type '%s'" % str(t))
+			ok = false
+	var forced_v: Variant = place.get("forced_floors", null)
+	if not (forced_v is Dictionary):
+		push_error("GameData: placement needs a 'forced_floors' object")
+		return false
+	var forced: Dictionary = forced_v
+	if forced.get(str(floors), null) != "boss":
+		push_error("GameData: the last floor (%d) must be forced to 'boss'" % floors)
+		ok = false
+	var forced_by_floor: Dictionary = {}
+	for key: String in forced.keys():
+		var tv: Variant = forced[key]
+		if not key.is_valid_int() or int(key) < 1 or int(key) > floors or not (tv is String) or tv not in ROOM_TYPES:
+			push_error("GameData: invalid forced floor '%s'" % key)
+			ok = false
+			continue
+		if tv == "boss" and int(key) != floors:
+			push_error("GameData: only the last floor may be 'boss'")
+			ok = false
+		forced_by_floor[int(key)] = tv
+		var fr: Dictionary = rooms[tv] if rooms[tv] is Dictionary else {}
+		if not fr.is_empty() and (int(key) < int(fr.get("min_floor", 1)) or int(key) > int(fr.get("max_floor", NO_FLOOR_LIMIT))):
+			push_error("GameData: forced floor %s uses '%s' outside its floor range" % [key, str(tv)])
+			ok = false
+	for f: int in forced_by_floor.keys():
+		if forced_by_floor.has(f + 1) and forced_by_floor[f] == forced_by_floor[f + 1] and forced_by_floor[f] in (nc_v as Array):
+			push_error("GameData: forced floors %d and %d break no_consecutive" % [f, f + 1])
+			ok = false
+	# Every free floor needs at least one placeable type (wild-like weight > 0 and floor range).
+	for f: int in range(1, floors + 1):
+		if forced_by_floor.has(f):
+			continue
+		var placeable: bool = false
+		for tid: String in rooms.keys():
+			var rr: Dictionary = rooms[tid] if rooms[tid] is Dictionary else {}
+			if not rr.is_empty() and _is_number(rr.get("weight", null)) and rr["weight"] > 0 \
+					and f >= int(rr.get("min_floor", 1)) and f <= int(rr.get("max_floor", NO_FLOOR_LIMIT)):
+				placeable = true
+		if not placeable:
+			push_error("GameData: no room type can be placed on floor %d" % f)
+			ok = false
+	# Event pool.
+	var ep_v: Variant = root.get("event_pool", null)
+	if not (ep_v is Array) or (ep_v as Array).is_empty():
+		push_error("GameData: act file needs a non-empty 'event_pool'")
+		return false
+	for eid: Variant in (ep_v as Array):
+		if not (eid is String) or not _events.has(eid):
+			push_error("GameData: event_pool references unknown event '%s'" % str(eid))
+			ok = false
+	if ok:
+		_act = root
 	return ok
 
 

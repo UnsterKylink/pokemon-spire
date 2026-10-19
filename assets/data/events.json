@@ -1,0 +1,33 @@
+{
+	"_doc": "Evenements (story 005). events: liste de {id, title, text (FR), options: exactement 2 x {label, result_text, effects}}. Effets: heal {percent 1..100}, lose_hp {value > 0; un evenement ne tue jamais: PV >= 1}, gain_max_hp {value > 0; augmente aussi les PV actuels}, add_card {card}, add_random_card {rarity: common|uncommon|rare}, remove_card {card; retire un exemplaire si le deck en a un}, nothing. Les evenements tirables sont listes dans act1.json (event_pool).",
+	"events": [
+		{"id": "rattata_affame", "title": "Un Rattata affamé",
+			"text": "Un Rattata maigrichon te fixe, les yeux brillants, devant ton sac de baies. Son ventre gargouille.",
+			"options": [
+				{"label": "Lui donner une baie", "result_text": "Il dévore la baie et te suit un moment, plein d'énergie. Tu te sens plus robuste.",
+					"effects": [{"type": "gain_max_hp", "value": 5}, {"type": "lose_hp", "value": 5}]},
+				{"label": "Le chasser", "result_text": "Le Rattata détale. Rien ne se passe.", "effects": [{"type": "nothing"}]}
+			]},
+		{"id": "source_chaude", "title": "Source chaude",
+			"text": "Une source chaude fume entre les rochers. L'eau a l'air délicieuse, mais quelque chose remue au fond.",
+			"options": [
+				{"label": "Se baigner", "result_text": "Quelle détente ! Tes blessures se referment doucement.", "effects": [{"type": "heal", "percent": 30}]},
+				{"label": "Fouiller le fond", "result_text": "Tu trouves une capsule de CT, mais l'eau bouillante te brûle les pattes.",
+					"effects": [{"type": "add_random_card", "rarity": "uncommon"}, {"type": "lose_hp", "value": 6}]}
+			]},
+		{"id": "dresseur_curieux", "title": "Dresseur curieux",
+			"text": "Un jeune Dresseur t'arrête : il aimerait étudier ta façon de te défendre en échange d'une de ses techniques.",
+			"options": [
+				{"label": "Échanger Abri", "result_text": "Vous échangez vos astuces. Tu oublies Abri mais apprends autre chose.",
+					"effects": [{"type": "remove_card", "card": "abri"}, {"type": "add_random_card", "rarity": "common"}]},
+				{"label": "Refuser poliment", "result_text": "Le Dresseur hausse les épaules et s'en va.", "effects": [{"type": "nothing"}]}
+			]},
+		{"id": "herbes_hautes", "title": "Hautes herbes",
+			"text": "Les hautes herbes bruissent. Quelque chose y est caché, ou bien ce n'est que le vent.",
+			"options": [
+				{"label": "Y plonger", "result_text": "Tu déniches une technique, mais tu es griffé par des ronces.",
+					"effects": [{"type": "add_random_card", "rarity": "common"}, {"type": "lose_hp", "value": 4}]},
+				{"label": "Contourner", "result_text": "Tu fais une pause à l'écart du chemin et reprends des forces.", "effects": [{"type": "heal", "percent": 10}]}
+			]}
+	]
+}
