@@ -1,7 +1,7 @@
 # Story 009: Cartes Pokémon, switch et PV communs
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -75,3 +75,10 @@
 
 - Depends on: Story 008 must be DONE
 - Unlocks: Story 010
+
+## Completion Notes
+**Completed**: 2026-10-19
+**Criteria**: 8/8 passing. Real mouse play on this version (switch, intents changing) confirmed by the developer.
+**Deviations**: ADVISORY — skill cards show "Équipe" instead of a Pokémon; the card → Pokémon mapping is fixed in `cards.json` (story 010 makes non-stolen cards carried by a random coherent Pokémon, and adds the starting-Pokémon choice); no validation that starter-deck cards belong to the starter and no check that a card's type matches its Pokémon's types (by design, like Scratch on Charmander); `RemoveCard(card_id)` removes the first card with that id whatever its Pokémon; `qa_force_hand` / `qa_set_hp` are public QA helpers shipping in the build (gate before sharing); an enemy with two types still attacks with its first type; user-facing French strings still hardcoded. Scope notes: deck lines and counts are keyed by (card, Pokémon) via `CardData.deck_key()`; `Battle` takes an optional Pokémon lookup + starter id; card sprites are cropped to their opaque area for legibility.
+**Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-009-cartes-pokemon-switch/` (7 PNGs + README.md). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720). Throwaway headless assertions: t9 199 / 0 (switch rules, intent recompute, shared HP/block, stolen card carrier, data rejections), t3 101, t4 1208, t5b 465, t8 785 — all 0 failures.
+**Code Review**: Skipped (solo mode).
