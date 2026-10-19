@@ -32,6 +32,7 @@
 - [ ] Les combats sauvages tirent leurs ennemis dans cette liste (pools par étage en données) ; élites et boss restent des rencontres définies en données.
 - [ ] Les cartes de récompense (hors carte volée) : chaque carte d'attaque d'un type T est portée par un Pokémon de la liste ayant le type T, tiré au hasard mais cohérent (ex. une carte Feu peut être portée par un starter Feu ou un Pokémon Feu des premières routes).
 - [ ] Chaque Pokémon de la liste a au moins une carte d'attaque cohérente avec ses types (ex. Moustillon : Pistolet à O).
+- [ ] Début de partie : un écran propose 3 Pokémon de départ tirés au hasard parmi les starters et Pokémon de route 1 de la liste, de 3 types (principaux) différents ; le joueur en choisit 1, qui remplace Salamèche : son deck de départ (10 cartes, défini en données pour chaque Pokémon proposable) et Pokémon actif au début de chaque combat.
 - [ ] Les données sont validées au chargement (types connus, sprites présents, cartes existantes) ; une erreur de données est signalée sans planter le jeu.
 
 ---
