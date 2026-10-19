@@ -6,7 +6,7 @@ extends SceneTree
 ## Wins use the real select/click path; HP is topped up through Main.qa_set_hp (QA-only cheat).
 ## Run (needs a display, not --headless for screenshots):
 ##   godot --path . --windowed --resolution 1280x720 -s res://tools/qa/battle_walkthrough.gd -- <out_dir>
-## Story: pokemon-spire 005 (replaces the 001-004 walkthrough)
+## Story: pokemon-spire 005, 008 (type shots 01-types-doubles / 02-super-efficace-double / 03-immunite first)
 
 const SEEDS: Array[int] = [12345, 777, 4242, 2026, 31337, 8080, 1111, 9001]
 const WANTED_TYPES: Array[String] = ["event", "elite", "center"]
@@ -116,6 +116,27 @@ func _win_battle() -> void:
 	print("battle finished after %d steps -> %s" % [guard, _main.get_current_screen_name()])
 
 
+## Story 008 shots: dual-type badges, a x2.25 hit, an immunity. 04-intention-attaque-0 is skipped:
+## no attack in the roster is fully immune vs Salamèche (Feu); the unit test covers "Attaque 0".
+func _type_shots(used_seed: int) -> void:
+	_main.start_encounter("trio_vol")
+	await _shot("01-types-doubles")
+	_main.start_encounter("solo_racaillou")
+	var bs: BattleScreen = _main.get_battle_screen()
+	var foe: Combatant = bs.get_battle().enemies[0]
+	var hp_before: int = foe.hp
+	bs.qa_force_hand(["pistolet_a_o"] as Array[String])  # Eau vs Roche/Sol = x1.5 x1.5
+	bs.play_card_direct(0, 0)
+	print("pistolet_a_o vs %s %s: hp %d -> %d" % [foe.id, foe.type_ids, hp_before, foe.hp])
+	await _shot("02-super-efficace-double")
+	hp_before = foe.hp
+	bs.qa_force_hand(["eclair"] as Array[String])  # Électrik vs Sol = immune
+	bs.play_card_direct(0, 0)
+	print("eclair vs %s %s: hp %d -> %d" % [foe.id, foe.type_ids, hp_before, foe.hp])
+	await _shot("03-immunite")
+	_main.start_new_run(used_seed)
+
+
 func _run() -> void:
 	# Pick the first seed whose map has a path through event + elite + centre.
 	var used_seed: int = SEEDS[0]
@@ -138,6 +159,7 @@ func _run() -> void:
 	for id: String in path:
 		types.append(graph.get_node(id).room_type)
 	print("walkthrough seed = %d, path = %s" % [used_seed, types])
+	await _type_shots(used_seed)
 	await _shot("01-carte-debut")
 	var shot_done: Dictionary = {}
 	for step: int in path.size():

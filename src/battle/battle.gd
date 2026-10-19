@@ -100,8 +100,8 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	var hit_mult: float = 1.0
 	if card.damage > 0:
 		hit_target = enemies[target_index]
-		hit_mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_id)
-		hit_amount = _type_chart.final_damage(card.damage, card.type_id, hit_target.type_id)
+		hit_mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
+		hit_amount = _type_chart.final_damage(card.damage, card.type_id, hit_target.type_ids)
 		hit_target.take_damage(hit_amount)  # block absorbs AFTER the type multiplier
 		if not hit_target.is_alive():
 			hit_target.intent = null  # a K.O. enemy no longer acts
@@ -158,7 +158,7 @@ func _execute_intent(enemy: Combatant) -> void:
 		EnemyIntent.TYPE_BUFF:
 			enemy.strength += intent.value
 	if hit:
-		hit_resolved.emit(player, intent.value, _type_chart.damage_multiplier(enemy.type_id, player.type_id))
+		hit_resolved.emit(player, intent.value, _type_chart.damage_multiplier(enemy.get_primary_type(), player.type_ids))
 	enemy_acted.emit(enemy, intent)
 
 
@@ -187,7 +187,7 @@ func _roll_intent(enemy: Combatant) -> void:
 	var rolled: EnemyIntent = chosen.with_bonus(bonus)
 	if rolled.type == EnemyIntent.TYPE_ATTACK:
 		# Strength is added BEFORE the type multiplier; the displayed value is the final one.
-		rolled.value = _type_chart.final_damage(rolled.value, enemy.type_id, player.type_id)
+		rolled.value = _type_chart.final_damage(rolled.value, enemy.get_primary_type(), player.type_ids)
 	enemy.intent = rolled
 
 

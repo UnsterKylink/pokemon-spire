@@ -35,6 +35,9 @@ const COLOR_SUPER_EFFECTIVE: Color = Color(0.35, 1.0, 0.4)
 const COLOR_NOT_VERY_EFFECTIVE: Color = Color(0.72, 0.72, 0.76)
 const TEXT_SUPER_EFFECTIVE: String = "Super efficace !"
 const TEXT_NOT_VERY_EFFECTIVE: String = "Ce n'est pas très efficace…"
+## %s = display name of the immune target (story 008).
+const TEXT_IMMUNE: String = "Ça n'affecte pas %s…"
+const COLOR_IMMUNE: Color = Color(0.55, 0.58, 0.68)
 ## Effectiveness feedback: total visible time (s), final fade (s), upward drift (px).
 const FLOAT_DURATION: float = 1.2
 const FLOAT_FADE: float = 0.4
@@ -60,7 +63,7 @@ class EnemyView extends RefCounted:
 	var hp_bar: ProgressBar
 	var hp_label: Label
 	var block_label: Label
-	var type_badge: PanelContainer
+	var type_badge: HBoxContainer
 	var float_text: FloatText
 
 
@@ -73,7 +76,7 @@ var _data: GameData
 
 var _background: ColorRect
 var _player_name: Label
-var _player_type_badge: PanelContainer
+var _player_type_badge: HBoxContainer
 var _player_float: FloatText
 var _float_layer: Control
 var _player_sprite: TextureRect
@@ -138,7 +141,7 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	var player: Combatant = _battle.player
 	_build_enemy_views(_battle.enemies)
 	_player_name.text = player.display_name
-	_set_badge(_player_type_badge, player.type_id)
+	_set_badge_row(_player_type_badge, player.type_ids)
 	_hide_float(_player_float)
 	_player_sprite.texture = _load_texture(player.sprite_path)
 	_end_box.visible = false
@@ -195,6 +198,21 @@ func play_card_direct(index: int, enemy_index: int = -1) -> bool:
 	return _battle.play_card(index, target)
 
 
+## QA-ONLY: replaces the hand with the given card ids (and refills energy) so a walkthrough
+## can stage a matchup. Never called by the game itself.
+func qa_force_hand(card_ids: Array[String]) -> void:
+	if _battle == null:
+		return
+	_battle.hand.clear()
+	for cid: String in card_ids:
+		var c: CardData = _data.get_card(cid)
+		if c != null:
+			_battle.hand.append(c)
+	_battle.energy = _battle.max_energy
+	_selected_index = -1
+	_refresh()
+
+
 ## Presses the "Fin de tour" button.
 func press_end_turn() -> void:
 	if _battle == null:
@@ -244,7 +262,7 @@ func _build_ui() -> void:
 	arena.add_child(player_box)
 	_player_name = _make_label(28)
 	player_box.add_child(_player_name)
-	_player_type_badge = _make_type_badge()
+	_player_type_badge = CardView.make_type_badge_row()
 	player_box.add_child(_player_type_badge)
 	_player_sprite = _make_sprite_holder("PlayerSprite", PLAYER_SPRITE_SCALE)
 	player_box.add_child(_player_sprite)
@@ -344,8 +362,8 @@ func _make_type_badge(font_size: int = 16) -> PanelContainer:
 	return CardView.make_type_badge(font_size)
 
 
-func _set_badge(badge: PanelContainer, type_id: String) -> void:
-	CardView.set_badge(badge, type_id, _data.get_type_chart())
+func _set_badge_row(row: HBoxContainer, type_ids: Array[String]) -> void:
+	CardView.set_badge_row(row, type_ids, _data.get_type_chart())
 
 
 func _make_float_text() -> FloatText:
@@ -409,8 +427,8 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.name_label = _make_label(24)
 		v.name_label.text = enemies[i].display_name
 		v.panel.add_child(v.name_label)
-		v.type_badge = _make_type_badge()
-		_set_badge(v.type_badge, enemies[i].type_id)
+		v.type_badge = CardView.make_type_badge_row()
+		_set_badge_row(v.type_badge, enemies[i].type_ids)
 		v.panel.add_child(v.type_badge)
 		v.intent_label = _make_label(22)
 		v.panel.add_child(v.intent_label)
@@ -444,17 +462,24 @@ func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> voi
 			return
 		f = _enemy_views[idx].float_text
 		anchor = _enemy_views[idx].sprite
-	_show_float(f, anchor, multiplier > 1.0)
+	var text: String = TEXT_SUPER_EFFECTIVE
+	var color: Color = COLOR_SUPER_EFFECTIVE
+	if multiplier <= 0.0:
+		text = TEXT_IMMUNE % target.display_name
+		color = COLOR_IMMUNE
+	elif multiplier < 1.0:
+		text = TEXT_NOT_VERY_EFFECTIVE
+		color = COLOR_NOT_VERY_EFFECTIVE
+	_show_float(f, anchor, text, color)
 
 
 ## Shows the floating label over `anchor` for FLOAT_DURATION s (drifts up, fades at the end).
 ## Any previous tween of the same label is killed first; nothing here blocks input or logic.
-func _show_float(f: FloatText, anchor: Control, super_effective: bool) -> void:
+func _show_float(f: FloatText, anchor: Control, text: String, color: Color) -> void:
 	if f.tween != null and f.tween.is_valid():
 		f.tween.kill()
-	f.label.text = TEXT_SUPER_EFFECTIVE if super_effective else TEXT_NOT_VERY_EFFECTIVE
-	f.label.add_theme_color_override("font_color",
-			COLOR_SUPER_EFFECTIVE if super_effective else COLOR_NOT_VERY_EFFECTIVE)
+	f.label.text = text
+	f.label.add_theme_color_override("font_color", color)
 	f.serial += 1
 	var my_serial: int = f.serial
 	f.label.visible = false

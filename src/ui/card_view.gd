@@ -32,6 +32,30 @@ static func make_type_badge(font_size: int = 16) -> PanelContainer:
 	return badge
 
 
+## Row of badges for a Pokémon (1-2 types, side by side, centred); fill it with set_badge_row.
+static func make_type_badge_row(font_size: int = 16) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "TypeBadgeRow"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 4)
+	row.set_meta("font_size", font_size)
+	return row
+
+
+## Rebuilds the row with one badge per known type id (hidden when the Pokémon has none).
+static func set_badge_row(row: HBoxContainer, type_ids: Array[String], chart: TypeChart) -> void:
+	for child: Node in row.get_children():
+		row.remove_child(child)
+		child.queue_free()
+	var font_size: int = int(row.get_meta("font_size", 16))
+	for type_id: String in type_ids:
+		var badge: PanelContainer = make_type_badge(font_size)
+		set_badge(badge, type_id, chart)
+		row.add_child(badge)
+	row.visible = row.get_child_count() > 0
+
+
 ## Fills a badge with the type's French name and colour (hidden when the type is empty/unknown).
 static func set_badge(badge: PanelContainer, type_id: String, chart: TypeChart) -> void:
 	badge.visible = chart.is_known_type(type_id)

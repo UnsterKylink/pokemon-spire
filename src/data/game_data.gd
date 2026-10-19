@@ -15,7 +15,9 @@ const FIGHT_ROOM_TYPES: Array[String] = ["wild", "elite", "boss"]
 const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "nothing"]
 const NO_FLOOR_LIMIT: int = 1000000
 ## Minimum number of types the type table must define (story 003).
-const MIN_TYPES: int = 10
+const MIN_TYPES: int = 18
+## A Pokémon has 1 to MAX_POKEMON_TYPES distinct types (story 008).
+const MAX_POKEMON_TYPES: int = 2
 
 var _type_chart: TypeChart = TypeChart.neutral_chart()
 var _cards: Dictionary = {}    # String -> CardData
@@ -334,7 +336,7 @@ func _load_players(pokemon_root: Dictionary) -> bool:
 			ok = false
 			continue
 		var def: Dictionary = def_v
-		if not _check_type_ref("player '%s'" % pid, String(def.get("type", "")), true):
+		if not _check_types_ref("player '%s'" % pid, def.get("types", null)):
 			ok = false
 		for key: String in ["energy_per_turn", "hand_size"]:
 			if not _is_positive_int(def.get(key, null)):
@@ -370,7 +372,7 @@ func _load_enemies(pokemon_root: Dictionary) -> bool:
 			ok = false
 			continue
 		var def: Dictionary = def_v
-		if not _check_type_ref("enemy '%s'" % eid, String(def.get("type", "")), true):
+		if not _check_types_ref("enemy '%s'" % eid, def.get("types", null)):
 			ok = false
 		if not _is_positive_int(def.get("max_hp", null)):
 			push_error("GameData: enemy '%s' needs a positive integer 'max_hp'" % eid)
@@ -796,6 +798,25 @@ func _load_act(root: Dictionary) -> bool:
 			ok = false
 	if ok:
 		_act = root
+	return ok
+
+
+## Checks a Pokémon's `types` array: 1-2 distinct ids known to the chart.
+func _check_types_ref(owner_label: String, types_v: Variant) -> bool:
+	if not (types_v is Array) or (types_v as Array).is_empty() or (types_v as Array).size() > MAX_POKEMON_TYPES:
+		push_error("GameData: %s needs a 'types' array of 1 to %d types" % [owner_label, MAX_POKEMON_TYPES])
+		return false
+	var seen: Dictionary = {}
+	var ok: bool = true
+	for t: Variant in (types_v as Array):
+		if not (t is String) or not _type_chart.is_known_type(t):
+			push_error("GameData: %s has unknown type '%s'" % [owner_label, str(t)])
+			ok = false
+		elif seen.has(t):
+			push_error("GameData: %s lists type '%s' twice" % [owner_label, t])
+			ok = false
+		else:
+			seen[t] = true
 	return ok
 
 

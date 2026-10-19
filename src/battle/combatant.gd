@@ -10,8 +10,8 @@ const PATTERN_WEIGHTED: String = "weighted"
 var id: String = ""
 var display_name: String = ""
 var sprite_path: String = ""
-## Type id from types.json (story 003); empty = typeless (always neutral).
-var type_id: String = ""
+## Type ids from types.json (story 003/008): 1 or 2 entries; empty = typeless (always neutral).
+var type_ids: Array[String] = []
 var max_hp: int = 1
 var hp: int = 1
 var block: int = 0
@@ -40,7 +40,12 @@ static func from_dict(combatant_id: String, d: Dictionary, current_hp: int = -1)
 	c.max_hp = int(d["max_hp"])
 	c.hp = c.max_hp if current_hp < 0 else clampi(current_hp, 0, c.max_hp)
 	c.sprite_path = String(d["sprite"])
-	c.type_id = String(d.get("type", ""))
+	var raw_types: Variant = d.get("types", null)
+	if raw_types is Array:
+		for t: Variant in (raw_types as Array):
+			c.type_ids.append(String(t))
+	elif d.has("type"):  # tolerated for hand-built test definitions; GameData requires "types"
+		c.type_ids.append(String(d["type"]))
 	if d.has("pattern"):
 		c.pattern = String(d["pattern"])
 		if c.pattern != PATTERN_SEQUENCE and c.pattern != PATTERN_WEIGHTED:
@@ -61,8 +66,16 @@ static func from_dict(combatant_id: String, d: Dictionary, current_hp: int = -1)
 	return c
 
 
+## First type id ("" if typeless); kept for single-type callers (display, old tests).
+func get_primary_type() -> String:
+	return type_ids[0] if not type_ids.is_empty() else ""
+
+
 ## Applies damage: block absorbs first, remainder reduces HP (min 0). Returns HP actually lost.
+## 0 damage changes nothing (block untouched, no change signal).
 func take_damage(amount: int) -> int:
+	if amount <= 0:
+		return 0
 	var remaining: int = maxi(amount, 0)
 	var absorbed: int = mini(block, remaining)
 	block -= absorbed

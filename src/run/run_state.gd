@@ -5,7 +5,7 @@ extends RefCounted
 
 var player_id: String = ""
 var display_name: String = ""
-var type_id: String = ""
+var type_ids: Array[String] = []
 var sprite_path: String = ""
 var max_hp: int = 1
 var hp: int = 1
@@ -26,7 +26,10 @@ static func create(data: GameData, new_player_id: String) -> RunState:
 	var r := RunState.new()
 	r.player_id = new_player_id
 	r.display_name = String(def.get("name", ""))
-	r.type_id = String(def.get("type", ""))
+	var raw_types: Variant = def.get("types", [])
+	if raw_types is Array:
+		for t: Variant in (raw_types as Array):
+			r.type_ids.append(String(t))
 	r.sprite_path = String(def.get("sprite", ""))
 	r.max_hp = int(def.get("max_hp", 1))
 	r.hp = r.max_hp
@@ -48,7 +51,7 @@ func build_player_combatant() -> Combatant:
 	c.id = player_id
 	c.display_name = display_name
 	c.sprite_path = sprite_path
-	c.type_id = type_id
+	c.type_ids = type_ids.duplicate()
 	c.max_hp = max_hp
 	c.hp = clampi(hp, 0, max_hp)
 	return c
