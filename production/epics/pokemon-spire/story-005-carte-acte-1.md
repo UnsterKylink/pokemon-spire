@@ -1,7 +1,7 @@
 # Story 005: Carte de l'acte 1
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -73,3 +73,11 @@
 
 - Depends on: Story 004 must be DONE
 - Unlocks: Story 006
+
+## Completion Notes
+**Completed**: 2026-10-19
+**Criteria**: 6/6 passing. Real mouse play on this version (map, room choice, events) confirmed by the developer.
+**Deviations**: ADVISORY — Centre Pokémon and Poké Mart are placeholders (the centre heals 30 % from data until story 006; the mart does nothing); the boss is a placeholder strong trio (story 007); `Main.qa_set_hp` is a public QA helper that ships in the game build (gate to debug builds before sharing the game); user-facing French strings still hardcoded (no localization system); `no_consecutive` means two connected rooms cannot share the same type among elite/center/mart (elite → center is allowed). Scope additions: 4 events, elite/boss encounter ids in `pokemon.json`, `src/ui/deck_overlay.gd` shared by the reward and map screens, `--seed=<int>` launch argument for reproducible maps.
+**Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-005-carte-acte-1/` (10 PNGs + README.md, full act on seed 12345). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720). Throwaway headless assertions: map generator 227 833 / 0 over 400 seeds, whole act through Main 465 / 0, types 202 / 0, rewards 1208 / 0.
+**Code Review**: Skipped (solo mode).
+**Design change requested after this story (2026-10-19):** the player asked for a team system — see the stories added after 007 (types, team/summon cards, early-route Pokémon) — which will rework the reward/card model built here.
