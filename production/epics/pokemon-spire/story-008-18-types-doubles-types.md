@@ -1,12 +1,12 @@
 # Story 008: 18 types et doubles types
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Core
 > **Type**: Logic
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-10-19
 
 ## Context
 
