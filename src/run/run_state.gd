@@ -45,6 +45,34 @@ static func create(data: GameData, new_player_id: String) -> RunState:
 	return r
 
 
+## Starts a run with the chosen starter (story 010): deck = GameData.build_starter_deck(starter), identity
+## (name, types, sprite) from the starter's entry, max HP / energy / hand size from the shared player config
+## (GameData.get_default_player_id). Null if the starter or the shared config is unknown.
+static func create_with_starter(data: GameData, starter_id: String) -> RunState:
+	var info: Dictionary = data.get_pokemon_info(starter_id)
+	var shared: Dictionary = data.get_player_definition(data.get_default_player_id())
+	if info.is_empty() or shared.is_empty():
+		push_error("RunState: unknown starter '%s' or missing shared player config" % starter_id)
+		return null
+	var deck: Array[CardData] = data.build_starter_deck(starter_id)
+	if deck.is_empty():
+		return null
+	var r := RunState.new()
+	r.player_id = data.get_default_player_id()
+	r.display_name = String(info["name"])
+	r.type_ids.assign(info["types"])
+	r.sprite_path = String(info["sprite_path"])
+	r.max_hp = int(shared.get("max_hp", 1))
+	r.hp = r.max_hp
+	r.energy_per_turn = int(shared.get("energy_per_turn", 0))
+	r.hand_size = int(shared.get("hand_size", 0))
+	r.deck = deck
+	r.starter_pokemon_id = starter_id
+	for pid: String in data.get_pokemon_ids():
+		r._pokemon_infos[pid] = data.get_pokemon_info(pid)
+	return r
+
+
 ## Adds a reward card to the deck.
 func add_card(card: CardData) -> void:
 	if card != null:

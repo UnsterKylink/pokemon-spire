@@ -31,6 +31,10 @@ var _reward_pools: Dictionary = {}    # String (player id) -> Array[CardData]
 var _act: Dictionary = {}      # validated act1.json
 var _events: Dictionary = {}   # String -> Dictionary (validated event)
 var _starter_pokemon: String = ""
+var _starter_candidates: Array[String] = []
+var _starter_cards_by_type: Dictionary = {}  # type id -> {"basic": card id, "strong": card id}
+var _deck_template: Dictionary = {}  # basic_count / skill / skill_count / strong_count (story 010)
+var _carriers_by_type: Dictionary = {}  # type id -> Array[String] (roster Pokémon having that type)
 
 
 ## Loads all six files (act and events last, story 005). Returns false (after push_error) if anything is missing or invalid.
@@ -49,6 +53,10 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_act = {}
 	_events.clear()
 	_starter_pokemon = ""
+	_starter_candidates.clear()
+	_starter_cards_by_type = {}
+	_deck_template = {}
+	_carriers_by_type = {}
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -73,6 +81,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_encounters(pokemon_root) and ok
 	ok = _check_pokemon_refs(pokemon_root) and ok
 	ok = _load_rewards(rewards_root) and ok
+	ok = _load_starters(pokemon_root) and ok
 	ok = _load_events(events_root) and ok
 	ok = _load_act(act_root) and ok
 	return ok
@@ -293,6 +302,154 @@ func get_event(event_id: String) -> Dictionary:
 		push_error("GameData: unknown event id '%s'" % event_id)
 		return {}
 	return (_events[event_id] as Dictionary).duplicate(true)
+
+
+# --- Starter choice (story 010) ---------------------------------------------------------------------
+
+## Id of the shared player-config entry (max HP, energy, hand size, reward pool) used by every starter.
+## It is the pokemon.json "starter_pokemon" (the default starter), not a hardcoded id.
+func get_default_player_id() -> String:
+	return _starter_pokemon
+
+
+## Pokémon that may be offered at the start of a run (pokemon.json "starter_candidates").
+func get_starter_candidates() -> Array[String]:
+	return _starter_candidates.duplicate()
+
+
+## First type id of a Pokémon ("" if unknown).
+func get_primary_type(pokemon_id: String) -> String:
+	var types: Array = get_pokemon_info(pokemon_id).get("types", [])
+	return String(types[0]) if not types.is_empty() else ""
+
+
+## {"basic": CardData, "strong": CardData} of the starter deck for a type (empty if the type has none).
+func get_starter_cards_for_type(type_id: String) -> Dictionary:
+	if not _starter_cards_by_type.has(type_id):
+		return {}
+	var entry: Dictionary = _starter_cards_by_type[type_id]
+	return {"basic": get_card(String(entry["basic"])), "strong": get_card(String(entry["strong"]))}
+
+
+## Starter deck template {"basic_count", "skill", "skill_count", "strong_count"} (copy).
+func get_starter_deck_template() -> Dictionary:
+	return _deck_template.duplicate()
+
+
+## Starter deck of a Pokémon: basic x N + skill x M + strong x K of its PRIMARY type, every attack carried
+## by that Pokémon. Fresh array each call; empty (push_error) if the Pokémon or its type has no entry.
+func build_starter_deck(pokemon_id: String) -> Array[CardData]:
+	var deck: Array[CardData] = []
+	var cards: Dictionary = get_starter_cards_for_type(get_primary_type(pokemon_id))
+	if cards.is_empty():
+		push_error("GameData: no starter cards for pokemon '%s'" % pokemon_id)
+		return deck
+	for i: int in int(_deck_template["basic_count"]):
+		deck.append((cards["basic"] as CardData).with_pokemon(pokemon_id))
+	for i: int in int(_deck_template["skill_count"]):
+		deck.append(get_card(String(_deck_template["skill"])))
+	for i: int in int(_deck_template["strong_count"]):
+		deck.append((cards["strong"] as CardData).with_pokemon(pokemon_id))
+	return deck
+
+
+## `count` starter candidates with pairwise DIFFERENT primary types, drawn with the injected rng
+## (deterministic for a seeded rng). Fewer (push_error) if there are not enough distinct types.
+func draw_starter_choices(rng: RandomNumberGenerator, count: int = 3) -> Array[String]:
+	var pool: Array[String] = _starter_candidates.duplicate()
+	for i: int in range(pool.size() - 1, 0, -1):  # Fisher-Yates
+		var j: int = rng.randi_range(0, i)
+		var tmp: String = pool[i]
+		pool[i] = pool[j]
+		pool[j] = tmp
+	var result: Array[String] = []
+	var used_types: Dictionary = {}
+	for pid: String in pool:
+		var t: String = get_primary_type(pid)
+		if used_types.has(t):
+			continue
+		used_types[t] = true
+		result.append(pid)
+		if result.size() >= count:
+			break
+	if result.size() < count:
+		push_error("GameData: only %d distinct starter types available, %d requested" % [result.size(), count])
+	return result
+
+
+## Roster Pokémon (players + enemies) whose types include `type_id`, in file order.
+func get_carriers_for_type(type_id: String) -> Array[String]:
+	if _carriers_by_type.is_empty():
+		for pid: String in get_pokemon_ids():
+			for t: String in (get_pokemon_info(pid)["types"] as Array):
+				if not _carriers_by_type.has(t):
+					_carriers_by_type[t] = [] as Array[String]
+				(_carriers_by_type[t] as Array[String]).append(pid)
+	var result: Array[String] = []
+	result.assign(_carriers_by_type.get(type_id, []))
+	return result
+
+
+func _load_starters(pokemon_root: Dictionary) -> bool:
+	var ok: bool = true
+	var tmpl_v: Variant = pokemon_root.get("starter_deck_template", null)
+	if not (tmpl_v is Dictionary):
+		push_error("GameData: pokemon file needs a 'starter_deck_template' object")
+		return false
+	var tmpl: Dictionary = tmpl_v
+	for key: String in ["basic_count", "skill_count", "strong_count"]:
+		if not _is_positive_int(tmpl.get(key, null)):
+			push_error("GameData: starter_deck_template needs a positive integer '%s'" % key)
+			ok = false
+	var skill: Variant = tmpl.get("skill", null)
+	if not (skill is String) or not _cards.has(skill) or (_cards[skill] as CardData).kind != CardData.KIND_SKILL:
+		push_error("GameData: starter_deck_template 'skill' must name a skill card")
+		ok = false
+	var by_type_v: Variant = pokemon_root.get("starter_cards_by_type", null)
+	if not (by_type_v is Dictionary):
+		push_error("GameData: pokemon file needs a 'starter_cards_by_type' object")
+		return false
+	var by_type: Dictionary = by_type_v
+	for type_id: String in by_type.keys():
+		if not _type_chart.is_known_type(type_id):
+			push_error("GameData: starter_cards_by_type has unknown type '%s'" % type_id)
+			ok = false
+		var entry_v: Variant = by_type[type_id]
+		if not (entry_v is Dictionary):
+			push_error("GameData: starter_cards_by_type['%s'] must be an object" % type_id)
+			ok = false
+			continue
+		for slot: String in ["basic", "strong"]:
+			var cid: Variant = (entry_v as Dictionary).get(slot, null)
+			var card: CardData = _cards.get(cid, null) if cid is String else null
+			if card == null or card.kind != CardData.KIND_ATTACK:
+				push_error("GameData: starter_cards_by_type['%s'].%s must name an attack card" % [type_id, slot])
+				ok = false
+			elif card.type_id != type_id:
+				push_error("GameData: starter_cards_by_type['%s'].%s: card '%s' has type '%s'" % [type_id, slot, cid, card.type_id])
+				ok = false
+	var cand_v: Variant = pokemon_root.get("starter_candidates", null)
+	if not (cand_v is Array) or (cand_v as Array).is_empty():
+		push_error("GameData: pokemon file needs a non-empty 'starter_candidates' array")
+		return false
+	for pid_v: Variant in (cand_v as Array):
+		if not (pid_v is String) or not (_players.has(pid_v) or _enemies.has(pid_v)):
+			push_error("GameData: starter_candidates references unknown pokemon '%s'" % str(pid_v))
+			ok = false
+			continue
+		var pid: String = pid_v
+		var primary: String = ""
+		var types: Array = (_players.get(pid, _enemies.get(pid, {})) as Dictionary).get("types", [])
+		if not types.is_empty():
+			primary = String(types[0])
+		if not by_type.has(primary):
+			push_error("GameData: starter candidate '%s' has primary type '%s' without starter_cards_by_type entry" % [pid, primary])
+			ok = false
+		_starter_candidates.append(pid)
+	if ok:
+		_starter_cards_by_type = by_type.duplicate(true)
+		_deck_template = tmpl.duplicate(true)
+	return ok
 
 
 # --- Loading / validation --------------------------------------------------
@@ -563,6 +720,9 @@ func _load_rewards(root: Dictionary) -> bool:
 				ok = false
 			elif seen.has(card_id):
 				push_error("GameData: reward pool '%s' lists '%s' twice" % [pid, str(card_id)])
+				ok = false
+			elif card.rarity == CardData.RARITY_STARTER:
+				push_error("GameData: reward pool '%s': starter-rarity card '%s' must not be a reward" % [pid, str(card_id)])
 				ok = false
 			elif not _rarity_weights.has(card.rarity):
 				push_error("GameData: reward pool '%s': card '%s' has rarity '%s' without a weight" % [pid, str(card_id), card.rarity])

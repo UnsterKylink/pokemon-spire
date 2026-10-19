@@ -60,6 +60,11 @@ static func generate(data: GameData, player_id: String, defeated_enemy_ids: Arra
 		if picked == null:
 			break
 		used[picked.id] = true
+		# Story 010: an attack is carried by a random roster Pokémon having its type (default carrier if none).
+		if picked.kind == CardData.KIND_ATTACK:
+			var carriers: Array[String] = data.get_carriers_for_type(picked.type_id)
+			if not carriers.is_empty():
+				picked = picked.with_pokemon(carriers[rng.randi_range(0, carriers.size() - 1)])
 		offers.append(RewardOffer.make(picked))
 	# 3. Shuffle so the stolen card is not always first (Fisher-Yates, injected rng).
 	for i: int in range(offers.size() - 1, 0, -1):

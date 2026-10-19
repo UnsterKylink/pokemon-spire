@@ -9,6 +9,9 @@ extends SceneTree
 ## Story: pokemon-spire 005, 008 (type shots 01-types-doubles / 02-super-efficace-double / 03-immunite),
 ## 009 (switch shots 01-actif-salameche .. 07-deck, run FIRST, see _switch_shots).
 
+const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
+const ROSTER_SEED: int = 12345
+const ROSTER_TRIO_PREFIX: String = "trio_r"
 const SEEDS: Array[int] = [12345, 777, 4242, 2026, 31337, 8080, 1111, 9001]
 const WANTED_TYPES: Array[String] = ["event", "elite", "center"]
 const MAX_PATHS: int = 200000
@@ -42,9 +45,13 @@ func _shot(shot_name: String) -> void:
 	var img: Image = root.get_texture().get_image()
 	img.save_png(_out_dir.path_join(shot_name + ".png"))
 	var run: RunState = _main.get_run_state()
-	var line: String = "shot %s | screen=%s run_hp=%d/%d deck=%d won=%d floor=%d visited=%d reachable=%s" % [
-			shot_name, _main.get_current_screen_name(), run.hp, run.max_hp, run.deck.size(), run.battles_won,
-			run.act.current_floor(), run.act.visited.size(), _main.map_reachable_ids()]
+	var line: String = "shot %s | screen=%s" % [shot_name, _main.get_current_screen_name()]
+	if _main.get_current_screen_name() == "starter":
+		line += " choices=%s" % [_main.get_starter_choices()]
+	elif run != null and run.act != null:
+		line += " starter=%s run_hp=%d/%d deck=%d won=%d floor=%d visited=%d reachable=%s" % [
+				run.starter_pokemon_id, run.hp, run.max_hp, run.deck.size(), run.battles_won,
+				run.act.current_floor(), run.act.visited.size(), _main.map_reachable_ids()]
 	var bs: BattleScreen = _main.get_battle_screen()
 	if bs != null:
 		var b: Battle = bs.get_battle()
@@ -218,7 +225,52 @@ func _type_shots(used_seed: int) -> void:
 	_main.start_new_run(used_seed)
 
 
+## Story 010 shots (run FIRST, seed ROSTER_SEED, no forced starter): starter choice, chosen starter in its first
+## fight, type-coherent reward carriers, varied roster enemies, starter deck overlay.
+func _roster_shots() -> void:
+	_main.forced_starter_id = ""
+	_main.start_new_run(ROSTER_SEED)
+	var choices: Array[String] = _main.get_starter_choices()
+	var data := GameData.new()
+	data.load_all()
+	var prim: PackedStringArray = PackedStringArray()
+	for c: String in choices:
+		prim.append("%s:%s" % [c, data.get_primary_type(c)])
+	print("roster: choices = %s" % [prim])
+	await _shot("01-choix-depart")
+	_main.starter_choose(1)
+	var node_id: String = _main.map_reachable_ids()[0]
+	_main.map_choose(node_id)
+	await _shot("02-depart-choisi")
+	_win_battle()
+	await _shot("03-carte-aleatoire-type-coherent")
+	for o: RewardOffer in _main.get_reward_offers():
+		print("roster offer: %s type=%s carrier=%s carrier_types=%s stolen=%s" % [o.card.id, o.card.type_id,
+				o.card.pokemon_id, data.get_pokemon_info(o.card.pokemon_id).get("types", []), o.stolen])
+	_main.reward_pick(0)
+	var trio: String = ""
+	for id: String in data.get_encounter_order():
+		if not id.begins_with(ROSTER_TRIO_PREFIX):
+			continue
+		var fresh: bool = true
+		for e: Combatant in data.create_enemies(id):
+			if ORIGINAL_ENEMIES.has(e.id):
+				fresh = false
+		if fresh:
+			trio = id
+			break
+	_main.start_encounter(trio)
+	await _shot("04-ennemis-varies")
+	_main.start_new_run(ROSTER_SEED)
+	_main.starter_choose(1)
+	_main.map_open_deck()
+	await _shot("05-deck-du-depart")
+	_main.map_close_deck()
+
+
 func _run() -> void:
+	await _roster_shots()
+	_main.forced_starter_id = "salameche"  # the older shots assume Salamèche's deck and identity
 	# Pick the first seed whose map has a path through event + elite + centre.
 	var used_seed: int = SEEDS[0]
 	var path: Array[String] = []

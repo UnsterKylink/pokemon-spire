@@ -5,17 +5,20 @@ extends Control
 ## Screens only display and emit signals; all persistent state lives here / in RunState.
 ## Implements: story-005-carte-acte-1 (act map flow), story-004-recompenses-vol-attaque (rewards).
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
-## `--encounter=<id>` starts that encounter directly (debug).
+## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
-const PLAYER_ID: String = "salameche"
+const STARTER_ARG_PREFIX: String = "--starter="
+const STARTER_CHOICE_COUNT: int = 3
 const ENCOUNTER_ARG_PREFIX: String = "--encounter="
 const SEED_ARG_PREFIX: String = "--seed="
 const BATTLE_SCENE: PackedScene = preload("res://src/ui/battle_screen.tscn")
 const REWARD_SCENE: PackedScene = preload("res://src/ui/reward_screen.tscn")
+const STARTER_SCENE: PackedScene = preload("res://src/ui/starter_screen.tscn")
 const MAP_SCENE: PackedScene = preload("res://src/ui/map_screen.tscn")
 const EVENT_SCENE: PackedScene = preload("res://src/ui/event_screen.tscn")
 const ROOM_SCENE: PackedScene = preload("res://src/ui/placeholder_room_screen.tscn")
 const SCREEN_NONE: String = "none"
+const SCREEN_STARTER: String = "starter"
 const SCREEN_MAP: String = "map"
 const SCREEN_BATTLE: String = "battle"
 const SCREEN_REWARD: String = "reward"
@@ -30,6 +33,12 @@ var _battle_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _encounter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _reward_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _event_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _starter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Non-empty = every new run starts with this Pokémon without showing the choice (QA / `--starter=`).
+var forced_starter_id: String = ""
+var _pending_act_seed: int = 0
+var _starter_choices: Array[String] = []
+var _starter_screen: StarterScreen
 var _encounter_order: Array[String] = []
 var _encounter_id: String = ""
 ## Room type of the current fight ("" for a debug start_encounter): drives the reward rarity override.
@@ -54,6 +63,12 @@ func _ready() -> void:
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
 	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with(STARTER_ARG_PREFIX):
+			forced_starter_id = arg.substr(STARTER_ARG_PREFIX.length())
+			if _data.get_pokemon_info(forced_starter_id).is_empty():
+				push_error("Main: unknown --starter '%s', the choice screen will be shown" % forced_starter_id)
+				forced_starter_id = ""
+			continue
 		if arg.begins_with(SEED_ARG_PREFIX):
 			var value: String = arg.substr(SEED_ARG_PREFIX.length())
 			if value.is_valid_int() and int(value) != 0:
@@ -62,28 +77,53 @@ func _ready() -> void:
 				push_error("Main: invalid --seed '%s' (non-zero integer expected), using a random seed" % value)
 		elif arg.begins_with(ENCOUNTER_ARG_PREFIX):
 			debug_encounter = arg.substr(ENCOUNTER_ARG_PREFIX.length())
+	if not debug_encounter.is_empty() and forced_starter_id.is_empty():
+		forced_starter_id = _data.get_default_player_id()  # a debug fight needs a run, so no choice screen
 	start_new_run(forced_seed)
 	if not debug_encounter.is_empty():
 		start_encounter(debug_encounter)
 
 
-## Starts a brand new run (full HP, starter deck) on a new act map and shows the map.
-## `act_seed` 0 = random map and RNGs; any other value makes the map AND the run RNGs reproducible (QA).
-func start_new_run(act_seed: int = 0) -> void:
-	var run: RunState = RunState.create(_data, PLAYER_ID)
-	if run == null:
-		return
-	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng]
+## Starts a brand new run: shows the starter choice screen (3 proposals drawn with the run RNG), unless
+## `starter_id` (or `forced_starter_id`) is given. `act_seed` 0 = random map and RNGs; any other value makes
+## the map, the starter draw AND the run RNGs reproducible (QA).
+func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
+	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng]
 	for i: int in rngs.size():
 		if act_seed != 0:
 			rngs[i].seed = act_seed + i + 1
 		else:
 			rngs[i].randomize()
+	var chosen: String = starter_id if not starter_id.is_empty() else forced_starter_id
+	if not chosen.is_empty():
+		_begin_run(chosen, act_seed)
+		return
+	_pending_act_seed = act_seed
+	_starter_choices = _data.draw_starter_choices(_starter_rng, STARTER_CHOICE_COUNT)
+	_show_starter_screen()
+
+
+func _begin_run(starter_id: String, act_seed: int) -> void:
+	var run: RunState = RunState.create_with_starter(_data, starter_id)
+	if run == null:
+		return
 	if not run.start_act(_data, act_seed):
 		push_error("Main: could not start the act")
 		return
 	_run = run
 	_show_map()
+
+
+func _show_starter_screen() -> void:
+	_clear_screens()
+	_starter_screen = STARTER_SCENE.instantiate() as StarterScreen
+	_starter_screen.starter_chosen.connect(_on_starter_chosen)
+	_set_screen(_starter_screen, SCREEN_STARTER)
+	_starter_screen.setup(_data, _starter_choices)
+
+
+func _on_starter_chosen(pokemon_id: String) -> void:
+	_begin_run(pokemon_id, _pending_act_seed)
 
 
 ## Debug/QA entry point: starts a battle on `encounter_id` (x1 modifiers, normal reward) with the CURRENT
@@ -97,12 +137,32 @@ func start_encounter(encounter_id: String) -> void:
 
 # --- QA accessors -------------------------------------------------------------------------------
 
+## QA: the proposals of the last starter screen.
+func get_starter_choices() -> Array[String]:
+	return _starter_choices
+
+
+## QA: picks a starter proposal by index (int) or by Pokémon id (String), as a click would.
+func starter_choose(index_or_id: Variant) -> void:
+	if _starter_screen == null:
+		return
+	if index_or_id is int:
+		_starter_screen.choose(index_or_id)
+	else:
+		_starter_screen.choose(_starter_choices.find(String(index_or_id)))
+
+
+## QA: the live StarterScreen (null outside the choice).
+func get_starter_screen() -> StarterScreen:
+	return _starter_screen
+
+
 ## QA: the run state (HP, deck, act progress).
 func get_run_state() -> RunState:
 	return _run
 
 
-## QA: "map", "battle", "reward", "event", "room", "act_end" (or "none").
+## QA: "starter", "map", "battle", "reward", "event", "room", "act_end" (or "none").
 func get_current_screen_name() -> String:
 	return _screen_name
 
@@ -370,6 +430,7 @@ func _clear_screens() -> void:
 	_screen = null
 	_screen_name = SCREEN_NONE
 	_battle_screen = null
+	_starter_screen = null
 	_reward_screen = null
 	_map_screen = null
 	_event_screen = null
