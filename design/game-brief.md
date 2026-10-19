@@ -3,30 +3,32 @@
 <!-- Fiche d'une page — au niveau `minimal`, c'est le document de design complet. -->
 <!-- Projet perso, non publié : utilise les Pokémon et sprites officiels (PokéAPI). -->
 
-**One-sentence pitch:** Un roguelike deckbuilder façon Slay the Spire où l'on guide son starter sur une route Pokémon, en volant les attaques des Pokémon vaincus et en évoluant jusqu'au Champion d'arène.
+**One-sentence pitch:** Un roguelike deckbuilder façon Slay the Spire où chaque carte d'attaque appartient à un Pokémon qui entre sur le terrain quand on la joue : on part avec Salamèche, on vole les cartes des Pokémon mis K.O. sur les premières routes de toutes les générations, et on monte jusqu'au Champion d'arène.
 
 ## Core loop
 - Choisir son chemin sur la carte : combat sauvage, Dresseur élite, Centre Pokémon, Poké Mart, événement.
-- Combattre avec ses cartes d'attaque (offensives / défensives) en gérant son énergie chaque tour.
-- Après la victoire : choisir 1 nouvelle attaque parmi 3 (souvent celles du Pokémon vaincu), parfois un objet.
+- Combattre avec ses cartes en gérant son énergie : jouer l'attaque d'un Pokémon le fait entrer sur le terrain (il devient la cible des ennemis, avec ses types).
+- Après la victoire : choisir 1 carte parmi 3 (dont une volée à un Pokémon mis K.O.), parfois un objet.
 - Deck plus fort → avancer vers le boss → recommencer une nouvelle partie.
 
 ## Player goal & fail state — what "working" looks like
 - **But :** battre le Champion d'arène en fin d'acte 1, ce qui fait évoluer le starter (écran de victoire).
-- **Défaite :** les PV du starter tombent à 0 → la partie est perdue, on recommence depuis le début.
+- **Défaite :** la barre de PV commune de l'équipe tombe à 0 → la partie est perdue, on recommence depuis le début.
 
 ## MVP — what must exist to be the game
 - **Combat à cartes** : 3 énergies/tour, pioche/main/défausse, cartes d'attaque et de protection, intention de l'ennemi affichée.
-- **Un starter — Salamèche** : deck de départ de 10 cartes + ~25 cartes à gagner.
-- **Types simplifiés** : super efficace ×1,5 / pas très efficace ×0,5.
-- **Vol d'attaque** : après combat, choisir 1 carte parmi 3, dont celles du Pokémon battu.
+- **Départ — Salamèche** : deck de départ de 10 cartes de Salamèche ; une seule barre de PV pour toute l'équipe (améliorable via événements et objets).
+- **Types** : les 18 types, doubles types compris (multiplicateurs multipliés) ; super efficace ×1,5 / pas très efficace ×0,5.
+- **Cartes Pokémon et switch** : chaque carte d'attaque porte un Pokémon ; la jouer fait entrer ce Pokémon (le même reste s'il est déjà actif) ; protection / renforcement ne font pas changer ; les ennemis frappent le Pokémon actif selon ses types.
+- **Vol de carte** : après combat, choisir 1 carte parmi 3, dont une carte d'un Pokémon mis K.O. ; les autres cartes sont portées par des Pokémon des premières routes (toutes générations) du type de la carte.
 - **Carte de l'acte 1** : chemins avec combats, élites, Centre Pokémon (repos), Poké Mart (boutique), boss Champion.
 - **Objets** : ~10 objets tenus (équivalent reliques : Restes, Bandeau…) + ~5 potions à usage unique.
 - **Évolution** : battre le Champion fait évoluer Salamèche en Reptincel (nouvelles cartes) → écran de victoire.
 
 ## Out of scope — not building this
 - Autres starters, actes 2 et 3, Dracaufeu.
-- Toutes les générations d'emblée : ~20 Pokémon ennemis au départ. Les Pokémon sont des données (data-driven), donc en ajouter = ajouter des fiches.
+- Tous les Pokémon : seulement ceux des premières routes / starters, toutes générations (~50). Les Pokémon sont des données, donc en ajouter = ajouter des fiches.
+- PV individuels par Pokémon, K.O. individuels (barre de PV commune à la place).
 - Sauvegarde en cours de partie, méta-progression / déblocages.
 - Son, animations élaborées, multijoueur.
 - Publication / distribution publique (propriété intellectuelle Pokémon).
@@ -37,6 +39,7 @@
 3. Types et multiplicateurs.
 4. Récompenses avec vol d'attaque.
 5. Carte de l'acte (génération des chemins et des salles).
+5b. (ajouté 2026-10-19) 18 types et doubles types → cartes Pokémon et switch → Pokémon des premières routes, toutes générations.
 6. Objets tenus, potions, Centre Pokémon et Poké Mart.
 7. Boss Champion + évolution + écran de victoire.
 
@@ -45,4 +48,4 @@
 
 **Art & audio direction:** Sprites pixel officiels (PokéAPI), interface de cartes simple et lisible ; pas de son au début.
 
-**Reference game:** Slay the Spire — l'acte 1 avec un seul personnage ; pas d'ascension ni de déblocages.
+**Reference game:** Slay the Spire — l'acte 1 avec un seul personnage ; pas d'ascension ni de déblocages. Le switch de Pokémon actif est notre twist.

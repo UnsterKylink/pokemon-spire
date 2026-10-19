@@ -70,5 +70,5 @@
 
 ## Dependencies
 
-- Depends on: Story 005 must be DONE
+- Depends on: Story 010 must be DONE (team design change, 2026-10-19)
 - Unlocks: Story 007
