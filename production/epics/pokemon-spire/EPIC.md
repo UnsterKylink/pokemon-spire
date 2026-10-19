@@ -15,7 +15,7 @@
 | 003 | Types et multiplicateurs | Logic | Complete | N/A |
 | 004 | Récompenses et vol d'attaque | Integration | Complete | N/A |
 | 005 | Carte de l'acte 1 | Integration | Complete | N/A |
-| 008 | 18 types et doubles types | Logic | Ready | N/A |
+| 008 | 18 types et doubles types | Logic | Complete | N/A |
 | 009 | Cartes Pokémon, switch et PV communs | Integration | Ready | N/A |
 | 010 | Pokémon des premières routes, toutes générations | Integration | Ready | N/A |
 | 006 | Objets, potions, Centre Pokémon et Poké Mart | Integration | Ready | N/A |

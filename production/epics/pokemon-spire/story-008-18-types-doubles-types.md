@@ -1,7 +1,7 @@
 # Story 008: 18 types et doubles types
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Estimate**: [fill before starting]
@@ -74,3 +74,10 @@
 
 - Depends on: Story 005 must be DONE
 - Unlocks: Story 009
+
+## Completion Notes
+**Completed**: 2026-10-19
+**Criteria**: 7/7 passing. Real mouse play on this version confirmed by the developer.
+**Deviations**: ADVISORY — a dual-type enemy attacks with its first listed type (no per-attack type yet; revisit with story 010); no on-screen "Attaque 0" intent (no roster Pokémon is immune vs Salamèche's Fire; covered by the headless test, becomes visible with the switch of story 009); `BattleScreen.qa_force_hand` is a public QA helper that ships in the build (gate before sharing); the old `_make_type_badge` helper in `battle_screen.gd` is now unused; user-facing French strings still hardcoded. `Combatant.from_dict` still accepts the legacy single `type` key (GameData is strict). `take_damage(0)` no longer emits `changed`.
+**Test Evidence**: tests waived at `qa.level: minimal` (no test file). Visual evidence: `production/qa/evidence/story-008-18-types-doubles-types/` (3 PNGs + README.md). Run result: OBSERVED on Godot 4.6.3 (Linux, Xvfb 1280x720). Throwaway headless assertions: t8 785 / 0 (all 324 pairs vs the official chart, dual types, immunities, rounding, block untouched on ×0, intent == damage, 14 data rejections); t3 101 / 0, t4 1208 / 0, t5b 465 / 0.
+**Code Review**: Skipped (solo mode).
