@@ -14,6 +14,9 @@ var hand_size: int = 0
 ## The run's own copy of the deck (never the shared starter definition).
 var deck: Array[CardData] = []
 var battles_won: int = 0
+## Pokémon on the field at the start of every battle (GameData.get_starter_pokemon_id, story 009).
+var starter_pokemon_id: String = ""
+var _pokemon_infos: Dictionary = {}  # pokemon id -> info dict (GameData.get_pokemon_info)
 ## Progress on the act map (null until start_act is called).
 var act: ActProgress = null
 
@@ -36,6 +39,9 @@ static func create(data: GameData, new_player_id: String) -> RunState:
 	r.energy_per_turn = int(def.get("energy_per_turn", 0))
 	r.hand_size = int(def.get("hand_size", 0))
 	r.deck = data.get_starter_deck(new_player_id)  # fresh array each call
+	r.starter_pokemon_id = data.get_starter_pokemon_id()
+	for pid: String in data.get_pokemon_ids():
+		r._pokemon_infos[pid] = data.get_pokemon_info(pid)
 	return r
 
 
@@ -54,12 +60,22 @@ func build_player_combatant() -> Combatant:
 	c.type_ids = type_ids.duplicate()
 	c.max_hp = max_hp
 	c.hp = clampi(hp, 0, max_hp)
+	c.active_pokemon_id = starter_pokemon_id
+	var info: Dictionary = get_pokemon_info(starter_pokemon_id)
+	if not info.is_empty():
+		c.set_active_pokemon(starter_pokemon_id, String(info["name"]), String(info["sprite_path"]), info["types"])
 	return c
+
+
+## Pokémon info {id, name, sprite_path, types} for any player/enemy id (empty if unknown); Battle's lookup.
+func get_pokemon_info(pokemon_id: String) -> Dictionary:
+	return (_pokemon_infos.get(pokemon_id, {}) as Dictionary).duplicate()
 
 
 ## Builds a battle from the persisted state; the battle gets a COPY of the deck.
 func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: RandomNumberGenerator) -> Battle:
-	return Battle.new(build_player_combatant(), enemies, deck.duplicate(), energy_per_turn, hand_size, rng, type_chart)
+	return Battle.new(build_player_combatant(), enemies, deck.duplicate(), energy_per_turn, hand_size, rng, type_chart,
+			get_pokemon_info, starter_pokemon_id)
 
 
 ## Copies the player's HP back after a battle (clamped 0..max_hp). A surviving player = a battle won.
@@ -69,11 +85,11 @@ func record_battle_result(player: Combatant) -> void:
 		battles_won += 1
 
 
-## card id -> copies in the deck.
+## CardData.deck_key() ("card@pokemon") -> copies in the deck.
 func deck_counts() -> Dictionary:
 	var counts: Dictionary = {}
 	for c: CardData in deck:
-		counts[c.id] = int(counts.get(c.id, 0)) + 1
+		counts[c.deck_key()] = int(counts.get(c.deck_key(), 0)) + 1
 	return counts
 
 
@@ -82,11 +98,11 @@ func get_deck_entries() -> Array[Dictionary]:
 	var by_id: Dictionary = {}
 	var entries: Array[Dictionary] = []
 	for c: CardData in deck:
-		if by_id.has(c.id):
-			by_id[c.id]["count"] = int(by_id[c.id]["count"]) + 1
+		if by_id.has(c.deck_key()):
+			by_id[c.deck_key()]["count"] = int(by_id[c.deck_key()]["count"]) + 1
 		else:
 			var e: Dictionary = {"card": c, "count": 1}
-			by_id[c.id] = e
+			by_id[c.deck_key()] = e
 			entries.append(e)
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return (a["card"] as CardData).display_name.naturalnocasecmp_to((b["card"] as CardData).display_name) < 0)

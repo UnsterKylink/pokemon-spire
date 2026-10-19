@@ -16,10 +16,14 @@ signal enemy_acted(enemy: Combatant, intent: EnemyIntent)
 ## Emitted for every damaging hit (card or enemy attack) AFTER state changes. `amount` is the
 ## final damage (strength and type multiplier applied) BEFORE block; `multiplier` is the type factor.
 signal hit_resolved(target: Combatant, amount: int, multiplier: float)
+## Emitted when a played attack card brings another Pokémon onto the field (before the hit resolves).
+signal active_pokemon_changed(old_id: String, new_id: String)
 signal battle_won
 signal battle_lost
 
 var player: Combatant
+## Id of the Pokémon currently on the field (shared HP/block; story 009). Read-only for the UI.
+var active_pokemon_id: String = ""
 var enemies: Array[Combatant] = []
 var state: State = State.PLAYER_TURN
 var energy: int = 0
@@ -31,15 +35,23 @@ var discard_pile: Array[CardData] = []
 
 var _rng: RandomNumberGenerator
 var _type_chart: TypeChart
+var _pokemon_lookup: Callable = Callable()
 
 
-## Starts a battle. rng is injected so shuffles and weighted intents are seedable.
+## Starts a battle. pokemon_lookup(pokemon_id) -> Dictionary {id, name, sprite_path, types} (GameData.get_pokemon_info)
+## lets cards bring other Pokémon in; starter_pokemon_id is the active Pokémon at battle start. rng is injected so shuffles and weighted intents are seedable.
 ## Expects 1..3 enemies: extra enemies are ignored, an empty list is reported (push_error).
 ## type_chart is injected; null means no types (every hit neutral).
 func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Array[CardData],
 		energy_per_turn: int, cards_per_turn: int, rng: RandomNumberGenerator,
-		type_chart: TypeChart = null) -> void:
+		type_chart: TypeChart = null, pokemon_lookup: Callable = Callable(), starter_pokemon_id: String = "") -> void:
 	player = player_combatant
+	_pokemon_lookup = pokemon_lookup
+	active_pokemon_id = starter_pokemon_id if not starter_pokemon_id.is_empty() else player.active_pokemon_id
+	if active_pokemon_id.is_empty():
+		active_pokemon_id = player.id
+	if not starter_pokemon_id.is_empty():
+		_apply_identity(starter_pokemon_id)  # battle start: the starter is on the field
 	_type_chart = type_chart if type_chart != null else TypeChart.neutral_chart()
 	for e: Combatant in enemy_list:
 		if e != null and enemies.size() < MAX_ENEMIES:
@@ -92,6 +104,13 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	var card: CardData = hand[index]
 	if card.needs_target() and not is_valid_target(target_index):
 		return false
+	# Only attack cards bring their Pokémon in, BEFORE the hit (types/intents use the new Pokémon).
+	if card.kind == CardData.KIND_ATTACK and not card.pokemon_id.is_empty() and card.pokemon_id != active_pokemon_id:
+		var old_id: String = active_pokemon_id
+		active_pokemon_id = card.pokemon_id
+		_apply_identity(card.pokemon_id)
+		refresh_intents()
+		active_pokemon_changed.emit(old_id, active_pokemon_id)
 	energy -= card.cost
 	hand.remove_at(index)
 	discard_pile.append(card)
@@ -144,6 +163,27 @@ func end_turn() -> bool:
 	return true
 
 
+## Recomputes the final value of every living enemy's already-chosen attack against the CURRENT
+## active Pokémon's types. The chosen action itself never changes.
+func refresh_intents() -> void:
+	for e: Combatant in enemies:
+		if e.is_alive() and e.intent != null and e.intent.type == EnemyIntent.TYPE_ATTACK:
+			e.intent.value = _type_chart.final_damage(e.intent.base_value, e.get_primary_type(), player.type_ids)
+
+
+func _apply_identity(pokemon_id: String) -> void:
+	player.active_pokemon_id = pokemon_id
+	if not _pokemon_lookup.is_valid():
+		return
+	var info: Dictionary = _pokemon_lookup.call(pokemon_id)
+	if info.is_empty():
+		return
+	var types: Array[String] = []
+	for t: Variant in (info.get("types", []) as Array):
+		types.append(String(t))
+	player.set_active_pokemon(pokemon_id, String(info.get("name", "")), String(info.get("sprite_path", "")), types)
+
+
 func _execute_intent(enemy: Combatant) -> void:
 	var intent: EnemyIntent = enemy.intent
 	enemy.reset_block()  # block from the previous round expires when the enemy acts
@@ -185,6 +225,7 @@ func _roll_intent(enemy: Combatant) -> void:
 		enemy.sequence_index = (enemy.sequence_index + 1) % enemy.actions.size()
 	var bonus: int = enemy.strength if chosen.type == EnemyIntent.TYPE_ATTACK else 0
 	var rolled: EnemyIntent = chosen.with_bonus(bonus)
+	rolled.base_value = rolled.value
 	if rolled.type == EnemyIntent.TYPE_ATTACK:
 		# Strength is added BEFORE the type multiplier; the displayed value is the final one.
 		rolled.value = _type_chart.final_damage(rolled.value, enemy.get_primary_type(), player.type_ids)

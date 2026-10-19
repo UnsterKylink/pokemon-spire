@@ -12,6 +12,8 @@ var display_name: String = ""
 var sprite_path: String = ""
 ## Type ids from types.json (story 003/008): 1 or 2 entries; empty = typeless (always neutral).
 var type_ids: Array[String] = []
+## Player only (story 009): id of the Pokémon currently on the field ("" for enemies / not set).
+var active_pokemon_id: String = ""
 var max_hp: int = 1
 var hp: int = 1
 var block: int = 0
@@ -64,6 +66,15 @@ static func from_dict(combatant_id: String, d: Dictionary, current_hp: int = -1)
 				return null
 			c.actions.append(action)
 	return c
+
+
+## Changes the displayed identity (name, sprite, types) WITHOUT touching HP, block or strength.
+func set_active_pokemon(pokemon_id: String, new_display_name: String, new_sprite_path: String, types: Array[String]) -> void:
+	active_pokemon_id = pokemon_id
+	display_name = new_display_name
+	sprite_path = new_sprite_path
+	type_ids = types.duplicate()
+	changed.emit()
 
 
 ## First type id ("" if typeless); kept for single-type callers (display, old tests).

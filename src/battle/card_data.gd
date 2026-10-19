@@ -23,6 +23,8 @@ var description: String = ""
 var type_id: String = ""
 ## One of RARITIES (story 004); validated by GameData ("" if the file omits it).
 var rarity: String = ""
+## Pokémon carrying this card (id from pokemon.json); required for attacks, empty for skills (story 009).
+var pokemon_id: String = ""
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -48,9 +50,38 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	card.description = String(d["description"])
 	card.type_id = String(d.get("type", ""))
 	card.rarity = String(d.get("rarity", ""))
+	card.pokemon_id = String(d.get("pokemon", ""))
 	return card
 
 
 ## True if the card needs an enemy target to be played (derived from its damage).
 func needs_target() -> bool:
 	return damage > 0
+
+
+## A copy of this card carried by another Pokémon (stolen cards, story 009).
+func with_pokemon(pid: String) -> CardData:
+	var copy := CardData.new()
+	copy.id = id
+	copy.display_name = display_name
+	copy.cost = cost
+	copy.kind = kind
+	copy.damage = damage
+	copy.block = block
+	copy.description = description
+	copy.type_id = type_id
+	copy.rarity = rarity
+	copy.pokemon_id = pid
+	return copy
+
+
+## Key grouping identical cards: card id + carrying Pokémon ("griffe@salameche"; just the id for skills).
+func deck_key() -> String:
+	return id if pokemon_id.is_empty() else "%s@%s" % [id, pokemon_id]
+
+
+## "Griffe — Salamèche" when `pokemon_name` is given and the card has a Pokémon, else the plain name.
+func display_label(pokemon_name: String = "") -> String:
+	if pokemon_id.is_empty() or pokemon_name.is_empty():
+		return display_name
+	return "%s — %s" % [display_name, pokemon_name]

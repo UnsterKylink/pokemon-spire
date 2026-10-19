@@ -20,7 +20,7 @@ static func generate(data: GameData, player_id: String, defeated_enemy_ids: Arra
 		for card: CardData in data.get_enemy_teaches(enemy_id):
 			if not seen.has(card.id):
 				seen[card.id] = true
-				candidates.append(RewardOffer.make(card, true, data.get_enemy_name(enemy_id)))
+				candidates.append(RewardOffer.make(card.with_pokemon(enemy_id), true, data.get_enemy_name(enemy_id)))
 	if not candidates.is_empty() and count > 0:
 		var stolen: RewardOffer = candidates[rng.randi_range(0, candidates.size() - 1)]
 		offers.append(stolen)

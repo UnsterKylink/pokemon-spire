@@ -12,6 +12,9 @@ var type: String = TYPE_ATTACK
 var value: int = 0
 ## Relative weight, only used by the "weighted" pattern (definitions only).
 var weight: float = 1.0
+## Attack value BEFORE the type multiplier (action value + strength); set when an intent is rolled so
+## Battle.refresh_intents can recompute `value` when the active Pokémon changes (story 009).
+var base_value: int = 0
 
 
 ## True if the given string is a known action type.
@@ -47,6 +50,7 @@ func with_bonus(bonus: int) -> EnemyIntent:
 	copy.type = type
 	copy.value = value + bonus
 	copy.weight = weight
+	copy.base_value = base_value
 	return copy
 
 

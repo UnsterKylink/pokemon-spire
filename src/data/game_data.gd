@@ -30,6 +30,7 @@ var _rarity_weights: Dictionary = {}  # String -> float
 var _reward_pools: Dictionary = {}    # String (player id) -> Array[CardData]
 var _act: Dictionary = {}      # validated act1.json
 var _events: Dictionary = {}   # String -> Dictionary (validated event)
+var _starter_pokemon: String = ""
 
 
 ## Loads all six files (act and events last, story 005). Returns false (after push_error) if anything is missing or invalid.
@@ -47,6 +48,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_reward_pools.clear()
 	_act = {}
 	_events.clear()
+	_starter_pokemon = ""
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -69,6 +71,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_players(pokemon_root) and ok
 	ok = _load_enemies(pokemon_root) and ok
 	ok = _load_encounters(pokemon_root) and ok
+	ok = _check_pokemon_refs(pokemon_root) and ok
 	ok = _load_rewards(rewards_root) and ok
 	ok = _load_events(events_root) and ok
 	ok = _load_act(act_root) and ok
@@ -293,6 +296,59 @@ func get_event(event_id: String) -> Dictionary:
 
 
 # --- Loading / validation --------------------------------------------------
+
+## Pokémon info for ANY player or enemy id: {id, name, sprite_path, types: Array[String]}. Empty if unknown.
+func get_pokemon_info(pokemon_id: String) -> Dictionary:
+	var def_v: Variant = _players.get(pokemon_id, _enemies.get(pokemon_id, null))
+	if not (def_v is Dictionary):
+		return {}
+	var def: Dictionary = def_v
+	var types: Array[String] = []
+	var raw_types: Variant = def.get("types", [])
+	if raw_types is Array:
+		for t: Variant in (raw_types as Array):
+			types.append(String(t))
+	return {"id": pokemon_id, "name": String(def.get("name", "")), "sprite_path": String(def.get("sprite", "")), "types": types}
+
+
+## Every player + enemy Pokémon id.
+func get_pokemon_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for k: String in _players.keys():
+		ids.append(k)
+	for k: String in _enemies.keys():
+		ids.append(k)
+	return ids
+
+
+## Id of the Pokémon on the field at the start of each battle (pokemon.json "starter_pokemon").
+func get_starter_pokemon_id() -> String:
+	return _starter_pokemon
+
+
+## Story 009: attacks need a known Pokémon, skills none; "starter_pokemon" must exist.
+func _check_pokemon_refs(pokemon_root: Dictionary) -> bool:
+	var ok: bool = true
+	for card_id: String in _cards.keys():
+		var card: CardData = _cards[card_id]
+		if card.kind == CardData.KIND_ATTACK:
+			if card.pokemon_id.is_empty():
+				push_error("GameData: attack card '%s' needs a 'pokemon'" % card_id)
+				ok = false
+			elif not _players.has(card.pokemon_id) and not _enemies.has(card.pokemon_id):
+				push_error("GameData: card '%s' references unknown pokemon '%s'" % [card_id, card.pokemon_id])
+				ok = false
+		elif not card.pokemon_id.is_empty():
+			push_error("GameData: skill card '%s' must not have a 'pokemon'" % card_id)
+			ok = false
+	var starter: Variant = pokemon_root.get("starter_pokemon", null)
+	if not (starter is String) or (not _players.has(starter) and not _enemies.has(starter)):
+		push_error("GameData: pokemon file needs a 'starter_pokemon' naming a known pokemon")
+		ok = false
+	else:
+		_starter_pokemon = starter
+	return ok
+
 
 func _load_cards(cards_root: Dictionary) -> bool:
 	var raw: Variant = cards_root.get("cards", null)
