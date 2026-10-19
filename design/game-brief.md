@@ -18,7 +18,7 @@
 ## MVP — what must exist to be the game
 - **Combat à cartes** : 3 énergies/tour, pioche/main/défausse, cartes d'attaque et de protection, intention de l'ennemi affichée.
 - **Départ — Salamèche** : deck de départ de 10 cartes de Salamèche ; une seule barre de PV pour toute l'équipe (améliorable via événements et objets).
-- **Types** : les 18 types, doubles types compris (multiplicateurs multipliés) ; super efficace ×1,5 / pas très efficace ×0,5.
+- **Types** : les 18 types, doubles types compris (multiplicateurs multipliés) ; super efficace ×1,5 / pas très efficace ×0,5 / immunité ×0 (comme dans les jeux : ex. Normal → Spectre, Sol → Vol).
 - **Cartes Pokémon et switch** : chaque carte d'attaque porte un Pokémon ; la jouer fait entrer ce Pokémon (le même reste s'il est déjà actif) ; protection / renforcement ne font pas changer ; les ennemis frappent le Pokémon actif selon ses types.
 - **Vol de carte** : après combat, choisir 1 carte parmi 3, dont une carte d'un Pokémon mis K.O. ; les autres cartes sont portées par des Pokémon des premières routes (toutes générations) du type de la carte.
 - **Carte de l'acte 1** : chemins avec combats, élites, Centre Pokémon (repos), Poké Mart (boutique), boss Champion.
