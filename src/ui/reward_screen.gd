@@ -161,7 +161,7 @@ func _make_offer_widget(offer: RewardOffer, index: int) -> Control:
 	var b := Button.new()
 	b.name = "Card"
 	b.custom_minimum_size = CARD_SIZE
-	CardView.fill_card_content(b, card, _data.get_type_chart())
+	CardView.fill_card_content(b, card, _data.get_type_chart(), _data.get_pokemon_info)  # stolen card shows the defeated Pokémon
 	var border: Color = COLOR_STOLEN if offer.stolen else CardView.rarity_color(card.rarity)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = COLOR_ATTACK_BG

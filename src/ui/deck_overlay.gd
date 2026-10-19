@@ -2,7 +2,8 @@ class_name DeckOverlay
 extends Control
 ## Full-screen "Voir le deck" overlay: dimmed background + scrollable list of the run's deck + "Fermer".
 ## Shared by RewardScreen and MapScreen. Only reads RunState; holds no game state.
-## Implements: story-004-recompenses-vol-attaque (deck overlay), reused by story-005-carte-acte-1.
+## Implements: story-004-recompenses-vol-attaque (deck overlay), reused by story-005-carte-acte-1;
+## story-009: one line per (card, Pokémon), e.g. "Griffe — Salamèche ×5 (coût 1) : ...".
 
 const PANEL_SIZE: Vector2 = Vector2(820, 560)
 
@@ -69,7 +70,8 @@ func open(run: RunState) -> void:
 		var l: Label = CardView.make_label(22)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.text = "%s ×%d  (coût %d) : %s" % [card.display_name, int(entry["count"]), card.cost, card.description]
+		var pokemon_name: String = String(run.get_pokemon_info(card.pokemon_id).get("name", "")) if not card.pokemon_id.is_empty() else ""
+		l.text = "%s ×%d (coût %d) : %s" % [card.display_label(pokemon_name), int(entry["count"]), card.cost, card.description]
 		l.add_theme_color_override("font_color", CardView.rarity_color(card.rarity))
 		_list.add_child(l)
 	visible = true
@@ -85,7 +87,7 @@ func is_open() -> bool:
 	return visible
 
 
-## Text of each deck line ("Griffe ×5 ..."), for the QA harness.
+## Text of each deck line ("Griffe — Salamèche ×5 ..."), for the QA harness.
 func get_lines() -> Array[String]:
 	var lines: Array[String] = []
 	for child: Node in _list.get_children():

@@ -2,7 +2,8 @@ class_name BattleScreen
 extends Control
 ## Playable battle screen (mouse only). UI is built from containers in code; all logic lives in Battle.
 ## Implements: story-001-combat-de-base (écran jouable), story-002-intentions-et-multi-ennemis,
-## story-003-types (type badges, "Super efficace !" feedback).
+## story-003-types (type badges, "Super efficace !" feedback),
+## story-009-cartes-pokemon-switch (active Pokémon on the left, "<Nom>, à toi !", cards show their Pokémon).
 ## Story 004: the screen no longer owns game state; Main gives it a Battle (built from RunState) via
 ## setup() and listens to battle_won / restart_requested.
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
@@ -44,6 +45,11 @@ const FLOAT_FADE: float = 0.4
 const FLOAT_RISE: float = 24.0
 const FLOAT_SCREEN_MARGIN: float = 8.0
 const FLOAT_FONT_SIZE: int = 22
+## Story 009: caption above the active Pokémon, switch feedback (%s = Pokémon name).
+const TEXT_ACTIVE_CAPTION: String = "Pokémon actif"
+const TEXT_SWITCH: String = "%s, à toi !"
+const COLOR_SWITCH: Color = Color(1.0, 0.85, 0.35)
+const COLOR_ACTIVE_CAPTION: Color = Color(0.7, 0.72, 0.82)
 
 
 ## A floating feedback label and its running tween (one per target, reused).
@@ -78,6 +84,8 @@ var _background: ColorRect
 var _player_name: Label
 var _player_type_badge: HBoxContainer
 var _player_float: FloatText
+var _switch_float: FloatText
+var _player_caption: Label
 var _float_layer: Control
 var _player_sprite: TextureRect
 var _player_hp_bar: ProgressBar
@@ -130,6 +138,11 @@ func get_player_float_text() -> String:
 	return _visible_float_text(_player_float)
 
 
+## Text of the "<Nom>, à toi !" label currently shown over the active Pokémon ("" if none).
+func get_switch_float_text() -> String:
+	return _visible_float_text(_switch_float)
+
+
 ## Displays `battle` (built by Main from RunState) and starts it. Call once, after add_child.
 ## `run` is only read, for the deck size shown in the info row.
 func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) -> void:
@@ -140,16 +153,16 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_encounter_id = encounter_id
 	var player: Combatant = _battle.player
 	_build_enemy_views(_battle.enemies)
-	_player_name.text = player.display_name
-	_set_badge_row(_player_type_badge, player.type_ids)
 	_hide_float(_player_float)
-	_player_sprite.texture = _load_texture(player.sprite_path)
+	_hide_float(_switch_float)
 	_end_box.visible = false
 	_end_dim.visible = false
 	_battle.state_changed.connect(_refresh)
 	_battle.hit_resolved.connect(_on_hit_resolved)
 	_battle.battle_won.connect(_on_battle_won)
+	_battle.active_pokemon_changed.connect(_on_active_pokemon_changed)
 	_battle.start()
+	_refresh_active_pokemon(player)
 	_refresh()
 
 
@@ -260,6 +273,10 @@ func _build_ui() -> void:
 	player_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	player_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	arena.add_child(player_box)
+	_player_caption = _make_label(16)
+	_player_caption.text = TEXT_ACTIVE_CAPTION
+	_player_caption.add_theme_color_override("font_color", COLOR_ACTIVE_CAPTION)
+	player_box.add_child(_player_caption)
 	_player_name = _make_label(28)
 	player_box.add_child(_player_name)
 	_player_type_badge = CardView.make_type_badge_row()
@@ -352,6 +369,7 @@ func _build_ui() -> void:
 	add_child(_float_layer)
 	move_child(_float_layer, _end_dim.get_index())
 	_player_float = _make_float_text()
+	_switch_float = _make_float_text()
 
 
 func _make_label(font_size: int) -> Label:
@@ -444,6 +462,25 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.panel.add_child(v.block_label)
 		v.float_text = _make_float_text()
 		_enemy_views.append(v)
+
+
+# --- Active Pokémon (story 009) ------------------------------------------------
+
+## Shows the active Pokémon (battle.player identity: name, type badges, sprite) on the left.
+func _refresh_active_pokemon(p: Combatant) -> void:
+	_player_name.text = p.display_name
+	_set_badge_row(_player_type_badge, p.type_ids)
+	_player_sprite.texture = _load_texture(p.sprite_path)
+
+
+## A card brought another Pokémon in (fired before the hit): update the left panel, show
+## "<Nom>, à toi !" over it (never blocks input) and redraw the enemy intents (recomputed by Battle).
+func _on_active_pokemon_changed(_old_id: String, _new_id: String) -> void:
+	var p: Combatant = _battle.player
+	_refresh_active_pokemon(p)
+	_show_float(_switch_float, _player_sprite, TEXT_SWITCH % p.display_name, COLOR_SWITCH)
+	for i: int in _enemy_views.size():
+		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 
 
 # --- Effectiveness feedback ------------------------------------------------
@@ -630,7 +667,7 @@ func _rebuild_hand() -> void:
 
 ## Builds the visual content of a card button (shared look, see CardView).
 func _fill_card_content(b: Button, card: CardData) -> void:
-	CardView.fill_card_content(b, card, _data.get_type_chart())
+	CardView.fill_card_content(b, card, _data.get_type_chart(), _data.get_pokemon_info)
 
 
 # --- Input -----------------------------------------------------------------
