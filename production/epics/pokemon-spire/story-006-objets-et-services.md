@@ -1,7 +1,7 @@
 # Story 006: Objets, potions, Centre Pokémon et Poké Mart
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -28,12 +28,12 @@
 
 *From `design/game-brief.md` (the **Player goal & fail state** field + MVP feature 6), scoped to this story:*
 
-- [ ] ~10 objets tenus définis en données, avec effets permanents (ex. Restes : +PV en fin de combat ; Bandeau : +dégâts de la 1re attaque par combat).
-- [ ] ~5 potions à usage unique (ex. Potion : soigne ; Attaque + : bonus de dégâts ce tour), max 3 potions portées, utilisables pendant le combat.
-- [ ] Les combats rapportent des Pokédollars ; les élites donnent un objet tenu.
-- [ ] Centre Pokémon : choisir entre se soigner (30 % des PV max) ou améliorer une carte du deck.
-- [ ] Poké Mart : acheter des cartes, objets et potions avec des Pokédollars, et retirer une carte du deck contre paiement.
-- [ ] Les objets possédés et l'argent sont visibles en permanence.
+- [x] ~10 objets tenus définis en données, avec effets permanents (ex. Restes : +PV en fin de combat ; Bandeau : +dégâts de la 1re attaque par combat).
+- [x] ~5 potions à usage unique (ex. Potion : soigne ; Attaque + : bonus de dégâts ce tour), max 3 potions portées, utilisables pendant le combat.
+- [x] Les combats rapportent des Pokédollars ; les élites donnent un objet tenu.
+- [x] Centre Pokémon : choisir entre se soigner (30 % des PV max) ou améliorer une carte du deck.
+- [x] Poké Mart : acheter des cartes, objets et potions avec des Pokédollars, et retirer une carte du deck contre paiement.
+- [x] Les objets possédés et l'argent sont visibles en permanence.
 
 ---
 
@@ -64,7 +64,7 @@
 **Required evidence**:
 - Integration: `tests/integration/run/objets-et-services_test.gd` OR playtest doc — advisory at `qa.level: minimal`, plus a retained screenshot in `production/qa/evidence/` because the story changes what the player sees.
 
-**Status**: [ ] Not yet created
+**Status**: [x] Retained screenshots in `production/qa/evidence/story-006-objets-et-services/`
 
 ---
 
@@ -72,3 +72,12 @@
 
 - Depends on: Story 010 must be DONE (team design change, 2026-10-19)
 - Unlocks: Story 007
+
+---
+
+## Completion Notes
+**Completed**: 2026-10-21
+**Criteria**: 6/6 passing (confirmed by the user in play; 11 screenshots retained)
+**Deviations**: Advisory only — currency shown as "P$" (font lacks ₽); battle sprites scaled 2.5 → 2.0 to fit the HUD; Mart allows several card removals per visit (price rises 75/100/125…); 11 items / 6 potions (brief said ~10 / ~5); French strings hardcoded; QA hooks ship in the build
+**Test Evidence**: Integration — tests waived at qa.level minimal; screenshots at `production/qa/evidence/story-006-objets-et-services/`
+**Code Review**: Skipped — Solo mode
