@@ -55,6 +55,11 @@ var _continue_button: Button
 var _skip_button: Button
 
 
+func _init() -> void:
+	name = "EvolutionScreen"
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+
+
 func _ready() -> void:
 	_build_ui()
 

@@ -8,7 +8,9 @@ extends SceneTree
 ##   godot --path . --windowed --resolution 1280x720 -s res://tools/qa/battle_walkthrough.gd -- <out_dir>
 ## Story: pokemon-spire 005, 008 (type shots 01-types-doubles / 02-super-efficace-double / 03-immunite),
 ## 009 (switch shots 01-actif-salameche .. 07-deck, run FIRST, see _switch_shots),
-## 006 (items / services shots 01-hud-carte .. 07b-mart-apres-retrait, see _items_shots).
+## 006 (items / services shots 01-hud-carte .. 07b-mart-apres-retrait, see _items_shots),
+## 007 (Champion / evolution / victory / defeat / new run shots, see _champion_shots).
+## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
 const ROSTER_SEED: int = 12345
@@ -32,14 +34,24 @@ const ITEMS_ENCOUNTER: String = "solo_bidoof"
 const ITEMS_ATTACK: String = "flammeche"
 const MART_MONEY: int = 260
 
+## Story 007: run seed and the money / item / potion given so the summary shows them.
+const CHAMPION_SEED: int = 4242
+const CHAMPION_ITEM: String = "restes"
+const CHAMPION_MONEY: int = 187
+const CHAMPION_WARMUP: Array[String] = ["solo_bidoof", "trio_vol"]  # defeat part: one win, then the lost fight
+const CHAMPION_PICK: int = 1
+
 var _main: Main
 var _out_dir: String = "user://qa"
+var _filter: String = ""
 
 
 func _initialize() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() > 0:
 		_out_dir = args[0]
+	if args.size() > 1:
+		_filter = args[1]
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_main = (load("res://src/main.tscn") as PackedScene).instantiate() as Main
 	root.add_child(_main)
@@ -193,13 +205,15 @@ func _path_score(g: MapGraph, path: Array[String]) -> int:
 
 
 ## Plays attacks (select + click, the real UI path) until the fight ends; HP topped up each loop (bounded).
-func _win_battle() -> void:
+func _win_battle(quick: bool = false) -> void:
 	var guard: int = 0
 	while _main.get_current_screen_name() == "battle" and guard < MAX_BATTLE_STEPS:
 		guard += 1
 		var bs: BattleScreen = _main.get_battle_screen()
 		var b: Battle = bs.get_battle()
 		_main.qa_set_hp(b.player.max_hp)
+		if quick:
+			_main.qa_set_enemy_hp(1)
 		var played: bool = false
 		for i: int in b.hand.size():
 			if b.hand[i].kind == CardData.KIND_ATTACK and b.can_play(i):
@@ -356,7 +370,86 @@ func _items_shots() -> void:
 	print("after mart: screen=%s" % _main.get_current_screen_name())
 
 
+## Story 007 shots: Champion fight reached through the real map (3 Pokémon, boss modifiers), evolution before -> after, the card
+## choice, the victory summary, then a lost battle -> defeat summary, then "Nouvelle partie" (starter screen,
+## then the new run's map with a reset HUD). Wins use the real click path with Main.qa_set_enemy_hp (QA cheat).
+func _champion_shots() -> void:
+	_main.forced_starter_id = ""
+	_main.start_new_run(CHAMPION_SEED, "salameche")
+	_main.qa_set_money(CHAMPION_MONEY)
+	_main.qa_give_item(CHAMPION_ITEM)
+	# Walk the real act map up to the Champion (quick wins), so floors / enemies / battles are real numbers.
+	var graph: MapGraph = _main.get_run_state().act.graph
+	for id: String in _plan(graph):
+		var rt: String = graph.get_node(id).room_type
+		if not _main.map_choose(id):
+			print("ERROR: could not enter ", id)
+			quit(1)
+			return
+		match rt:
+			"boss":
+				await create_timer(FLOAT_WAIT).timeout
+				await _shot("01-champion")
+			"wild", "elite":
+				_win_battle(true)
+				_main.reward_pick(0)
+			"event":
+				_main.event_choose(0)
+				_main.event_continue()
+			"center":
+				_main.center_heal()
+				_main.room_continue()
+			_:
+				_main.room_continue()
+	if _main.get_current_screen_name() != "battle":
+		print("ERROR: not on the Champion fight: ", _main.get_current_screen_name())
+	_win_battle(true)
+	print("evolution summary: ", _main.get_evolution_summary())
+	await _shot("02-evolution")
+	_main.evolution_continue()
+	await _shot("03-evolution-cartes")
+	_main.evolution_pick(CHAMPION_PICK)
+	print("evolution result: ", _main.get_evolution_screen().get_result_text())
+	_main.evolution_continue()
+	await _shot("04-victoire")
+	print("victory stats: ", _main.get_victory_screen().get_stats())
+	_main.victory_new_run()
+	_main.starter_choose(0)
+	_main.qa_set_money(CHAMPION_MONEY)
+	# Defeat on the map: win the floor-1 fight, then lose the first fight reachable on floor 2 (debug fight if none).
+	_main.map_choose(_main.map_reachable_ids()[0])
+	_win_battle(true)
+	_main.reward_skip()
+	var g2: MapGraph = _main.get_run_state().act.graph
+	var fight_id: String = ""
+	for id: String in _main.map_reachable_ids():
+		if g2.get_node(id).room_type == "wild":
+			fight_id = id
+			break
+	if fight_id.is_empty():
+		_main.start_encounter(CHAMPION_WARMUP[1])
+	else:
+		_main.map_choose(fight_id)
+	print("lost: ", _main.qa_lose_battle())
+	await _shot("05a-defaite-combat")
+	_main.battle_defeat_continue()
+	await _shot("05-defaite")
+	print("defeat stats: ", _main.get_defeat_screen().get_stats())
+	_main.defeat_new_run()
+	await _shot("06-nouvelle-partie")
+	_main.starter_choose(0)
+	var r: RunState = _main.get_run_state()
+	print("new run: money=%d items=%d potions=%d deck=%d hp=%d/%d evolved=%s hud=%s %s" % [r.money, r.items.size(),
+			r.potions.size(), r.deck.size(), r.hp, r.max_hp, r.evolution_applied, _main.get_hud().get_money_text(),
+			_main.get_hud().get_item_names()])
+	await _shot("06b-nouvelle-partie-carte")
+
+
 func _run() -> void:
+	if _filter == "story-007":
+		await _champion_shots()
+		quit(0)
+		return
 	await _roster_shots()
 	_main.forced_starter_id = "salameche"  # the older shots assume Salamèche's deck and identity
 	await _items_shots()
@@ -425,6 +518,9 @@ func _run() -> void:
 				if rt == "center":
 					_main.center_heal()  # story 006: the centre no longer heals on entry
 				_main.room_continue()
+	_main.evolution_continue()  # story 007: the boss win now leads to the evolution, then the victory
+	_main.evolution_skip()
+	_main.evolution_continue()
 	await _shot("10-acte-termine")
 	print("missing room types on the path: ", WANTED_TYPES.filter(func(t: String) -> bool: return not shot_done.has(t)))
 	quit(0)

@@ -680,9 +680,9 @@ func _on_new_run_requested() -> void:
 ## Story 007: the Champion is beaten -> the chosen starter evolves (RunState.evolve_starter, data-driven), then
 ## the evolved form offers its cards (EvolutionOffer). The run's HP / deck change here; the screen only displays.
 func _show_evolution() -> void:
+	_clear_screens()  # before the offers: it resets _evolution_offers
 	_evolution_summary = _run.evolve_starter(_data)
 	_evolution_offers = EvolutionOffer.generate(_data, _run)
-	_clear_screens()
 	_evolution_screen = EvolutionScreen.new()
 	_evolution_screen.card_chosen.connect(_on_evolution_card_chosen)
 	_evolution_screen.finished.connect(_show_victory)

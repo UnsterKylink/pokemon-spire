@@ -44,6 +44,11 @@ var _deck_grid: GridContainer
 var _stats: Dictionary = {}  # stat caption -> value text (QA)
 
 
+func _init() -> void:
+	name = "RunEndScreen"
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+
+
 func _ready() -> void:
 	_build_ui()
 
