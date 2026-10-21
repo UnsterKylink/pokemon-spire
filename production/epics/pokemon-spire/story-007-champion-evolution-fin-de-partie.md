@@ -1,7 +1,7 @@
 # Story 007: Champion, évolution, victoire et défaite
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -28,11 +28,11 @@
 
 *From `design/game-brief.md` (the **Player goal & fail state** field + MVP feature 7), scoped to this story:*
 
-- [ ] Le boss Champion d'arène a plusieurs Pokémon ou un comportement spécial défini en données, plus difficile qu'une élite.
-- [ ] Battre le Champion fait évoluer le Pokémon de départ choisi (ex. Salamèche → Reptincel) : nouveau sprite, PV max augmentés, choix de nouvelles cartes. (Mis à jour 2026-10-19 : départ au choix, tâche 010.)
-- [ ] Après l'évolution, un écran de victoire résume la partie (étages, ennemis battus, deck final).
-- [ ] Si les PV tombent à 0 à n'importe quel moment, un écran de défaite s'affiche.
-- [ ] Depuis les écrans de victoire et de défaite, le joueur peut relancer une nouvelle partie depuis le début (état de partie entièrement réinitialisé).
+- [x] Le boss Champion d'arène a plusieurs Pokémon ou un comportement spécial défini en données, plus difficile qu'une élite.
+- [x] Battre le Champion fait évoluer le Pokémon de départ choisi (ex. Salamèche → Reptincel) : nouveau sprite, PV max augmentés, choix de nouvelles cartes. (Mis à jour 2026-10-19 : départ au choix, tâche 010.)
+- [x] Après l'évolution, un écran de victoire résume la partie (étages, ennemis battus, deck final).
+- [x] Si les PV tombent à 0 à n'importe quel moment, un écran de défaite s'affiche.
+- [x] Depuis les écrans de victoire et de défaite, le joueur peut relancer une nouvelle partie depuis le début (état de partie entièrement réinitialisé).
 
 ---
 
@@ -63,7 +63,7 @@
 **Required evidence**:
 - Integration: `tests/integration/run/champion-evolution-fin-de-partie_test.gd` OR playtest doc — advisory at `qa.level: minimal`, plus a retained screenshot in `production/qa/evidence/` because the story changes what the player sees.
 
-**Status**: [ ] Not yet created
+**Status**: [x] Retained screenshots in `production/qa/evidence/story-007-champion-evolution-fin-de-partie/`
 
 ---
 
@@ -71,3 +71,12 @@
 
 - Depends on: Story 006 must be DONE
 - Unlocks: None (MVP complete)
+
+---
+
+## Completion Notes
+**Completed**: 2026-10-21
+**Criteria**: 5/5 passing (confirmed by the user in play; 8 screenshots retained)
+**Deviations**: Advisory only — Champion balance (315 HP total, Onix/Arcanin/Ronflex) not playtested; 3rd evolution card is an upgraded copy of the starter "strong" card (no other rare of that type exists); deck cards switch to the evolved form; French strings hardcoded; QA hooks ship in the build; evolution data uses the lowest-id branch (Wurmple → Armulys)
+**Test Evidence**: Integration — tests waived at qa.level minimal; screenshots at `production/qa/evidence/story-007-champion-evolution-fin-de-partie/`
+**Code Review**: Skipped — Solo mode
