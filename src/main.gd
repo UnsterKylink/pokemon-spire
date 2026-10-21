@@ -1,11 +1,13 @@
 class_name Main
 extends Control
 ## Run owner: holds GameData, RunState and RNGs, and switches between the screens
-## (MapScreen -> Battle/Event/placeholder room -> Reward -> MapScreen ... -> boss -> act end).
+## (MapScreen -> Battle/Event/room -> Reward -> MapScreen ... -> boss -> Evolution -> Victory; HP 0 -> Defeat).
 ## Screens only display and emit signals; all persistent state lives here / in RunState.
 ## Implements: story-005-carte-acte-1 (act map flow), story-004-recompenses-vol-attaque (rewards),
 ## story-006-objets-et-services (permanent RunHud, potions in battle, loot on the reward screen, Centre Pokémon
-## and Poké Mart screens: Main applies every service / purchase through RunState / ShopInventory).
+## and Poké Mart screens: Main applies every service / purchase through RunState / ShopInventory),
+## story-007-champion-evolution-fin-de-partie (boss win -> evolution of the starter + 1-of-N card choice ->
+## victory summary; HP 0 -> defeat summary; "Nouvelle partie" resets the whole run back to the starter choice).
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -28,8 +30,13 @@ const SCREEN_EVENT: String = "event"
 const SCREEN_ROOM: String = "room"
 const SCREEN_CENTER: String = "center"
 const SCREEN_MART: String = "mart"
-const SCREEN_ACT_END: String = "act_end"
-const COLOR_ACT_END: Color = Color(1.0, 0.8, 0.28)
+const SCREEN_EVOLUTION: String = "evolution"
+const SCREEN_VICTORY: String = "victory"
+const SCREEN_DEFEAT: String = "defeat"
+## Room type whose win ends the act (no reward screen: evolution -> victory instead).
+const ROOM_BOSS: String = "boss"
+## QA: player turns qa_lose_battle() ends at most before giving up.
+const QA_LOSE_MAX_TURNS: int = 60
 
 var _data: GameData
 var _run: RunState
@@ -45,6 +52,8 @@ var _shop_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _last_loot: Dictionary = {}
 ## Non-empty = every new run starts with this Pokémon without showing the choice (QA / `--starter=`).
 var forced_starter_id: String = ""
+## `--seed=` value (0 = none): every "Nouvelle partie" reuses it so a QA run stays reproducible; else random.
+var _cli_seed: int = 0
 var _pending_act_seed: int = 0
 var _starter_choices: Array[String] = []
 var _starter_screen: StarterScreen
@@ -62,6 +71,11 @@ var _event_screen: EventScreen
 var _room_screen: PlaceholderRoomScreen
 var _center_screen: CenterScreen
 var _mart_screen: MartScreen
+## Story 007 screens and the evolution's card offers / summary (cleared with the screens / on a new run).
+var _evolution_screen: EvolutionScreen
+var _end_screen: RunEndScreen
+var _evolution_offers: Array[CardData] = []
+var _evolution_summary: Dictionary = {}
 ## The current Poké Mart visit's stock (null outside the Mart): one per visit.
 var _shop: ShopInventory
 ## Permanent money / items / potions bar (story 006), above every run screen except the starter choice.
@@ -98,6 +112,7 @@ func _ready() -> void:
 			debug_encounter = arg.substr(ENCOUNTER_ARG_PREFIX.length())
 	if not debug_encounter.is_empty() and forced_starter_id.is_empty():
 		forced_starter_id = _data.get_default_player_id()  # a debug fight needs a run, so no choice screen
+	_cli_seed = forced_seed
 	start_new_run(forced_seed)
 	if not debug_encounter.is_empty():
 		start_encounter(debug_encounter)
@@ -106,7 +121,16 @@ func _ready() -> void:
 ## Starts a brand new run: shows the starter choice screen (3 proposals drawn with the run RNG), unless
 ## `starter_id` (or `forced_starter_id`) is given. `act_seed` 0 = random map and RNGs; any other value makes
 ## the map, the starter draw AND the run RNGs reproducible (QA).
+## Story 007: the previous run is dropped entirely (RunState, loot, evolution, encounter, screens), so nothing
+## leaks into the new one; the HUD is redrawn from the new run once the starter is chosen.
 func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
+	_clear_screens()
+	_run = null
+	_last_loot = {}
+	_encounter_id = ""
+	_fight_room_type = ""
+	_evolution_summary = {}
+	_hud.visible = false
 	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng]
 	for i: int in rngs.size():
 		if act_seed != 0:
@@ -193,7 +217,8 @@ func get_run_state() -> RunState:
 	return _run
 
 
-## QA: "starter", "map", "battle", "reward", "event", "center", "mart", "room", "act_end" (or "none").
+## QA: "starter", "map", "battle", "reward", "event", "center", "mart", "room", "evolution", "victory",
+## "defeat" (or "none").
 func get_current_screen_name() -> String:
 	return _screen_name
 
@@ -218,7 +243,7 @@ func get_event_screen() -> EventScreen:
 	return _event_screen
 
 
-## QA: the live placeholder / act-end screen (null otherwise).
+## QA: the live placeholder room screen (null otherwise).
 func get_room_screen() -> PlaceholderRoomScreen:
 	return _room_screen
 
@@ -423,6 +448,101 @@ func qa_set_money(amount: int) -> void:
 		_refresh_hud()
 
 
+# --- QA: story 007 (Champion, evolution, victory / defeat, new run) ----------------------------------
+
+## QA: the live EvolutionScreen (null outside the evolution).
+func get_evolution_screen() -> EvolutionScreen:
+	return _evolution_screen
+
+
+## QA: the live victory summary (null otherwise).
+func get_victory_screen() -> RunEndScreen:
+	return _end_screen if _screen_name == SCREEN_VICTORY else null
+
+
+## QA: the live defeat summary (null otherwise).
+func get_defeat_screen() -> RunEndScreen:
+	return _end_screen if _screen_name == SCREEN_DEFEAT else null
+
+
+## QA: what the evolution did (RunState.evolve_starter summary; {} before the Champion is beaten).
+func get_evolution_summary() -> Dictionary:
+	return _evolution_summary
+
+
+## QA: "Continuer" on the evolution screen (reveal -> card choice; result -> victory).
+func evolution_continue() -> void:
+	if _evolution_screen != null:
+		_evolution_screen.press_continue()
+
+
+## QA: picks evolution card `index` (from the card-choice step) as a click would.
+func evolution_pick(index: int) -> void:
+	if _evolution_screen != null:
+		_evolution_screen.pick(index)
+
+
+## QA: "Passer" on the evolution card choice.
+func evolution_skip() -> void:
+	if _evolution_screen != null:
+		_evolution_screen.skip()
+
+
+## QA: "Nouvelle partie" on the victory screen.
+func victory_new_run() -> void:
+	if get_victory_screen() != null:
+		_end_screen.press_new_run()
+
+
+## QA: "Nouvelle partie" on the defeat screen.
+func defeat_new_run() -> void:
+	if get_defeat_screen() != null:
+		_end_screen.press_new_run()
+
+
+## QA: "Continuer" on the battle's defeat overlay (-> defeat summary). Ignored unless the battle is lost.
+func battle_defeat_continue() -> void:
+	if _battle_screen != null:
+		_battle_screen.press_defeat_continue()
+
+
+## QA-ONLY: starts the Champion fight ("boss" room: its pool encounter and hp / strength modifiers, as on the map)
+## with the CURRENT run, without walking the map. The win goes to the evolution like the real boss.
+func qa_start_boss() -> void:
+	if _run == null:
+		return
+	var encounter_id: String = _data.pick_encounter(ROOM_BOSS, _run.total_floors(), _encounter_rng)
+	var mods: Dictionary = _data.get_room_modifiers(ROOM_BOSS)
+	_launch_battle(encounter_id, _data.create_enemies(encounter_id, float(mods["hp_multiplier"]), int(mods["strength_bonus"])), ROOM_BOSS)
+
+
+## QA-ONLY CHEAT: sets every living enemy of the live battle to `value` HP (clamped 1..max), to win quickly.
+func qa_set_enemy_hp(value: int) -> void:
+	if _battle_screen == null:
+		return
+	for e: Combatant in _battle_screen.get_battle().enemies:
+		if e.is_alive():
+			e.hp = clampi(value, 1, e.max_hp)
+			e.changed.emit()
+	_battle_screen.get_battle().state_changed.emit()
+
+
+## QA-ONLY CHEAT: loses the live battle through the real enemy turns (player at 1 HP, no block, ends turns).
+## True if the battle is lost (the defeat overlay is then shown; battle_defeat_continue() goes on).
+func qa_lose_battle() -> bool:
+	if _battle_screen == null:
+		return false
+	var b: Battle = _battle_screen.get_battle()
+	for i: int in QA_LOSE_MAX_TURNS:
+		if b.state != Battle.State.PLAYER_TURN:
+			break
+		b.player.hp = 1
+		b.player.block = 0
+		b.player.changed.emit()
+		_battle_screen.press_end_turn()
+	return b.state == Battle.State.LOST
+
+
 ## QA: picks reward card `index` as a click would.
 func reward_pick(index: int) -> void:
 	if _reward_screen != null:
@@ -510,14 +630,18 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	battle.item_triggered.connect(_on_item_triggered)
 	_battle_screen = BATTLE_SCENE.instantiate() as BattleScreen
 	_battle_screen.battle_won.connect(_on_battle_won)
-	_battle_screen.restart_requested.connect(_on_restart_requested)
+	_battle_screen.defeat_acknowledged.connect(_show_defeat)
+	battle.battle_lost.connect(_on_battle_lost)
 	_set_screen(_battle_screen, SCREEN_BATTLE)
 	_battle_screen.setup(battle, _data, _run, encounter_id)
 	_refresh_hud()
 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
-	_run.record_battle_result(_battle_screen.get_battle().player)
+	_run.record_battle_result(_battle_screen.get_battle().player, defeated_ids)
+	if _fight_room_type == ROOM_BOSS:
+		_show_evolution()  # story 007: the Champion pays no loot and no reward screen
+		return
 	_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
 	var weights: Dictionary = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
 	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
@@ -536,16 +660,68 @@ func _on_card_chosen(card: CardData) -> void:
 	_after_reward()
 
 
-## Back to the map, or the act-end message after the boss fight.
+## Back to the map (the boss never reaches the reward screen since story 007).
 func _after_reward() -> void:
-	if _fight_room_type == "boss" and _run.act.is_boss_current():
-		_show_act_end()
-	else:
-		_show_map()
+	_show_map()
 
 
-func _on_restart_requested() -> void:
-	start_new_run()
+## The battle is lost: HP 0 is written to the run now (the HUD / summary read it); the overlay's "Continuer"
+## then shows the defeat summary (_show_defeat).
+func _on_battle_lost() -> void:
+	_run.record_battle_result(_battle_screen.get_battle().player)
+	_refresh_hud()
+
+
+## "Nouvelle partie" (victory / defeat): a brand new run, back to the starter choice (same seed only with --seed).
+func _on_new_run_requested() -> void:
+	start_new_run(_cli_seed)
+
+
+## Story 007: the Champion is beaten -> the chosen starter evolves (RunState.evolve_starter, data-driven), then
+## the evolved form offers its cards (EvolutionOffer). The run's HP / deck change here; the screen only displays.
+func _show_evolution() -> void:
+	_evolution_summary = _run.evolve_starter(_data)
+	_evolution_offers = EvolutionOffer.generate(_data, _run)
+	_clear_screens()
+	_evolution_screen = EvolutionScreen.new()
+	_evolution_screen.card_chosen.connect(_on_evolution_card_chosen)
+	_evolution_screen.finished.connect(_show_victory)
+	_set_screen(_evolution_screen, SCREEN_EVOLUTION)
+	_evolution_screen.setup(_data, _run, _evolution_summary, _evolution_offers)
+
+
+func _on_evolution_card_chosen(index: int) -> void:
+	var card: CardData = _evolution_offers[index]
+	_run.add_card(card)
+	_evolution_screen.show_result("%s rejoint ton deck !" % card.display_name)
+
+
+func _show_victory() -> void:
+	_show_run_end(true)
+
+
+## Defeat summary; only once HP is 0 (a stray call with HP left is refused).
+func _show_defeat() -> void:
+	if _run == null or not _run.is_defeated():
+		return
+	_show_run_end(false)
+
+
+func _show_run_end(victory: bool) -> void:
+	_clear_screens()
+	_end_screen = RunEndScreen.new()
+	_end_screen.new_run_requested.connect(_on_new_run_requested)
+	_set_screen(_end_screen, SCREEN_VICTORY if victory else SCREEN_DEFEAT)
+	_end_screen.setup(_data, _run, victory)
+
+
+## Any HP loss outside a battle (events, services) that reaches 0 also ends the run. Events never go below
+## 1 HP today (RunState.lose_hp), so this is a safety net for future effects.
+func _check_defeat_outside_battle() -> bool:
+	if _run != null and _run.is_defeated():
+		_show_defeat()
+		return true
+	return false
 
 
 func _show_event() -> void:
@@ -566,6 +742,8 @@ func _show_event() -> void:
 func _on_event_option_chosen(index: int) -> void:
 	var option: Dictionary = (_current_event.get("options", []) as Array)[index]
 	var summary: String = EventResolver.apply_effects(option.get("effects", []), _run, _data, _event_rng)
+	if _check_defeat_outside_battle():
+		return
 	_event_screen.show_result(String(option.get("result_text", "")), summary, _run)
 
 
@@ -647,22 +825,12 @@ func _show_placeholder_room(room_type: String) -> void:
 			MapCanvas.ROOM_COLORS.get(room_type, MapCanvas.COLOR_UNKNOWN_ROOM))
 
 
-## Minimal end-of-act message (the real victory / evolution screen is story 007).
-func _show_act_end() -> void:
-	_clear_screens()
-	_room_screen = ROOM_SCENE.instantiate() as PlaceholderRoomScreen
-	_room_screen.finished.connect(_on_restart_requested)
-	_set_screen(_room_screen, SCREEN_ACT_END)
-	_room_screen.setup("Acte 1 terminé !",
-			"Tu as vaincu le %s ! PV %d/%d   |   Deck : %d cartes" % [_data.get_room_name("boss"), _run.hp, _run.max_hp, _run.deck.size()],
-			"Nouvelle partie", COLOR_ACT_END)
-
-
 func _set_screen(screen: Control, screen_name: String) -> void:
 	_screen = screen
 	_screen_name = screen_name
 	add_child(screen)
-	var show_hud: bool = _run != null and screen_name != SCREEN_STARTER
+	# No HUD on the starter choice nor on the end summaries (they show money / items themselves).
+	var show_hud: bool = _run != null and screen_name not in [SCREEN_STARTER, SCREEN_VICTORY, SCREEN_DEFEAT]
 	_hud.visible = show_hud
 	screen.offset_top = RunHud.HEIGHT if show_hud else 0.0
 	move_child(_hud, get_child_count() - 1)
@@ -689,6 +857,9 @@ func _clear_screens() -> void:
 	_room_screen = null
 	_center_screen = null
 	_mart_screen = null
+	_evolution_screen = null
+	_end_screen = null
+	_evolution_offers = []
 	_shop = null
 	_offers = []
 	_current_event = {}

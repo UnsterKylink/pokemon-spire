@@ -7,13 +7,13 @@ extends Control
 ## Story 006: potions are drunk through use_potion (the slots live in Main's RunHud); held-item triggers and
 ## potions show a short floating text over the active Pokémon; the "Attaque +" turn bonus shows in the info row.
 ## Story 004: the screen no longer owns game state; Main gives it a Battle (built from RunState) via
-## setup() and listens to battle_won / restart_requested.
+## setup() and listens to battle_won / defeat_acknowledged.
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
 
 ## Emitted when the player wins; carries the ids of the enemies of this battle (all defeated).
 signal battle_won(defeated_ids: Array[String])
-## Emitted by the "Rejouer" button after a defeat.
-signal restart_requested
+## Emitted by the "Continuer" button of the defeat overlay (story 007: Main then shows the defeat summary).
+signal defeat_acknowledged
 
 const SPRITE_SOURCE_SIZE: float = 96.0
 ## Enemy sprite scale by number of enemies (index 0 = 1 enemy). Chosen so 3 enemies fit 1280x720.
@@ -203,9 +203,15 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_refresh()
 
 
-## Presses "Rejouer" (QA harness / button): asks Main for a new run.
+## Presses "Continuer" on the defeat overlay (QA harness / button). Ignored unless the battle is lost.
+func press_defeat_continue() -> void:
+	if _battle != null and _battle.state == Battle.State.LOST:
+		defeat_acknowledged.emit()
+
+
+## Old name of press_defeat_continue (the button was "Rejouer" before story 007).
 func press_restart() -> void:
-	restart_requested.emit()
+	press_defeat_continue()
 
 
 func _on_battle_won() -> void:
@@ -392,9 +398,10 @@ func _build_ui() -> void:
 	_message_label.add_theme_constant_override("outline_size", 12)
 	_end_box.add_child(_message_label)
 	_restart_button = Button.new()
-	_restart_button.text = "Rejouer"
+	_restart_button.text = "Continuer"
 	_restart_button.custom_minimum_size = Vector2(200, 56)
-	_restart_button.pressed.connect(press_restart)
+	_restart_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_restart_button.pressed.connect(press_defeat_continue)
 	_end_box.add_child(_restart_button)
 
 	# Floating feedback layer (never intercepts the mouse). It sits just below the

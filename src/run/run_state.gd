@@ -2,6 +2,8 @@ class_name RunState
 extends RefCounted
 ## The player's persistent state for one run (HP and deck survive from battle to battle).
 ## Pure logic, no Node access. Implements: story-004-recompenses-vol-attaque, criterion 4.
+## Story 007 (story-007-champion-evolution-fin-de-partie): evolve_starter() after the Champion, run stats for the
+## victory / defeat summary (get_summary), is_defeated().
 
 var player_id: String = ""
 var display_name: String = ""
@@ -14,6 +16,14 @@ var hand_size: int = 0
 ## The run's own copy of the deck (never the shared starter definition).
 var deck: Array[CardData] = []
 var battles_won: int = 0
+## Enemy Pokémon beaten in won battles (story 007, victory / defeat summary).
+var enemies_defeated: int = 0
+## The starter picked at the start of the run; never changes, even after the evolution (story 007).
+var base_pokemon_id: String = ""
+## True once evolve_starter() has run (evolution OR the "il se renforce" bonus): it applies once per run.
+var evolution_applied: bool = false
+## True if evolve_starter() changed the form (false for a Pokémon without an evolution entry).
+var evolved: bool = false
 ## Pokédollars (story 006).
 var money: int = 0
 ## Held items owned, in pickup order (permanent, no duplicates).
@@ -49,6 +59,7 @@ static func create(data: GameData, new_player_id: String) -> RunState:
 	r.hand_size = int(def.get("hand_size", 0))
 	r.deck = data.get_starter_deck(new_player_id)  # fresh array each call
 	r.starter_pokemon_id = data.get_starter_pokemon_id()
+	r.base_pokemon_id = r.starter_pokemon_id
 	for pid: String in data.get_pokemon_ids():
 		r._pokemon_infos[pid] = data.get_pokemon_info(pid)
 	r._init_services(data)
@@ -78,6 +89,7 @@ static func create_with_starter(data: GameData, starter_id: String) -> RunState:
 	r.hand_size = int(shared.get("hand_size", 0))
 	r.deck = deck
 	r.starter_pokemon_id = starter_id
+	r.base_pokemon_id = starter_id
 	for pid: String in data.get_pokemon_ids():
 		r._pokemon_infos[pid] = data.get_pokemon_info(pid)
 	r._init_services(data)
@@ -143,11 +155,78 @@ func _on_battle_potion_used(potion: PotionData) -> void:
 			return
 
 
-## Copies the player's HP back after a battle (clamped 0..max_hp). A surviving player = a battle won.
-func record_battle_result(player: Combatant) -> void:
+## Copies the player's HP back after a battle (clamped 0..max_hp). A surviving player = a battle won, and
+## `defeated_ids` (the enemies of that battle) are added to enemies_defeated. HP 0 = the run is lost (is_defeated).
+func record_battle_result(player: Combatant, defeated_ids: Array[String] = []) -> void:
 	hp = clampi(player.hp, 0, max_hp)
 	if hp > 0:
 		battles_won += 1
+		enemies_defeated += defeated_ids.size()
+
+
+## True when the run is lost: HP reached 0 (story 007 defeat screen).
+func is_defeated() -> bool:
+	return hp <= 0
+
+
+## Rooms entered on the act map (one per floor), 0 without an act.
+func floors_climbed() -> int:
+	return act.visited.size() if act != null else 0
+
+
+## Floors of the act map, 0 without an act.
+func total_floors() -> int:
+	return act.graph.floors if act != null and act.graph != null else 0
+
+
+## Story 007: the Champion is beaten. Applies the official evolution of the chosen starter (GameData.get_evolution,
+## pokemon.json): new name / types / sprite, max HP AND current HP + max_hp_bonus, the field Pokémon becomes the
+## evolved form, and the deck cards carried by the old form are now carried by the evolved one (so playing them
+## never brings the old form back). Without an evolution entry the form stays and the bonus is
+## GameData.get_evolution_hp_bonus_default() ("n'évolue pas — il se renforce").
+## Applies once per run; a second call changes nothing and returns {}.
+## Returns {from_id, from_name, from_sprite, from_types, to_id, to_name, to_sprite, to_types, hp_bonus: int, evolved: bool}.
+func evolve_starter(data: GameData) -> Dictionary:
+	if evolution_applied or data == null:
+		return {}
+	var summary: Dictionary = {"from_id": starter_pokemon_id, "from_name": display_name, "from_sprite": sprite_path,
+			"from_types": type_ids.duplicate()}
+	var evo: Dictionary = data.get_evolution(base_pokemon_id)
+	var bonus: int = data.get_evolution_hp_bonus_default()
+	if not evo.is_empty():
+		bonus = int(evo["max_hp_bonus"])
+		var new_id: String = String(evo["id"])
+		display_name = String(evo["name"])
+		type_ids.assign(evo["types"])
+		sprite_path = String(evo["sprite"])
+		_pokemon_infos[new_id] = data.get_pokemon_info(new_id)
+		for i: int in deck.size():
+			if deck[i].pokemon_id == starter_pokemon_id:
+				deck[i] = deck[i].with_pokemon(new_id)
+		starter_pokemon_id = new_id
+		evolved = true
+	gain_max_hp(bonus)
+	evolution_applied = true
+	summary["to_id"] = starter_pokemon_id
+	summary["to_name"] = display_name
+	summary["to_sprite"] = sprite_path
+	summary["to_types"] = type_ids.duplicate()
+	summary["hp_bonus"] = bonus
+	summary["evolved"] = evolved
+	return summary
+
+
+## Story 007: everything the victory / defeat screen shows, read from the run:
+## {pokemon_id, name, sprite, types, hp, max_hp, floors, total_floors, enemies_defeated, battles_won, money,
+##  item_names: Array[String], deck_size, evolved}.
+func get_summary() -> Dictionary:
+	var item_names: Array[String] = []
+	for it: ItemData in items:
+		item_names.append(it.display_name)
+	return {"pokemon_id": starter_pokemon_id, "name": display_name, "sprite": sprite_path, "types": type_ids.duplicate(),
+			"hp": hp, "max_hp": max_hp, "floors": floors_climbed(), "total_floors": total_floors(),
+			"enemies_defeated": enemies_defeated, "battles_won": battles_won, "money": money,
+			"item_names": item_names, "deck_size": deck.size(), "evolved": evolved}
 
 
 ## CardData.deck_key() ("card@pokemon") -> copies in the deck.
