@@ -42,6 +42,9 @@ var _items: Dictionary = {}    # String -> ItemData (story 006)
 var _potions: Dictionary = {}  # String -> PotionData
 var _max_potions: int = 0
 var _shop_cfg: Dictionary = {}  # validated shop.json
+var _evolutions: Dictionary = {}  # base pokemon id -> validated evolution entry (story 007)
+var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (for get_pokemon_info)
+var _evolution_hp_bonus_default: int = 0
 
 
 ## Loads all nine files (act and events story 005; items, potions, shop story 006). Returns false (after push_error) if anything is missing or invalid.
@@ -70,6 +73,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_potions.clear()
 	_max_potions = 0
 	_shop_cfg = {}
+	_evolutions = {}
+	_evolved_forms = {}
+	_evolution_hp_bonus_default = 0
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -99,6 +105,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _check_pokemon_refs(pokemon_root) and ok
 	ok = _load_rewards(rewards_root) and ok
 	ok = _load_starters(pokemon_root) and ok
+	ok = _load_evolutions(pokemon_root) and ok
 	ok = _load_events(events_root) and ok
 	ok = _load_act(act_root) and ok
 	ok = _load_items(items_root) and ok
@@ -680,11 +687,101 @@ func _load_starters(pokemon_root: Dictionary) -> bool:
 	return ok
 
 
+# --- Evolution (story 007) ---------------------------------------------------------------------------
+
+## Official evolution of a Pokémon (copy), gained when the Champion is beaten:
+## {"id": evolved form slug, "name": FR name, "types": Array, "max_hp_bonus": int, "sprite": res:// path,
+## "teaches": Array of card ids (the player picks 1)}. EMPTY if the Pokémon has no evolution:
+## the caller then applies get_evolution_hp_bonus_default() ("n'évolue pas, il se renforce").
+func get_evolution(base_id: String) -> Dictionary:
+	if not _evolutions.has(base_id):
+		return {}
+	return (_evolutions[base_id] as Dictionary).duplicate(true)
+
+
+## Max HP gained by a Pokémon that has no evolution when the Champion is beaten (pokemon.json).
+func get_evolution_hp_bonus_default() -> int:
+	return _evolution_hp_bonus_default
+
+
+## Cards (CardData) carried by the evolved form of `base_id`, among which the player picks one. Empty if no evolution.
+func get_evolution_cards(base_id: String) -> Array[CardData]:
+	var result: Array[CardData] = []
+	for card_id: String in (_evolutions.get(base_id, {}) as Dictionary).get("teaches", []):
+		var card: CardData = _cards.get(card_id, null)
+		if card != null:
+			result.append(card)
+	return result
+
+
+## Validates `evolutions` + `evolution_hp_bonus_default`: base known, evolved id sane and unique, FR name, known types,
+## positive max_hp_bonus, existing sprite, teaches = known non-starter attack cards. Reports every problem, never crashes.
+func _load_evolutions(pokemon_root: Dictionary) -> bool:
+	var ok: bool = true
+	if not _is_positive_int(pokemon_root.get("evolution_hp_bonus_default", null)):
+		push_error("GameData: pokemon file needs a positive integer 'evolution_hp_bonus_default'")
+		ok = false
+	else:
+		_evolution_hp_bonus_default = int(pokemon_root["evolution_hp_bonus_default"])
+	var raw: Variant = pokemon_root.get("evolutions", null)
+	if not (raw is Dictionary):
+		push_error("GameData: pokemon file needs an 'evolutions' object")
+		return false
+	for base_id: String in (raw as Dictionary).keys():
+		var label: String = "evolution of '%s'" % base_id
+		var def_v: Variant = (raw as Dictionary)[base_id]
+		if not _players.has(base_id) and not _enemies.has(base_id):
+			push_error("GameData: %s: unknown base pokemon" % label)
+			ok = false
+			continue
+		if not (def_v is Dictionary):
+			push_error("GameData: %s must be an object" % label)
+			ok = false
+			continue
+		var def: Dictionary = def_v
+		var entry_ok: bool = true
+		var evo_id: String = String(def["id"]) if def.get("id", null) is String else ""
+		if evo_id.is_empty() or not evo_id.is_valid_ascii_identifier() or evo_id == base_id or _players.has(evo_id):
+			push_error("GameData: %s needs an 'id' that is a valid identifier, differs from the base and is not a player id (got '%s')" % [label, evo_id])
+			entry_ok = false
+		elif _evolved_forms.has(evo_id):
+			push_error("GameData: %s: evolved id '%s' is already used by another evolution" % [label, evo_id])
+			entry_ok = false
+		if not (def.get("name", null) is String) or String(def["name"]).is_empty():
+			push_error("GameData: %s needs a non-empty 'name'" % label)
+			entry_ok = false
+		if not _check_types_ref(label, def.get("types", null)):
+			entry_ok = false
+		if not _is_positive_int(def.get("max_hp_bonus", null)):
+			push_error("GameData: %s needs a positive integer 'max_hp_bonus'" % label)
+			entry_ok = false
+		var sprite: Variant = def.get("sprite", null)
+		if not (sprite is String) or not ResourceLoader.exists(sprite):
+			push_error("GameData: %s: sprite '%s' does not exist" % [label, str(sprite)])
+			entry_ok = false
+		var teaches_v: Variant = def.get("teaches", null)
+		if not (teaches_v is Array) or (teaches_v as Array).is_empty():
+			push_error("GameData: %s needs a non-empty 'teaches' array of card ids" % label)
+			entry_ok = false
+		else:
+			for card_id: Variant in (teaches_v as Array):
+				var card: CardData = _cards.get(card_id, null) if card_id is String else null
+				if card == null or card.kind != CardData.KIND_ATTACK or card.rarity == CardData.RARITY_STARTER:
+					push_error("GameData: %s teaches '%s' which is not a known non-starter attack card" % [label, str(card_id)])
+					entry_ok = false
+		if entry_ok:
+			_evolutions[base_id] = def
+			_evolved_forms[evo_id] = def
+		else:
+			ok = false
+	return ok
+
+
 # --- Loading / validation --------------------------------------------------
 
-## Pokémon info for ANY player or enemy id: {id, name, sprite_path, types: Array[String]}. Empty if unknown.
+## Pokémon info for ANY player, enemy or evolved-form id: {id, name, sprite_path, types: Array[String]}. Empty if unknown.
 func get_pokemon_info(pokemon_id: String) -> Dictionary:
-	var def_v: Variant = _players.get(pokemon_id, _enemies.get(pokemon_id, null))
+	var def_v: Variant = _players.get(pokemon_id, _enemies.get(pokemon_id, _evolved_forms.get(pokemon_id, null)))
 	if not (def_v is Dictionary):
 		return {}
 	var def: Dictionary = def_v
