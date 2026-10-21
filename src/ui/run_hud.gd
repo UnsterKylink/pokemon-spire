@@ -1,6 +1,7 @@
 class_name RunHud
 extends PanelContainer
 ## Permanent run bar (top of the screen, HEIGHT px): Pokédollars, held items (chips, tooltip = description)
+## the gym badges (story 012: one BadgeEmblem slot per zone, earned = type colour + tooltip, else a grey outline)
 ## and the potion belt (max_potions slots). Owned by Main and shown above every run screen (map, battle,
 ## reward, event, Centre, Mart, act end). Reads RunState / Battle only; a click on a usable potion emits
 ## potion_pressed and Main asks the battle to drink it. Implements: story-006-objets-et-services (criteria 2, 6).
@@ -22,11 +23,14 @@ const COLOR_CHIP_BG: Color = Color(0.16, 0.17, 0.23)
 const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
 const COLOR_EMPTY: Color = Color(0.45, 0.46, 0.52)
 const COLOR_FLASH: Color = Color(1.0, 0.85, 0.3)
-const POTION_SLOT_SIZE: Vector2 = Vector2(128, 32)
+const POTION_SLOT_SIZE: Vector2 = Vector2(112, 32)
+## Story 012: side of a badge slot in the bar.
+const BADGE_SLOT_SIDE: float = 22.0
 const FLASH_DURATION: float = 0.7
 const TEXT_DECK: String = "Deck"
 const TEXT_DECK_TIP: String = "Voir ton deck (Échap pour fermer)."
 const TEXT_DECK_BLOCKED: String = "Termine d'abord le choix de carte en cours."
+const TEXT_BADGES: String = "Badges :"
 const TEXT_ITEMS: String = "Objets :"
 const TEXT_NO_ITEM: String = "aucun"
 const TEXT_POTIONS: String = "Potions :"
@@ -36,6 +40,8 @@ const TEXT_POTION_LATER: String = "Utilisable pendant ton tour, en combat."
 
 var _money: Label
 var _items_box: HBoxContainer
+var _badges_box: HBoxContainer
+var _badges_caption: Label
 var _potions_box: HBoxContainer
 var _chips: Dictionary = {}  # item id -> PanelContainer (display only)
 var _deck_button: Button
@@ -67,12 +73,19 @@ func _init() -> void:
 	add_child(row)
 	_money = CardView.make_label(22)
 	_money.name = "Money"
-	_money.custom_minimum_size = Vector2(110, 0)
+	_money.custom_minimum_size = Vector2(96, 0)
 	_money.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_money.add_theme_color_override("font_color", COLOR_MONEY)
 	_money.mouse_filter = Control.MOUSE_FILTER_STOP
 	_money.tooltip_text = "Pokédollars"
 	row.add_child(_money)
+	_badges_caption = _caption(TEXT_BADGES)
+	row.add_child(_badges_caption)
+	_badges_box = HBoxContainer.new()
+	_badges_box.name = "Badges"
+	_badges_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_badges_box.add_theme_constant_override("separation", 3)
+	row.add_child(_badges_box)
 	row.add_child(_caption(TEXT_ITEMS))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -109,6 +122,8 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 	if run == null:
 		return
 	_money.text = format_money(run.money)
+	BadgeEmblem.fill_row(_badges_box, run, BADGE_SLOT_SIDE)
+	_badges_caption.visible = _badges_box.visible
 	for child: Node in _items_box.get_children():
 		_items_box.remove_child(child)
 		child.queue_free()
@@ -176,6 +191,17 @@ func get_item_names() -> Array[String]:
 	for id: String in _chips:
 		names.append(((_chips[id] as PanelContainer).get_child(0) as Label).text)
 	return names
+
+
+## Badge slots, for the QA harness: [{earned: bool, tooltip: String}] in zone order.
+func get_badge_slots() -> Array[Dictionary]:
+	var slots: Array[Dictionary] = []
+	for child: Node in _badges_box.get_children():
+		if child.is_queued_for_deletion():
+			continue
+		var e: BadgeEmblem = child as BadgeEmblem
+		slots.append({"earned": e.is_earned(), "tooltip": e.tooltip_text})
+	return slots
 
 
 ## Text of each potion slot ("— vide —" for empty ones), for the QA harness.

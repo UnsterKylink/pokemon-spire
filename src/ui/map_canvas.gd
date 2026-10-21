@@ -12,7 +12,7 @@ const ROW_SPACING: float = 62.0
 const PAD_TOP: float = 46.0
 const PAD_BOTTOM: float = 34.0
 const NODE_SIZE: Vector2 = Vector2(96, 36)
-const BOSS_SIZE: Vector2 = Vector2(150, 46)
+const BOSS_SIZE: Vector2 = Vector2(196, 46)
 const NODE_FONT_SIZE: int = 16
 const BOSS_FONT_SIZE: int = 20
 ## Short label shown on each room button (UI text, not gameplay data).
@@ -41,8 +41,9 @@ var _buttons: Dictionary = {}
 var _reachable: Array[String] = []
 
 
-## Builds the buttons for `progress.graph`. `room_names`: room type -> display name (tooltips).
-func setup(progress: ActProgress, room_names: Dictionary) -> void:
+## Builds the buttons for `progress.graph`. `room_names`: room type -> display name (tooltips). `boss_label`
+## (story 012, optional): text of the gym room button ("Arène Roche"); ROOM_SHORT's "Champion" when empty.
+func setup(progress: ActProgress, room_names: Dictionary, boss_label: String = "") -> void:
 	_progress = progress
 	_graph = progress.graph
 	_room_names = room_names
@@ -57,6 +58,8 @@ func setup(progress: ActProgress, room_names: Dictionary) -> void:
 		var b := Button.new()
 		b.name = "Room_" + id
 		b.text = String(ROOM_SHORT.get(node.room_type, "?"))
+		if node.room_type == "boss" and not boss_label.is_empty():
+			b.text = boss_label
 		b.tooltip_text = "%s — étage %d" % [String(_room_names.get(node.room_type, node.room_type)), node.floor]
 		b.focus_mode = Control.FOCUS_NONE
 		b.add_theme_font_size_override("font_size", BOSS_FONT_SIZE if node.room_type == "boss" else NODE_FONT_SIZE)

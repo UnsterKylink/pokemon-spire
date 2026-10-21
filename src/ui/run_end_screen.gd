@@ -3,7 +3,8 @@ extends Control
 ## Story 007 (story-007-champion-evolution-fin-de-partie): end-of-run summary, in two modes.
 ## Victory (after the Champion and the evolution) and defeat (HP reached 0) show the same summary:
 ## final Pokémon (sprite, name, types, HP), floors climbed, enemies beaten, battles won, Pokédollars, items,
-## and the final deck grouped by card. "Nouvelle partie" emits new_run_requested (Main resets the whole run).
+## and the final deck grouped by card. Story 012: the zone reached ("Zone atteinte 3/8 — Arène Eau"), the badges row
+## (BadgeEmblem: earned in their type colour, the others grey) and the floors of the whole run (8 zones). "Nouvelle partie" emits new_run_requested (Main resets the whole run).
 ## Display only: reads RunState.get_summary() / get_deck_entries(). Mouse only, fits 1280x720.
 
 ## Emitted by "Nouvelle partie".
@@ -15,13 +16,20 @@ const COLOR_DEFEAT: Color = Color(0.95, 0.38, 0.35)
 const COLOR_PANEL: Color = Color(0.16, 0.17, 0.23)
 const COLOR_PANEL_BORDER: Color = Color(0.38, 0.4, 0.5)
 const COLOR_CAPTION: Color = Color(0.7, 0.72, 0.82)
-const SPRITE_SIZE: Vector2 = Vector2(150, 150)
+const SPRITE_SIZE: Vector2 = Vector2(120, 120)
+const BADGE_SIDE: float = 30.0
 const LEFT_PANEL_WIDTH: float = 470.0
 const DECK_COLUMNS: int = 2
 const TEXT_VICTORY: String = "Victoire ! Tu as battu le Champion d'arène"
 const TEXT_DEFEAT: String = "Défaite…"
 const TEXT_VICTORY_SUB: String = "%s a terminé l'acte 1. Bravo, Dresseur !"
 const TEXT_DEFEAT_SUB: String = "%s est K.O. La partie est terminée."
+## Story 012 (zones): subtitles naming the badges / the zone of the defeat.
+const TEXT_VICTORY_SUB_ZONES: String = "%s a remporté les %d badges. Bravo, Dresseur !"
+const TEXT_DEFEAT_SUB_ZONES: String = "%s est K.O. en zone %d/%d (Arène %s). La partie est terminée."
+const TEXT_BADGES: String = "Badges : %d/%d"
+const TEXT_ZONE: String = "%d/%d — Arène %s"
+const STAT_ZONE: String = "Zone atteinte"
 const TEXT_DECK: String = "Deck final (%d cartes)"
 const TEXT_NO_ITEM: String = "aucun"
 const STAT_FLOORS: String = "Étages franchis"
@@ -39,6 +47,8 @@ var _sprite: TextureRect
 var _name_label: Label
 var _badges: HBoxContainer
 var _stats_grid: GridContainer
+var _badge_caption: Label
+var _badge_row: HBoxContainer
 var _deck_title: Label
 var _deck_grid: GridContainer
 var _stats: Dictionary = {}  # stat caption -> value text (QA)
@@ -60,7 +70,13 @@ func setup(data: GameData, run: RunState, victory: bool) -> void:
 	var s: Dictionary = run.get_summary()
 	_title.text = TEXT_VICTORY if victory else TEXT_DEFEAT
 	_title.add_theme_color_override("font_color", COLOR_VICTORY if victory else COLOR_DEFEAT)
-	_subtitle.text = (TEXT_VICTORY_SUB if victory else TEXT_DEFEAT_SUB) % String(s["name"])
+	var zone: Dictionary = run.current_zone()
+	if zone.is_empty():
+		_subtitle.text = (TEXT_VICTORY_SUB if victory else TEXT_DEFEAT_SUB) % String(s["name"])
+	elif victory:
+		_subtitle.text = TEXT_VICTORY_SUB_ZONES % [String(s["name"]), int(s["badges"])]
+	else:
+		_subtitle.text = TEXT_DEFEAT_SUB_ZONES % [String(s["name"]), int(s["zone"]), int(s["zone_count"]), String(zone["type_name"])]
 	_sprite.texture = CardView.cropped_sprite(String(s["sprite"]))
 	_sprite.modulate = Color.WHITE if victory else Color(0.6, 0.6, 0.65, 0.85)
 	_name_label.text = String(s["name"])
@@ -73,12 +89,17 @@ func setup(data: GameData, run: RunState, victory: bool) -> void:
 		child.queue_free()
 	var items: Array[String] = []
 	items.assign(s["item_names"])
+	if not zone.is_empty():
+		_add_stat(STAT_ZONE, TEXT_ZONE % [int(s["zone"]), int(s["zone_count"]), String(zone["type_name"])])
 	_add_stat(STAT_FLOORS, "%d/%d" % [int(s["floors"]), int(s["total_floors"])])
 	_add_stat(STAT_ENEMIES, str(int(s["enemies_defeated"])))
 	_add_stat(STAT_BATTLES, str(int(s["battles_won"])))
 	_add_stat(STAT_HP, "%d/%d" % [int(s["hp"]), int(s["max_hp"])])
 	_add_stat(STAT_MONEY, RunHud.format_money(int(s["money"])))
 	_add_stat(STAT_ITEMS, ", ".join(items) if not items.is_empty() else TEXT_NO_ITEM)
+	BadgeEmblem.fill_row(_badge_row, run, BADGE_SIDE)
+	_badge_caption.text = TEXT_BADGES % [int(s["badges"]), run.zones.size()]
+	_badge_caption.visible = _badge_row.visible
 	_deck_title.text = TEXT_DECK % int(s["deck_size"])
 	for child: Node in _deck_grid.get_children():
 		_deck_grid.remove_child(child)
@@ -110,6 +131,14 @@ func get_title_text() -> String:
 ## Stat caption -> displayed value ({"Étages franchis": "15/15", ...}) (QA).
 func get_stats() -> Dictionary:
 	return _stats.duplicate()
+
+
+## Badges row, for QA: [{earned: bool, tooltip: String}] in zone order.
+func get_badge_slots() -> Array[Dictionary]:
+	var slots: Array[Dictionary] = []
+	for child: Node in _badge_row.get_children():
+		slots.append({"earned": (child as BadgeEmblem).is_earned(), "tooltip": (child as Control).tooltip_text})
+	return slots
 
 
 ## Deck lines ("×5  Flammette — Reptincel") (QA).
@@ -213,6 +242,19 @@ func _build_ui() -> void:
 	_stats_grid.add_theme_constant_override("h_separation", 16)
 	_stats_grid.add_theme_constant_override("v_separation", 4)
 	lbox.add_child(_stats_grid)
+	var badge_box := HBoxContainer.new()
+	badge_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_box.add_theme_constant_override("separation", 12)
+	lbox.add_child(badge_box)
+	_badge_caption = CardView.make_label(22)
+	_badge_caption.name = "BadgeCaption"
+	_badge_caption.add_theme_color_override("font_color", COLOR_CAPTION)
+	badge_box.add_child(_badge_caption)
+	_badge_row = HBoxContainer.new()
+	_badge_row.name = "BadgeRow"
+	_badge_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_badge_row.add_theme_constant_override("separation", 6)
+	badge_box.add_child(_badge_row)
 	# Right: final deck.
 	var right: PanelContainer = _panel()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL

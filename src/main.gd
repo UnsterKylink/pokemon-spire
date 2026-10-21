@@ -35,7 +35,7 @@ const SCREEN_ROOM: String = "room"
 const SCREEN_CENTER: String = "center"
 const SCREEN_MART: String = "mart"
 const SCREEN_EVOLUTION: String = "evolution"
-## Story 012: the badge screen (a PlaceholderRoomScreen until the UI agent replaces it; leave it with badge_continue()).
+## Story 012: the badge screen (BadgeScreen; leave it with badge_continue()).
 const SCREEN_BADGE: String = "badge"
 const SCREEN_VICTORY: String = "victory"
 const SCREEN_DEFEAT: String = "defeat"
@@ -84,6 +84,8 @@ var _mart_screen: MartScreen
 ## Story 007 screens and the evolution's card offers / summary (cleared with the screens / on a new run).
 var _evolution_screen: EvolutionScreen
 var _end_screen: RunEndScreen
+## Story 012: the badge screen (null outside it).
+var _badge_screen: BadgeScreen
 var _evolution_offers: Array[CardData] = []
 var _evolution_summary: Dictionary = {}
 ## The current Poké Mart visit's stock (null outside the Mart): one per visit.
@@ -265,6 +267,11 @@ func create_shop_inventory() -> ShopInventory:
 	return ShopInventory.generate(_data, _run, _shop_rng)
 
 
+## QA: the badge screen (null outside it).
+func get_badge_screen() -> BadgeScreen:
+	return _badge_screen
+
+
 ## QA: the run state (HP, deck, act progress).
 func get_run_state() -> RunState:
 	return _run
@@ -364,6 +371,8 @@ func room_continue() -> void:
 		_center_screen.press_continue()
 	elif _mart_screen != null:
 		_mart_screen.leave()
+	elif _badge_screen != null:
+		_badge_screen.press_continue()
 
 
 # --- QA: story 006 (HUD, potions, Centre, Mart) ----------------------------------------------------
@@ -826,21 +835,18 @@ func _after_reward() -> void:
 		_show_map()
 
 
-## Story 012: awards the zone's badge (RunState.award_badge: bonuses + heal, data) and shows the badge screen. Until the UI
-## agent builds the real screen this is a PlaceholderRoomScreen (get_room_screen()); its button calls badge_continue().
+## Story 012: awards the zone's badge (RunState.award_badge: bonuses + heal, data) and shows the badge screen
+## (BadgeScreen, get_badge_screen()); its button calls badge_continue().
 func _show_badge() -> void:
 	_last_badge = _run.award_badge(_data)
 	_clear_screens()
 	if _last_badge.is_empty():  # no zones configured: nothing to award
 		_next_zone_or_victory()
 		return
-	_room_screen = ROOM_SCENE.instantiate() as PlaceholderRoomScreen
-	_room_screen.finished.connect(badge_continue)
-	_set_screen(_room_screen, SCREEN_BADGE)
-	var b: Dictionary = _last_badge
-	var body: String = "Tu as battu %s, Champion de l'arène %s !\n%s\n\nBadges : %d/%d" % [b["leader"], b["type_name"],
-			b["bonus_text"], _run.badges.size(), _run.zones.size()]
-	_room_screen.setup("%s obtenu !" % b["name"], body, "Continuer" if not _run.is_final_zone() else "Terminer", b["color"])
+	_badge_screen = BadgeScreen.new()
+	_badge_screen.finished.connect(badge_continue)
+	_set_screen(_badge_screen, SCREEN_BADGE)
+	_badge_screen.setup(_data, _run, _last_badge)
 
 
 ## After the badge (and the evolution): the next zone's map, or the victory once the last zone's gym is beaten
@@ -1053,6 +1059,7 @@ func _clear_screens() -> void:
 	_mart_screen = null
 	_evolution_screen = null
 	_end_screen = null
+	_badge_screen = null
 	_evolution_offers = []
 	_shop = null
 	_offers = []

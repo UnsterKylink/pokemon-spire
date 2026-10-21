@@ -1,8 +1,10 @@
 class_name MapScreen
 extends Control
-## Act map screen (mouse only, fits 1280x720): header (act/floor, HP, deck, map seed, "Voir le deck"),
-## colour legend of the room types, and the scrollable map (MapCanvas). Holds no game state:
-## it emits node_chosen and Main enters the room. Implements: story-005-carte-acte-1.
+## Zone map screen (mouse only, fits 1280x720): header (story 012: "Zone n/8 — Arène <Type> (Champion <Leader>)" and
+## "Étage x/6", HP, deck, map seed, "Voir le deck"), a zone banner on the zone's start ("Zone n — Arène <Type>",
+## floor 0 only), the colour legend of the room types (the gym named after its type) and the scrollable map
+## (MapCanvas). Holds no game state: it emits node_chosen and Main enters the room.
+## Implements: story-005-carte-acte-1, story-012-structure-8-arenes (zone header, banner, gym label).
 
 ## Emitted when the player picks a reachable room.
 signal node_chosen(node_id: String)
@@ -12,6 +14,17 @@ signal deck_requested
 const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
 const COLOR_TITLE: Color = Color(1.0, 0.9, 0.4)
 const ACT_TITLE: String = "Acte 1"
+const COLOR_FLOOR: Color = Color(0.95, 0.95, 0.98)
+const COLOR_BANNER_BG: Color = Color(0.15, 0.16, 0.22)
+const COLOR_BANNER_SUB: Color = Color(0.78, 0.8, 0.88)
+## Story 012 texts (zone header, gym label, zone banner).
+const TEXT_ZONE_TITLE: String = "Zone %d/%d — Arène %s (Champion %s)"
+const TEXT_GYM: String = "Arène %s"
+const TEXT_START: String = "Départ"
+const TEXT_FLOOR: String = "Étage %d/%d"
+const TEXT_BANNER: String = "Zone %d — Arène %s"
+const TEXT_BANNER_SUB_FIRST: String = "Le Champion %s t'attend au sommet de la carte."
+const TEXT_BANNER_SUB_NEXT: String = "Le Champion %s t'attend au sommet. Ton deck, tes PV, tes objets et ton argent te suivent."
 ## Legend order of the room types.
 const LEGEND_ORDER: Array[String] = ["wild", "elite", "event", "center", "mart", "boss"]
 const LEGEND_SWATCH: Vector2 = Vector2(18, 18)
@@ -21,7 +34,12 @@ const FOCUS_RATIO: float = 0.5
 var _data: GameData
 var _run: RunState
 var _title: Label
+var _floor: Label
 var _info: Label
+var _banner: PanelContainer
+var _banner_style: StyleBoxFlat
+var _banner_title: Label
+var _banner_sub: Label
 var _legend: HBoxContainer
 var _scroll: ScrollContainer
 var _canvas: MapCanvas
@@ -41,16 +59,29 @@ func setup(data: GameData, run: RunState) -> void:
 	_done = false
 	var progress: ActProgress = run.act
 	var floor_now: int = progress.current_floor()
-	if floor_now == 0:
-		_title.text = "%s — Départ" % ACT_TITLE
+	var zone: Dictionary = run.current_zone()
+	var zone_color: Color = data.get_type_color(String(zone.get("type_id", ""))) if not zone.is_empty() else COLOR_TITLE
+	if zone.is_empty():
+		_title.text = ACT_TITLE
 	else:
-		_title.text = "%s — Étage %d/%d" % [ACT_TITLE, floor_now, progress.graph.floors]
+		_title.text = TEXT_ZONE_TITLE % [int(zone["number"]), run.zones.size(), String(zone["type_name"]), String(zone["leader"])]
+	_floor.text = TEXT_START if floor_now == 0 else TEXT_FLOOR % [floor_now, progress.graph.floors]
 	_info.text = "PV %d/%d   |   Deck : %d cartes   |   Graine : %d" % [run.hp, run.max_hp, run.deck.size(), progress.graph.seed]
 	var names: Dictionary = {}
 	for rt: String in LEGEND_ORDER:
 		names[rt] = data.get_room_name(rt)
+	var gym_label: String = ""
+	if not zone.is_empty():
+		gym_label = TEXT_GYM % String(zone["type_name"])
+		names["boss"] = gym_label
 	_build_legend(names)
-	_canvas.setup(progress, names)
+	_banner.visible = floor_now == 0 and not zone.is_empty()
+	if _banner.visible:
+		_banner_style.border_color = zone_color
+		_banner_title.text = TEXT_BANNER % [int(zone["number"]), String(zone["type_name"])]
+		_banner_title.add_theme_color_override("font_color", zone_color.lightened(0.3))
+		_banner_sub.text = (TEXT_BANNER_SUB_FIRST if int(zone["index"]) == 0 else TEXT_BANNER_SUB_NEXT) % String(zone["leader"])
+	_canvas.setup(progress, names, gym_label)
 	_scroll_to_focus()
 
 
@@ -62,9 +93,14 @@ func choose(node_id: String) -> void:
 	node_chosen.emit(node_id)
 
 
-## Header title ("Acte 1 — Étage 3/15").
+## Header title and floor ("Zone 1/8 — Arène Roche (Champion Pierre) — Étage 3/6").
 func get_title_text() -> String:
-	return _title.text
+	return "%s — %s" % [_title.text, _floor.text]
+
+
+## Zone banner text ("Zone 2 — Arène Eau"), "" when the banner is hidden (after the zone's first room).
+func get_banner_text() -> String:
+	return _banner_title.text if _banner.visible else ""
 
 
 ## Header info line (HP, deck size, seed).
@@ -105,20 +141,62 @@ func _build_ui() -> void:
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_theme_constant_override("separation", 20)
 	root.add_child(header)
-	_title = CardView.make_label(28)
+	var titles := VBoxContainer.new()
+	titles.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	titles.add_theme_constant_override("separation", 0)
+	header.add_child(titles)
+	_title = CardView.make_label(26)
+	_title.name = "Title"
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_title.add_theme_color_override("font_color", COLOR_TITLE)
-	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(_title)
+	titles.add_child(_title)
+	var sub := HBoxContainer.new()
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub.add_theme_constant_override("separation", 24)
+	titles.add_child(sub)
+	_floor = CardView.make_label(20)
+	_floor.name = "Floor"
+	_floor.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_floor.add_theme_color_override("font_color", COLOR_FLOOR)
+	sub.add_child(_floor)
 	_info = CardView.make_label(18)
-	header.add_child(_info)
+	_info.name = "Info"
+	_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_info.add_theme_color_override("font_color", COLOR_BANNER_SUB)
+	sub.add_child(_info)
 	var deck_button := Button.new()
 	deck_button.name = "DeckButton"
 	deck_button.text = "Voir le deck"
 	deck_button.custom_minimum_size = Vector2(150, 40)
+	deck_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	deck_button.focus_mode = Control.FOCUS_NONE
 	deck_button.pressed.connect(open_deck)
 	header.add_child(deck_button)
+	_banner = PanelContainer.new()
+	_banner.name = "ZoneBanner"
+	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_banner_style = StyleBoxFlat.new()
+	_banner_style.bg_color = COLOR_BANNER_BG
+	_banner_style.set_border_width_all(3)
+	_banner_style.set_corner_radius_all(10)
+	_banner_style.content_margin_top = 6
+	_banner_style.content_margin_bottom = 6
+	_banner.add_theme_stylebox_override("panel", _banner_style)
+	root.add_child(_banner)
+	var banner_box := VBoxContainer.new()
+	banner_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner_box.add_theme_constant_override("separation", 0)
+	_banner.add_child(banner_box)
+	_banner_title = CardView.make_label(30)
+	_banner_title.name = "BannerTitle"
+	_banner_title.add_theme_color_override("font_outline_color", Color.BLACK)
+	_banner_title.add_theme_constant_override("outline_size", 6)
+	banner_box.add_child(_banner_title)
+	_banner_sub = CardView.make_label(17)
+	_banner_sub.name = "BannerSub"
+	_banner_sub.add_theme_color_override("font_color", COLOR_BANNER_SUB)
+	banner_box.add_child(_banner_sub)
 	_legend = HBoxContainer.new()
 	_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_legend.alignment = BoxContainer.ALIGNMENT_CENTER

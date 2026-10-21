@@ -11,6 +11,8 @@ extends SceneTree
 ## 006 (items / services shots 01-hud-carte .. 07b-mart-apres-retrait, see _items_shots),
 ## 007 (Champion / evolution / victory / defeat / new run shots, see _champion_shots).
 ## 011 (deck access shots: deck panel on map / battle tabs / 45 cards / Mart, see _deck_shots; filter `story-011`).
+## 012 (8 zones / gyms / badges shots: zone maps + HUD badges, gyms of zones 1 and 8, badge screen, victory with 8
+## badges, defeat summary; see _zones_shots; filter `story-012`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
@@ -46,6 +48,12 @@ const CHAMPION_PICK: int = 1
 const DECK_SEED: int = 2026
 const DECK_ENCOUNTER: String = "trio_vol"
 const DECK_BIG: int = 45
+
+## Story 012: run seed, the items / potion given so the HUD is crowded, and how far the defeat run goes.
+const ZONES_SEED: int = 2026
+const ZONES_ITEMS: Array[String] = ["peau_metal", "bandeau", "restes"]
+const ZONES_POTIONS: Array[String] = ["potion", "attaque_plus"]
+const ZONES_DEFEAT_ZONE: int = 3  # 1-based zone where the defeat run loses
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -543,7 +551,94 @@ func _deck_shots() -> void:
 	print("mart picker closed: deck button enabled=%s" % _main.get_hud().is_deck_enabled())
 
 
+func _zone_line(tag: String) -> void:
+	var run: RunState = _main.get_run_state()
+	var z: Dictionary = _main.get_zone()
+	var line: String = "%s: zone=%d/%d type=%s leader=%s badges=%d hud_badges=%s" % [tag, _main.get_zone_index() + 1,
+			run.zones.size(), z.get("type_id", ""), z.get("leader", ""), run.badges.size(),
+			_main.get_hud().get_badge_slots().map(func(d: Dictionary) -> String: return "1" if d["earned"] else "0")]
+	if _main.get_map_screen() != null:
+		var ms: MapScreen = _main.get_map_screen()
+		var gym: Button = ms.get_map_canvas().get_button(run.act.graph.boss_id())
+		line += " title=\"%s\" banner=\"%s\" gym_button=\"%s\"" % [ms.get_title_text(), ms.get_banner_text(), gym.text]
+	print(line)
+
+
+func _gym_line(tag: String) -> void:
+	var b: Battle = _main.get_battle_screen().get_battle()
+	var parts: PackedStringArray = PackedStringArray()
+	for e: Combatant in b.enemies:
+		parts.append("%s %s hp=%d str=%d" % [e.id, e.type_ids, e.max_hp, e.strength])
+	print("%s: enc=%s zone_type=%s enemies=%s" % [tag, _main.get_encounter_id(), _main.get_zone().get("type_id", ""), parts])
+
+
+## Wins the current zone's gym through the real flow: gym fight -> reward (skipped) -> badge screen (left with
+## badge_continue) -> evolution after badge 1 (skipped) -> next map.
+func _clear_gym(shoot_badge: bool = false) -> void:
+	_main.qa_win_gym()
+	_main.reward_skip()
+	if shoot_badge:
+		var bs: BadgeScreen = _main.get_badge_screen()
+		print("badge screen: title=\"%s\" leader=\"%s\" bonus=\"%s\" unlock=\"%s\" progress=\"%s\" button=%s" % [
+				bs.get_title_text(), bs.get_leader_text(), bs.get_bonus_text(), bs.get_unlock_text().replace("\n", " / "),
+				bs.get_progress_text(), bs.get_button_text()])
+		await _shot("03-badge")
+	_main.badge_continue()
+	if _main.get_current_screen_name() == "evolution":
+		_main.evolution_continue()
+		_main.evolution_skip()
+		_main.evolution_continue()
+
+
+func _zones_shots() -> void:
+	_main.forced_starter_id = "salameche"
+	_main.start_new_run(ZONES_SEED)
+	for id: String in ZONES_ITEMS:
+		_main.qa_give_item(id)
+	for id: String in ZONES_POTIONS:
+		_main.qa_give_potion(id)
+	_zone_line("zone 1 map")
+	await _shot("01-carte-zone-1")
+	_main.qa_skip_to_gym()
+	await create_timer(FLOAT_WAIT).timeout
+	_gym_line("zone 1 gym")
+	await _shot("02-champion-zone-1")
+	await _clear_gym(true)
+	_zone_line("zone 2 map")
+	await _shot("04-carte-zone-2")
+	for i: int in range(1, 7):  # badges 2..7 through the real gym flow
+		await _clear_gym()
+	print("before zone 8: badges=%d zone=%d" % [_main.get_badges().size(), _main.get_zone_index() + 1])
+	_zone_line("zone 8 map")
+	_main.qa_skip_to_gym()
+	await create_timer(FLOAT_WAIT).timeout
+	_gym_line("zone 8 gym")
+	await _shot("05-champion-zone-8")
+	await _clear_gym()
+	var vs: RunEndScreen = _main.get_victory_screen()
+	print("victory: title=\"%s\" stats=%s badges=%s" % [vs.get_title_text(), vs.get_stats(),
+			vs.get_badge_slots().map(func(d: Dictionary) -> String: return "1" if d["earned"] else "0")])
+	await _shot("06-victoire-8-badges")
+	# Defeat: a new run, gyms 1..2 won, then a fight of zone 3 lost.
+	_main.start_new_run(ZONES_SEED + 1)
+	for i: int in ZONES_DEFEAT_ZONE - 1:
+		await _clear_gym()
+	_main.map_choose(_main.map_reachable_ids()[0])
+	if _main.get_current_screen_name() != "battle":
+		print("defeat: first room is not a fight (%s), debug fight instead" % _main.get_current_screen_name())
+		_main.start_encounter(CHAMPION_WARMUP[1])
+	print("lost: ", _main.qa_lose_battle())
+	_main.battle_defeat_continue()
+	var ds: RunEndScreen = _main.get_defeat_screen()
+	print("defeat: stats=%s badges=%s" % [ds.get_stats(), ds.get_badge_slots().map(func(d: Dictionary) -> String: return "1" if d["earned"] else "0")])
+	await _shot("07-defaite-zone")
+
+
 func _run() -> void:
+	if _filter == "story-012":
+		await _zones_shots()
+		quit(0)
+		return
 	if _filter == "story-011":
 		await _deck_shots()
 		quit(0)
