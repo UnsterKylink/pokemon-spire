@@ -1,12 +1,12 @@
 # Story 011: Accès au deck partout
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Presentation
 > **Type**: UI
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-10-21
 
 ## Context
 
