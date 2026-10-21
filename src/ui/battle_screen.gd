@@ -4,6 +4,8 @@ extends Control
 ## Implements: story-001-combat-de-base (écran jouable), story-002-intentions-et-multi-ennemis,
 ## story-003-types (type badges, "Super efficace !" feedback),
 ## story-009-cartes-pokemon-switch (active Pokémon on the left, "<Nom>, à toi !", cards show their Pokémon).
+## Story 006: potions are drunk through use_potion (the slots live in Main's RunHud); held-item triggers and
+## potions show a short floating text over the active Pokémon; the "Attaque +" turn bonus shows in the info row.
 ## Story 004: the screen no longer owns game state; Main gives it a Battle (built from RunState) via
 ## setup() and listens to battle_won / restart_requested.
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
@@ -15,8 +17,9 @@ signal restart_requested
 
 const SPRITE_SOURCE_SIZE: float = 96.0
 ## Enemy sprite scale by number of enemies (index 0 = 1 enemy). Chosen so 3 enemies fit 1280x720.
-const ENEMY_SPRITE_SCALES: Array[float] = [2.5, 2.0, 1.6]
-const PLAYER_SPRITE_SCALE: float = 2.5
+## Story 006: scales lowered (2.5 -> 2.0) so the arena still fits under the RunHud bar.
+const ENEMY_SPRITE_SCALES: Array[float] = [2.0, 2.0, 1.6]
+const PLAYER_SPRITE_SCALE: float = 2.0
 const CARD_SIZE: Vector2 = Vector2(170, 200)
 const COLOR_HP_PLAYER: Color = Color(0.3, 0.8, 0.35)
 const COLOR_HP_ENEMY: Color = Color(0.9, 0.3, 0.3)
@@ -50,6 +53,14 @@ const TEXT_ACTIVE_CAPTION: String = "Pokémon actif"
 const TEXT_SWITCH: String = "%s, à toi !"
 const COLOR_SWITCH: Color = Color(1.0, 0.85, 0.35)
 const COLOR_ACTIVE_CAPTION: Color = Color(0.7, 0.72, 0.82)
+## Story 006: item / potion feedback ("Bandeau !" / "Potion : Attaque +"), shown mid-sprite / low on the sprite.
+const TEXT_ITEM: String = "%s !"
+const TEXT_POTION: String = "Potion : %s"
+const TEXT_TURN_BONUS: String = "Attaque +%d ce tour"
+const COLOR_ITEM: Color = Color(1.0, 0.72, 0.35)
+const COLOR_POTION: Color = Color(0.55, 0.85, 1.0)
+const ITEM_FLOAT_Y: float = 0.42
+const POTION_FLOAT_Y: float = 0.7
 
 
 ## A floating feedback label and its running tween (one per target, reused).
@@ -85,6 +96,9 @@ var _player_name: Label
 var _player_type_badge: HBoxContainer
 var _player_float: FloatText
 var _switch_float: FloatText
+var _item_float: FloatText
+var _potion_float: FloatText
+var _pending_items: Array[String] = []
 var _player_caption: Label
 var _float_layer: Control
 var _player_sprite: TextureRect
@@ -143,6 +157,24 @@ func get_switch_float_text() -> String:
 	return _visible_float_text(_switch_float)
 
 
+## Text of the held-item feedback currently shown ("" if none).
+func get_item_float_text() -> String:
+	return _visible_float_text(_item_float)
+
+
+## Text of the potion feedback currently shown ("" if none).
+func get_potion_float_text() -> String:
+	return _visible_float_text(_potion_float)
+
+
+## Drinks potion `index` of the battle (player's turn only, no energy cost). False if not possible.
+func use_potion(index: int) -> bool:
+	if _battle == null or not _battle.can_use_potion(index):
+		return false
+	_selected_index = -1
+	return _battle.use_potion(index)
+
+
 ## Displays `battle` (built by Main from RunState) and starts it. Call once, after add_child.
 ## `run` is only read, for the deck size shown in the info row.
 func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) -> void:
@@ -155,12 +187,17 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_build_enemy_views(_battle.enemies)
 	_hide_float(_player_float)
 	_hide_float(_switch_float)
+	_hide_float(_item_float)
+	_hide_float(_potion_float)
+	_pending_items.clear()
 	_end_box.visible = false
 	_end_dim.visible = false
 	_battle.state_changed.connect(_refresh)
 	_battle.hit_resolved.connect(_on_hit_resolved)
 	_battle.battle_won.connect(_on_battle_won)
 	_battle.active_pokemon_changed.connect(_on_active_pokemon_changed)
+	_battle.item_triggered.connect(_on_item_triggered)
+	_battle.potion_used.connect(_on_potion_used)
 	_battle.start()
 	_refresh_active_pokemon(player)
 	_refresh()
@@ -370,6 +407,8 @@ func _build_ui() -> void:
 	move_child(_float_layer, _end_dim.get_index())
 	_player_float = _make_float_text()
 	_switch_float = _make_float_text()
+	_item_float = _make_float_text()
+	_potion_float = _make_float_text()
 
 
 func _make_label(font_size: int) -> Label:
@@ -483,6 +522,29 @@ func _on_active_pokemon_changed(_old_id: String, _new_id: String) -> void:
 		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 
 
+# --- Item / potion feedback (story 006) ------------------------------------------
+
+## Several items can fire on the same action (e.g. Bandeau + Lunettes Choix): their names are gathered and
+## shown once, at the end of the frame.
+func _on_item_triggered(item: ItemData) -> void:
+	if _pending_items.is_empty():
+		_flush_item_float.call_deferred()
+	if not _pending_items.has(item.display_name):
+		_pending_items.append(item.display_name)
+
+
+func _flush_item_float() -> void:
+	if _pending_items.is_empty() or not is_inside_tree():
+		return
+	var text: String = "  ".join(_pending_items.map(func(n: String) -> String: return TEXT_ITEM % n))
+	_pending_items.clear()
+	_show_float(_item_float, _player_sprite, text, COLOR_ITEM, ITEM_FLOAT_Y)
+
+
+func _on_potion_used(potion: PotionData) -> void:
+	_show_float(_potion_float, _player_sprite, TEXT_POTION % potion.display_name, COLOR_POTION, POTION_FLOAT_Y)
+
+
 # --- Effectiveness feedback ------------------------------------------------
 
 func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> void:
@@ -511,8 +573,9 @@ func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> voi
 
 
 ## Shows the floating label over `anchor` for FLOAT_DURATION s (drifts up, fades at the end).
-## Any previous tween of the same label is killed first; nothing here blocks input or logic.
-func _show_float(f: FloatText, anchor: Control, text: String, color: Color) -> void:
+## `y_ratio` = start height inside the anchor (0 = its top). Any previous tween of the same label is killed
+## first; nothing here blocks input or logic.
+func _show_float(f: FloatText, anchor: Control, text: String, color: Color, y_ratio: float = 0.0) -> void:
 	if f.tween != null and f.tween.is_valid():
 		f.tween.kill()
 	f.label.text = text
@@ -529,7 +592,7 @@ func _show_float(f: FloatText, anchor: Control, text: String, color: Color) -> v
 	f.label.visible = true
 	f.label.reset_size()
 	var r: Rect2 = anchor.get_global_rect()
-	var start: Vector2 = Vector2(r.get_center().x - f.label.size.x * 0.5, r.position.y + 8.0)
+	var start: Vector2 = Vector2(r.get_center().x - f.label.size.x * 0.5, r.position.y + 8.0 + r.size.y * y_ratio)
 	# Keep the whole text on screen (the rightmost enemy slot is near the edge).
 	var screen_w: float = get_viewport_rect().size.x
 	start.x = clampf(start.x, FLOAT_SCREEN_MARGIN, maxf(FLOAT_SCREEN_MARGIN, screen_w - f.label.size.x - FLOAT_SCREEN_MARGIN))
@@ -599,6 +662,8 @@ func _refresh() -> void:
 	var over: bool = _battle.state != Battle.State.PLAYER_TURN
 	_end_turn_button.disabled = over
 	_hint_label.text = "Choisissez une cible" if _selected_index >= 0 else ""
+	if _selected_index < 0 and _battle.turn_damage_bonus > 0 and not over:
+		_hint_label.text = TEXT_TURN_BONUS % _battle.turn_damage_bonus
 	for i: int in _enemy_views.size():
 		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 	_rebuild_hand()

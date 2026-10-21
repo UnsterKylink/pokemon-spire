@@ -3,7 +3,9 @@ extends Control
 ## Run owner: holds GameData, RunState and RNGs, and switches between the screens
 ## (MapScreen -> Battle/Event/placeholder room -> Reward -> MapScreen ... -> boss -> act end).
 ## Screens only display and emit signals; all persistent state lives here / in RunState.
-## Implements: story-005-carte-acte-1 (act map flow), story-004-recompenses-vol-attaque (rewards).
+## Implements: story-005-carte-acte-1 (act map flow), story-004-recompenses-vol-attaque (rewards),
+## story-006-objets-et-services (permanent RunHud, potions in battle, loot on the reward screen, Centre Pokémon
+## and Poké Mart screens: Main applies every service / purchase through RunState / ShopInventory).
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -24,6 +26,8 @@ const SCREEN_BATTLE: String = "battle"
 const SCREEN_REWARD: String = "reward"
 const SCREEN_EVENT: String = "event"
 const SCREEN_ROOM: String = "room"
+const SCREEN_CENTER: String = "center"
+const SCREEN_MART: String = "mart"
 const SCREEN_ACT_END: String = "act_end"
 const COLOR_ACT_END: Color = Color(1.0, 0.8, 0.28)
 
@@ -56,6 +60,12 @@ var _reward_screen: RewardScreen
 var _map_screen: MapScreen
 var _event_screen: EventScreen
 var _room_screen: PlaceholderRoomScreen
+var _center_screen: CenterScreen
+var _mart_screen: MartScreen
+## The current Poké Mart visit's stock (null outside the Mart): one per visit.
+var _shop: ShopInventory
+## Permanent money / items / potions bar (story 006), above every run screen except the starter choice.
+var _hud: RunHud
 var _offers: Array[RewardOffer] = []
 
 
@@ -65,6 +75,10 @@ func _ready() -> void:
 		push_error("Main: could not load game data")
 		return
 	_encounter_order = _data.get_encounter_order()
+	_hud = RunHud.new()
+	_hud.visible = false
+	_hud.potion_pressed.connect(battle_use_potion)
+	add_child(_hud)
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
 	for arg: String in OS.get_cmdline_user_args():
@@ -132,12 +146,13 @@ func _on_starter_chosen(pokemon_id: String) -> void:
 
 
 ## Debug/QA entry point: starts a battle on `encounter_id` (x1 modifiers, normal reward) with the CURRENT
-## run state; the win leads back to the map.
-func start_encounter(encounter_id: String) -> void:
+## run state; the win leads back to the map. `loot_room_type` ("wild", "elite"; "" = none) only chooses the
+## loot and reward rarity of the win (QA shots of the loot, story 006).
+func start_encounter(encounter_id: String, loot_room_type: String = "") -> void:
 	if _run == null or not _encounter_order.has(encounter_id):
 		push_error("Main: cannot start encounter '%s'" % encounter_id)
 		return
-	_launch_battle(encounter_id, _data.create_enemies(encounter_id), "")
+	_launch_battle(encounter_id, _data.create_enemies(encounter_id), loot_room_type)
 
 
 # --- QA accessors -------------------------------------------------------------------------------
@@ -178,7 +193,7 @@ func get_run_state() -> RunState:
 	return _run
 
 
-## QA: "starter", "map", "battle", "reward", "event", "room", "act_end" (or "none").
+## QA: "starter", "map", "battle", "reward", "event", "center", "mart", "room", "act_end" (or "none").
 func get_current_screen_name() -> String:
 	return _screen_name
 
@@ -263,10 +278,149 @@ func event_continue() -> void:
 		_event_screen.press_continue()
 
 
-## QA: presses the button of the placeholder room or act-end screen.
+## QA: presses the button of the placeholder room or act-end screen; on the Centre it is "Continuer" (only
+## after a service), on the Mart "Quitter".
 func room_continue() -> void:
 	if _room_screen != null:
 		_room_screen.press_continue()
+	elif _center_screen != null:
+		_center_screen.press_continue()
+	elif _mart_screen != null:
+		_mart_screen.leave()
+
+
+# --- QA: story 006 (HUD, potions, Centre, Mart) ----------------------------------------------------
+
+## QA: the permanent run bar.
+func get_hud() -> RunHud:
+	return _hud
+
+
+## QA: the live CenterScreen (null outside the Centre Pokémon).
+func get_center_screen() -> CenterScreen:
+	return _center_screen
+
+
+## QA: the live MartScreen (null outside the Poké Mart).
+func get_shop_screen() -> MartScreen:
+	return _mart_screen
+
+
+## QA: the current Mart visit's stock (null outside the Mart).
+func get_shop_inventory() -> ShopInventory:
+	return _shop
+
+
+## QA: clicks potion slot `index` of the HUD during a battle (same path as the click). False if not drunk.
+func battle_use_potion(index: int) -> bool:
+	if _battle_screen == null:
+		return false
+	return _battle_screen.use_potion(index)
+
+
+## QA: Centre "Se soigner".
+func center_heal() -> void:
+	if _center_screen != null:
+		_center_screen.choose_heal()
+
+
+## QA: Centre "Améliorer une carte" (opens the picker).
+func center_open_upgrade() -> void:
+	if _center_screen != null:
+		_center_screen.open_upgrade()
+
+
+## QA: picks deck[deck_index] in the Centre picker (opens the before/after preview).
+func center_pick(deck_index: int) -> void:
+	if _center_screen != null:
+		_center_screen.pick_card(deck_index)
+
+
+## QA: confirms the previewed upgrade.
+func center_confirm() -> void:
+	if _center_screen != null:
+		_center_screen.confirm_upgrade()
+
+
+## QA: full upgrade path on deck[deck_index]: open picker, pick, confirm.
+func center_upgrade(deck_index: int) -> void:
+	center_open_upgrade()
+	center_pick(deck_index)
+	center_confirm()
+
+
+## QA: "Continuer" on the Centre (after a service).
+func center_continue() -> void:
+	if _center_screen != null:
+		_center_screen.press_continue()
+
+
+## QA: clicks card article `index` at the Mart.
+func shop_buy_card(index: int) -> void:
+	if _mart_screen != null:
+		_mart_screen.buy_card(index)
+
+
+## QA: clicks held-item article `index` at the Mart.
+func shop_buy_item(index: int) -> void:
+	if _mart_screen != null:
+		_mart_screen.buy_item(index)
+
+
+## QA: clicks potion article `index` at the Mart.
+func shop_buy_potion(index: int) -> void:
+	if _mart_screen != null:
+		_mart_screen.buy_potion(index)
+
+
+## QA: "Retirer une carte" (opens the removal picker).
+func shop_open_remove() -> void:
+	if _mart_screen != null:
+		_mart_screen.open_remove()
+
+
+## QA: removes deck[deck_index] (opens the picker if needed, then picks the card).
+func shop_remove(deck_index: int) -> void:
+	if _mart_screen == null:
+		return
+	if not _mart_screen.get_picker().is_open():
+		_mart_screen.open_remove()
+	_mart_screen.remove(deck_index)
+
+
+## QA: "Quitter" the Mart.
+func shop_leave() -> void:
+	if _mart_screen != null:
+		_mart_screen.leave()
+
+
+## QA-ONLY: opens the Centre ("center") or the Mart ("mart") screen directly, without moving on the map.
+func qa_open_room(room_type: String) -> void:
+	if _run == null:
+		return
+	if room_type == "center":
+		_show_center()
+	elif room_type == "mart":
+		_show_mart()
+
+
+## QA-ONLY CHEAT: gives held item `item_id` (on_pickup effects apply).
+func qa_give_item(item_id: String) -> void:
+	if _run != null and _run.add_item(_data.get_item(item_id)):
+		_refresh_hud()
+
+
+## QA-ONLY CHEAT: gives potion `potion_id` (if the belt has room).
+func qa_give_potion(potion_id: String) -> void:
+	if _run != null and _run.add_potion(_data.get_potion(potion_id)):
+		_refresh_hud()
+
+
+## QA-ONLY CHEAT: sets the run's Pokédollars.
+func qa_set_money(amount: int) -> void:
+	if _run != null:
+		_run.money = maxi(amount, 0)
+		_refresh_hud()
 
 
 ## QA: picks reward card `index` as a click would.
@@ -303,6 +457,8 @@ func qa_set_hp(value: int) -> void:
 		var player: Combatant = _battle_screen.get_battle().player
 		player.hp = clampi(value, 1, player.max_hp)
 		player.changed.emit()
+	elif _center_screen != null and _center_screen.get_step() == CenterScreen.Step.CHOOSE:
+		_center_screen.setup(_data, _run, _run.rest_heal_preview(), _run.rest_heal_percent())
 
 
 # --- Flow ----------------------------------------------------------------------------------------
@@ -324,6 +480,10 @@ func _on_node_chosen(node_id: String) -> void:
 		_start_room_fight(node)
 	elif node.room_type == "event":
 		_show_event()
+	elif node.room_type == "center":
+		_show_center()
+	elif node.room_type == "mart":
+		_show_mart()
 	else:
 		_show_placeholder_room(node.room_type)
 
@@ -346,11 +506,14 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	_encounter_id = encounter_id
 	_fight_room_type = room_type
 	var battle: Battle = _run.create_battle(enemies, _data.get_type_chart(), _battle_rng)
+	battle.state_changed.connect(_refresh_hud)
+	battle.item_triggered.connect(_on_item_triggered)
 	_battle_screen = BATTLE_SCENE.instantiate() as BattleScreen
 	_battle_screen.battle_won.connect(_on_battle_won)
 	_battle_screen.restart_requested.connect(_on_restart_requested)
 	_set_screen(_battle_screen, SCREEN_BATTLE)
 	_battle_screen.setup(battle, _data, _run, encounter_id)
+	_refresh_hud()
 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
@@ -365,6 +528,7 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_reward_screen.skipped.connect(_after_reward)
 	_set_screen(_reward_screen, SCREEN_REWARD)
 	_reward_screen.setup(_data, _run, _offers)
+	_reward_screen.set_loot(_last_loot if not _fight_room_type.is_empty() else {})
 
 
 func _on_card_chosen(card: CardData) -> void:
@@ -405,16 +569,76 @@ func _on_event_option_chosen(index: int) -> void:
 	_event_screen.show_result(String(option.get("result_text", "")), summary, _run)
 
 
-## Centre / Mart placeholder (contents = story 006). The centre's provisional heal comes from
-## act1.json room_types.center.heal_percent.
+func _on_item_triggered(item: ItemData) -> void:
+	_hud.flash_item(item)
+
+
+## Centre Pokémon (story 006): heal OR upgrade one card, applied here through RunState. Never auto-heals.
+func _show_center() -> void:
+	_clear_screens()
+	_center_screen = CenterScreen.new()
+	_center_screen.heal_chosen.connect(_on_center_heal)
+	_center_screen.upgrade_chosen.connect(_on_center_upgrade)
+	_center_screen.finished.connect(_show_map)
+	_set_screen(_center_screen, SCREEN_CENTER)
+	_center_screen.setup(_data, _run, _run.rest_heal_preview(), _run.rest_heal_percent())
+
+
+func _on_center_heal() -> void:
+	var healed: int = _run.rest_heal()
+	_refresh_hud()
+	_center_screen.show_result("Tu te reposes : +%d PV (PV %d/%d)." % [healed, _run.hp, _run.max_hp])
+
+
+func _on_center_upgrade(deck_index: int) -> void:
+	var before: String = _run.deck[deck_index].display_name if deck_index >= 0 and deck_index < _run.deck.size() else ""
+	if _run.upgrade_card(deck_index):
+		_center_screen.show_result("%s devient %s !" % [before, _run.deck[deck_index].display_name])
+	else:
+		push_error("Main: cannot upgrade deck card %d" % deck_index)
+		_center_screen.show_result("Impossible d'améliorer cette carte.")
+
+
+## Poké Mart (story 006): one ShopInventory per visit; purchases / removals applied here.
+func _show_mart() -> void:
+	_clear_screens()
+	_shop = create_shop_inventory()
+	_mart_screen = MartScreen.new()
+	_mart_screen.buy_requested.connect(_on_shop_buy)
+	_mart_screen.remove_requested.connect(_on_shop_remove)
+	_mart_screen.finished.connect(_show_map)
+	_set_screen(_mart_screen, SCREEN_MART)
+	_mart_screen.setup(_data, _run, _shop)
+
+
+func _on_shop_buy(kind: String, index: int) -> void:
+	var ok: bool = false
+	var label: String = ""
+	match kind:
+		ShopEntry.KIND_CARD:
+			label = _shop.cards[index].get_name()
+			ok = _shop.buy_card(index)
+		ShopEntry.KIND_ITEM:
+			label = _shop.items[index].get_name()
+			ok = _shop.buy_item(index)
+		ShopEntry.KIND_POTION:
+			label = _shop.potions[index].get_name()
+			ok = _shop.buy_potion(index)
+	_refresh_hud()
+	_mart_screen.refresh("Acheté : %s." % label if ok else "Achat impossible.")
+
+
+func _on_shop_remove(deck_index: int) -> void:
+	var label: String = _run.deck[deck_index].display_name if deck_index >= 0 and deck_index < _run.deck.size() else ""
+	var ok: bool = _shop.remove_card(deck_index)
+	_refresh_hud()
+	_mart_screen.refresh("Carte retirée : %s." % label if ok else "Retrait impossible.")
+
+
+## Fallback for a room type without a screen (none in act 1 since story 006).
 func _show_placeholder_room(room_type: String) -> void:
 	var room: Dictionary = _data.get_room_type(room_type)
-	var body: String = ""
-	var heal: float = float(room.get("heal_percent", 0))
-	if heal > 0.0:
-		var healed: int = _run.heal_percent(heal)
-		body = "Tu te reposes : +%d PV (PV %d/%d).\n\n" % [healed, _run.hp, _run.max_hp]
-	body += "Bientôt disponible — tâche 006"
+	var body: String = "Bientôt disponible."
 	_clear_screens()
 	_room_screen = ROOM_SCENE.instantiate() as PlaceholderRoomScreen
 	_room_screen.finished.connect(_show_map)
@@ -438,6 +662,17 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 	_screen = screen
 	_screen_name = screen_name
 	add_child(screen)
+	var show_hud: bool = _run != null and screen_name != SCREEN_STARTER
+	_hud.visible = show_hud
+	screen.offset_top = RunHud.HEIGHT if show_hud else 0.0
+	move_child(_hud, get_child_count() - 1)
+	_refresh_hud()
+
+
+## Redraws the HUD from the run (and the live battle's potions).
+func _refresh_hud() -> void:
+	if _hud != null and _run != null:
+		_hud.refresh(_run, _battle_screen.get_battle() if _battle_screen != null else null)
 
 
 func _clear_screens() -> void:
@@ -452,5 +687,8 @@ func _clear_screens() -> void:
 	_map_screen = null
 	_event_screen = null
 	_room_screen = null
+	_center_screen = null
+	_mart_screen = null
+	_shop = null
 	_offers = []
 	_current_event = {}

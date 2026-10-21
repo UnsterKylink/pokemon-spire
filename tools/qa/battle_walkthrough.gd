@@ -7,7 +7,8 @@ extends SceneTree
 ## Run (needs a display, not --headless for screenshots):
 ##   godot --path . --windowed --resolution 1280x720 -s res://tools/qa/battle_walkthrough.gd -- <out_dir>
 ## Story: pokemon-spire 005, 008 (type shots 01-types-doubles / 02-super-efficace-double / 03-immunite),
-## 009 (switch shots 01-actif-salameche .. 07-deck, run FIRST, see _switch_shots).
+## 009 (switch shots 01-actif-salameche .. 07-deck, run FIRST, see _switch_shots),
+## 006 (items / services shots 01-hud-carte .. 07b-mart-apres-retrait, see _items_shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
 const ROSTER_SEED: int = 12345
@@ -23,6 +24,13 @@ const SKILL_CARD: String = "abri"
 const MAX_INTENT_TURNS: int = 8
 ## Seconds to wait so the "<Nom>, à toi !" float has faded (FLOAT_DURATION is 1.2 s).
 const FLOAT_WAIT: float = 1.6
+## Story 006: run seed, items / potions / money given through the QA cheats, encounter of the potion shot.
+const ITEMS_SEED: int = 2026
+const ITEMS_GIVEN: Array[String] = ["peau_metal", "bandeau", "restes"]
+const POTIONS_GIVEN: Array[String] = ["potion", "attaque_plus", "defense_plus"]
+const ITEMS_ENCOUNTER: String = "solo_bidoof"
+const ITEMS_ATTACK: String = "flammeche"
+const MART_MONEY: int = 260
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -268,9 +276,90 @@ func _roster_shots() -> void:
 	_main.map_close_deck()
 
 
+## Story 006 shots: permanent HUD on the map, potions + item feedback in battle, reward loot (an elite-loot
+## debug fight), Centre (choice, upgrade picker, before/after preview, result) and Mart (stock, purchases,
+## removal picker, after removal). Leaves the run to the caller (it starts a new one).
+func _items_shots() -> void:
+	_main.start_new_run(ITEMS_SEED)
+	for id: String in ITEMS_GIVEN:
+		_main.qa_give_item(id)
+	for id: String in POTIONS_GIVEN:
+		_main.qa_give_potion(id)
+	await _shot("01-hud-carte")
+	print("hud: money=%s items=%s potions=%s" % [_main.get_hud().get_money_text(), _main.get_hud().get_item_names(),
+			_main.get_hud().get_potion_texts()])
+	_main.start_encounter(ITEMS_ENCOUNTER, "elite")
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	print("battle start: block=%d (Peau Métal) float=\"%s\"" % [b.player.block, bs.get_item_float_text()])
+	await create_timer(FLOAT_WAIT).timeout
+	bs.qa_force_hand([ITEMS_ATTACK, ITEMS_ATTACK, "abri"] as Array[String])
+	var drunk: bool = _main.battle_use_potion(1)  # Attaque +
+	var foe: Combatant = b.enemies[0]
+	var hp_before: int = foe.hp
+	bs.select_card(0)
+	bs.click_enemy(0)  # Bandeau (first attack) + Attaque + bonus
+	print("potion drunk=%s bonus=%d foe hp %d -> %d item_float=\"%s\" potion_float=\"%s\" hud_potions=%s run_potions=%d" % [
+			drunk, b.turn_damage_bonus, hp_before, foe.hp, bs.get_item_float_text(), bs.get_potion_float_text(),
+			_main.get_hud().get_potion_texts(), _main.get_run_state().potions.size()])
+	await _shot("02-combat-potions")
+	_win_battle()
+	var rs: RewardScreen = _main.get_reward_screen()
+	print("loot: %s texts=%s money=%d" % [_main.get_last_loot(), rs.get_loot_texts() if rs != null else [], _main.get_run_state().money])
+	await _shot("03-recompense-butin")
+	_main.reward_skip()
+	var run: RunState = _main.get_run_state()
+	_main.qa_open_room("center")
+	_main.qa_set_hp(run.max_hp / 2)
+	print("centre options: %s" % [_main.get_center_screen().get_option_texts()])
+	await _shot("04-centre")
+	_main.center_open_upgrade()
+	print("centre picker offers: %s" % [_main.get_center_screen().get_picker().get_offered_indices()])
+	await _shot("05a-centre-choix-carte")
+	var up_index: int = -1
+	for i: int in run.deck.size():
+		if run.deck[i].kind == CardData.KIND_ATTACK and run.can_upgrade_card(i):
+			up_index = i
+			break
+	_main.center_pick(up_index)
+	await _shot("05b-centre-amelioration")
+	var hp_c: int = run.hp
+	_main.center_confirm()
+	print("centre upgrade: %s | hp %d -> %d (no heal) | result=\"%s\"" % [run.deck[up_index].deck_key(), hp_c, run.hp,
+			_main.get_center_screen().get_result_text()])
+	await _shot("05c-centre-resultat")
+	_main.center_continue()
+	_main.qa_set_money(MART_MONEY)
+	_main.qa_open_room("mart")
+	var shop: ShopInventory = _main.get_shop_inventory()
+	await _shot("06-mart")
+	_main.shop_buy_card(0)
+	_main.shop_buy_potion(0)
+	_main.shop_buy_potion(1)  # belt full after the first one -> refused
+	print("mart after buys: money=%d deck=%d potions=%d card0 sold=%s potion0 sold=%s potion1 sold=%s status=\"%s\"" % [
+			run.money, run.deck.size(), run.potions.size(), shop.cards[0].sold, shop.potions[0].sold, shop.potions[1].sold,
+			_main.get_shop_screen().get_status_text()])
+	await _shot("06b-mart-achats")
+	_main.shop_open_remove()
+	await _shot("07-mart-retrait")
+	var deck_before: int = run.deck.size()
+	var money_before: int = run.money
+	var remove_index: int = _main.get_shop_screen().get_picker().get_offered_indices()[0]
+	for i: int in _main.get_shop_screen().get_picker().get_offered_indices():
+		if run.deck[i].id == SKILL_CARD:
+			remove_index = i  # remove an Abri, not the card just upgraded at the Centre
+	_main.shop_remove(remove_index)
+	print("mart removal: deck %d -> %d money %d -> %d next price=%d" % [deck_before, run.deck.size(), money_before,
+			run.money, shop.removal_price()])
+	await _shot("07b-mart-apres-retrait")
+	_main.shop_leave()
+	print("after mart: screen=%s" % _main.get_current_screen_name())
+
+
 func _run() -> void:
 	await _roster_shots()
 	_main.forced_starter_id = "salameche"  # the older shots assume Salamèche's deck and identity
+	await _items_shots()
 	# Pick the first seed whose map has a path through event + elite + centre.
 	var used_seed: int = SEEDS[0]
 	var path: Array[String] = []
@@ -333,6 +422,8 @@ func _run() -> void:
 				if rt == "center" and not shot_done.has("center"):
 					shot_done["center"] = true
 					await _shot("08-centre")
+				if rt == "center":
+					_main.center_heal()  # story 006: the centre no longer heals on entry
 				_main.room_continue()
 	await _shot("10-acte-termine")
 	print("missing room types on the path: ", WANTED_TYPES.filter(func(t: String) -> bool: return not shot_done.has(t)))

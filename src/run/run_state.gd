@@ -296,6 +296,16 @@ func rest_heal() -> int:
 	return heal_percent(float(_data.get_room_type("center").get("heal_percent", 0)))
 
 
+## HP that rest_heal() would restore now (display only, nothing changes).
+func rest_heal_preview() -> int:
+	return mini(max_hp - hp, ceili(max_hp * rest_heal_percent() / 100.0))
+
+
+## The Centre's heal rule: % of max HP (act1.json room_types.center.heal_percent).
+func rest_heal_percent() -> float:
+	return float(_data.get_room_type("center").get("heal_percent", 0))
+
+
 ## True if deck[deck_index] exists and can still be improved (not already upgraded, rule changes something).
 func can_upgrade_card(deck_index: int) -> bool:
 	return deck_index >= 0 and deck_index < deck.size() and deck[deck_index].can_upgrade(_data.get_upgrade_rules())
