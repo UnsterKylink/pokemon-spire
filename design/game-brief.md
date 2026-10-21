@@ -26,12 +26,19 @@
 - **Objets** : ~10 objets tenus (équivalent reliques : Restes, Bandeau…) + ~5 potions à usage unique.
 - **Évolution** : battre le Champion fait évoluer le Pokémon de départ (nouvelles cartes) → écran de victoire.
 
+## Après le MVP — feuille de route (décidée 2026-10-21)
+*Le MVP (étapes 1–7) est terminé. Ces fonctionnalités viennent ensuite, dans cet ordre :*
+1. **Accès au deck partout** : voir ses cartes à tout moment (combat : deck, pioche, défausse ; carte, Centre, Mart, événements) depuis la barre du haut.
+2. **Structure complète** : 8 arènes (badges), puis le Conseil 4, puis Éthernatos en boss final. Chaque zone a son type d'arène, ses Pokémon sauvages et son décor ; évolutions en cours de route (jusqu'au 3e stade) ; sauvegarde en cours de partie (quitter / reprendre). *Durée et découpage des actes à décider avant de coder.*
+3. **Statuts et capture** : brûlure, poison, paralysie, sommeil, gel ; Poké Balls pour capturer un Pokémon sauvage et l'ajouter à l'équipe avec ses cartes ; un rival qui revient avec une équipe qui grandit ; plus d'événements.
+4. **Équilibrage** : PV / dégâts par zone, prix et gains, puissance des cartes ; cartes peu communes / rares manquantes (Insecte, Ténèbres, Combat…) ; correction : les ennemis à double type attaquent avec leur 1er type seulement.
+5. **Esthétique et son** : un vrai style graphique (bible artistique), animations d'attaque, fonds de combat par zone, plus belles cartes et carte d'avancement, musique et effets sonores.
+6. **Finition** : menu principal, pause et options, tutoriel / infobulles des mots-clés, version jouable .exe Windows sans les raccourcis de test, optimisation.
+7. **Bonus** : Pokédex (rencontrés / capturés), niveaux de difficulté après une victoire (façon Ascension).
+
 ## Out of scope — not building this
-- Autres starters, actes 2 et 3, Dracaufeu.
-- Tous les Pokémon : seulement ceux des premières routes / starters, toutes générations (~50). Les Pokémon sont des données, donc en ajouter = ajouter des fiches.
 - PV individuels par Pokémon, K.O. individuels (barre de PV commune à la place).
-- Sauvegarde en cours de partie, méta-progression / déblocages.
-- Son, animations élaborées, multijoueur.
+- Multijoueur.
 - Publication / distribution publique (propriété intellectuelle Pokémon).
 
 ## Build order
@@ -49,4 +56,4 @@
 
 **Art & audio direction:** Sprites pixel officiels (PokéAPI), interface de cartes simple et lisible ; pas de son au début.
 
-**Reference game:** Slay the Spire — l'acte 1 avec un seul personnage ; pas d'ascension ni de déblocages. Le switch de Pokémon actif est notre twist.
+**Reference game:** Slay the Spire (structure en actes, boss, Ascension en bonus) croisé avec la progression d'un jeu Pokémon (8 badges, Conseil 4). Le switch de Pokémon actif est notre twist.
