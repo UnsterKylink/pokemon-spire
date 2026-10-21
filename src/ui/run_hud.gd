@@ -7,6 +7,8 @@ extends PanelContainer
 
 ## Emitted when a usable potion slot is clicked (index into the shown potion list).
 signal potion_pressed(index: int)
+## Emitted by the "Deck" button (story 011): Main opens / closes the single deck panel.
+signal deck_pressed
 
 const HEIGHT: float = 44.0
 ## Currency suffix. The default font has no "₽" glyph (it only renders through OS font fallback, absent on
@@ -22,6 +24,9 @@ const COLOR_EMPTY: Color = Color(0.45, 0.46, 0.52)
 const COLOR_FLASH: Color = Color(1.0, 0.85, 0.3)
 const POTION_SLOT_SIZE: Vector2 = Vector2(128, 32)
 const FLASH_DURATION: float = 0.7
+const TEXT_DECK: String = "Deck"
+const TEXT_DECK_TIP: String = "Voir ton deck (Échap pour fermer)."
+const TEXT_DECK_BLOCKED: String = "Termine d'abord le choix de carte en cours."
 const TEXT_ITEMS: String = "Objets :"
 const TEXT_NO_ITEM: String = "aucun"
 const TEXT_POTIONS: String = "Potions :"
@@ -33,6 +38,7 @@ var _money: Label
 var _items_box: HBoxContainer
 var _potions_box: HBoxContainer
 var _chips: Dictionary = {}  # item id -> PanelContainer (display only)
+var _deck_button: Button
 
 
 ## Formats an amount of Pokédollars ("50 P$").
@@ -86,6 +92,15 @@ func _init() -> void:
 	_potions_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_potions_box.add_theme_constant_override("separation", 6)
 	row.add_child(_potions_box)
+	_deck_button = Button.new()
+	_deck_button.name = "DeckButton"
+	_deck_button.text = TEXT_DECK
+	_deck_button.tooltip_text = TEXT_DECK_TIP
+	_deck_button.custom_minimum_size = Vector2(90, 32)
+	_deck_button.focus_mode = Control.FOCUS_NONE
+	_deck_button.add_theme_font_size_override("font_size", 17)
+	_deck_button.pressed.connect(press_deck)
+	row.add_child(_deck_button)
 
 
 ## Redraws the bar from `run` (read only). In a battle pass it: its potion list is shown and the slots the
@@ -123,6 +138,24 @@ func flash_item(item: ItemData) -> void:
 	chip.self_modulate = COLOR_FLASH * 1.6
 	var t: Tween = chip.create_tween()
 	t.tween_property(chip, "self_modulate", Color.WHITE, FLASH_DURATION)
+
+
+## Presses the Deck button (same path as the mouse). Ignored while it is disabled.
+func press_deck() -> void:
+	if not _deck_button.disabled:
+		deck_pressed.emit()
+
+
+## Enables / disables the Deck button. Main disables it while a modal card picker (Centre upgrade, Mart removal)
+## is open, so the deck panel never stacks on top of a picker.
+func set_deck_enabled(enabled: bool) -> void:
+	_deck_button.disabled = not enabled
+	_deck_button.tooltip_text = TEXT_DECK_TIP if enabled else TEXT_DECK_BLOCKED
+
+
+## True if the Deck button is clickable now.
+func is_deck_enabled() -> bool:
+	return not _deck_button.disabled
 
 
 ## Clicks potion slot `index` (same path as the mouse). Ignored for disabled / empty slots.

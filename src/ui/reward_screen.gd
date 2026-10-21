@@ -10,6 +10,8 @@ extends Control
 signal card_chosen(card: CardData)
 ## Emitted when the player passes.
 signal skipped
+## Emitted by "Voir le deck" (Main opens the single deck panel).
+signal deck_requested
 
 const CARD_SIZE: Vector2 = Vector2(220, 270)
 const COLOR_BG: Color = Color(0.12, 0.13, 0.18)
@@ -27,7 +29,6 @@ var _title: Label
 var _info: Label
 var _cards_box: HBoxContainer
 var _loot_box: HBoxContainer
-var _deck_overlay: DeckOverlay
 var _done: bool = false
 var _built: bool = false
 
@@ -50,7 +51,6 @@ func setup(data: GameData, run: RunState, offers: Array[RewardOffer]) -> void:
 		child.queue_free()
 	for i: int in offers.size():
 		_cards_box.add_child(_make_offer_widget(offers[i], i))
-	close_deck()
 
 
 ## Shows the loot of the fight (Main.get_last_loot(): {"money": int, "item": ItemData|null, "potion":
@@ -91,9 +91,9 @@ func get_offers() -> Array[RewardOffer]:
 	return _offers
 
 
-## Picks offer `index` (same path as the mouse click). Ignored while the deck overlay is open.
+## Picks offer `index` (same path as the mouse click).
 func pick(index: int) -> void:
-	if _done or is_deck_open() or index < 0 or index >= _offers.size():
+	if _done or index < 0 or index >= _offers.size():
 		return
 	_done = true
 	card_chosen.emit(_offers[index].card)
@@ -101,30 +101,15 @@ func pick(index: int) -> void:
 
 ## Passes without taking a card (same path as the "Passer" button).
 func skip() -> void:
-	if _done or is_deck_open():
+	if _done:
 		return
 	_done = true
 	skipped.emit()
 
 
-## Opens the deck overlay ("Voir le deck").
+## "Voir le deck": asks Main to open the single deck panel (story 011).
 func open_deck() -> void:
-	_deck_overlay.open(_run)
-
-
-## Closes the deck overlay ("Fermer").
-func close_deck() -> void:
-	_deck_overlay.close()
-
-
-## True while the deck overlay is shown.
-func is_deck_open() -> bool:
-	return _deck_overlay.is_open()
-
-
-## Lines of the deck overlay ("Griffe ×5 ..."), for the QA harness.
-func get_deck_lines() -> Array[String]:
-	return _deck_overlay.get_lines()
+	deck_requested.emit()
 
 
 func _build_ui() -> void:
@@ -181,8 +166,6 @@ func _build_ui() -> void:
 	deck_button.custom_minimum_size = Vector2(200, 52)
 	deck_button.pressed.connect(open_deck)
 	buttons.add_child(deck_button)
-	_deck_overlay = DeckOverlay.new()
-	add_child(_deck_overlay)
 
 
 ## One offer: ribbon (stolen) / card button / rarity label.

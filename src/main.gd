@@ -8,6 +8,7 @@ extends Control
 ## and Poké Mart screens: Main applies every service / purchase through RunState / ShopInventory),
 ## story-007-champion-evolution-fin-de-partie (boss win -> evolution of the starter + 1-of-N card choice ->
 ## victory summary; HP 0 -> defeat summary; "Nouvelle partie" resets the whole run back to the starter choice).
+## story-011-acces-au-deck (RunHud "Deck" button + the single DeckOverlay panel owned here: open_deck / close_deck).
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -80,6 +81,8 @@ var _evolution_summary: Dictionary = {}
 var _shop: ShopInventory
 ## Permanent money / items / potions bar (story 006), above every run screen except the starter choice.
 var _hud: RunHud
+## Story 011: THE deck panel (deck / pioche / défausse), under the HUD, above every screen. Read only.
+var _deck_panel: DeckOverlay
 var _offers: Array[RewardOffer] = []
 
 
@@ -92,7 +95,11 @@ func _ready() -> void:
 	_hud = RunHud.new()
 	_hud.visible = false
 	_hud.potion_pressed.connect(battle_use_potion)
+	_hud.deck_pressed.connect(toggle_deck)
 	add_child(_hud)
+	_deck_panel = DeckOverlay.new()
+	add_child(_deck_panel)
+	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
 	for arg: String in OS.get_cmdline_user_args():
@@ -282,13 +289,12 @@ func map_choose(node_id: String) -> bool:
 ## QA: presses "Voir le deck" on the map.
 func map_open_deck() -> void:
 	if _map_screen != null:
-		_map_screen.open_deck()
+		_map_screen.open_deck()  # same path as the button: routes to the single deck panel
 
 
 ## QA: closes the map's deck overlay.
 func map_close_deck() -> void:
-	if _map_screen != null:
-		_map_screen.close_deck()
+	close_deck()
 
 
 ## QA: clicks event option `index`.
@@ -448,6 +454,71 @@ func qa_set_money(amount: int) -> void:
 		_refresh_hud()
 
 
+# --- Deck panel (story 011) ---------------------------------------------------------------------
+
+## Opens the deck panel (outside a battle only the full deck; in a battle `tab` = "deck" | "draw" | "discard").
+## Refused (false) when there is no run, or while a modal card picker (Centre upgrade / Mart removal) is open.
+## Never changes the run or the battle.
+func open_deck(tab: String = "deck") -> bool:
+	if _run == null or _deck_panel == null or not _hud.visible or _picker_open():
+		return false
+	var which: DeckOverlay.Tab = DeckOverlay.Tab.DECK
+	if tab == "draw":
+		which = DeckOverlay.Tab.DRAW
+	elif tab == "discard":
+		which = DeckOverlay.Tab.DISCARD
+	_deck_panel.open(_run, _data, _battle_screen.get_battle() if _battle_screen != null else null, which)
+	return true
+
+
+## Closes the deck panel.
+func close_deck() -> void:
+	if _deck_panel != null:
+		_deck_panel.close()
+
+
+## The Deck button: opens the panel, or closes it if already open.
+func toggle_deck() -> void:
+	if _deck_panel != null and _deck_panel.is_open():
+		close_deck()
+	else:
+		open_deck()
+
+
+## QA: the deck panel (always exists; check is_open()).
+func get_deck_panel() -> DeckOverlay:
+	return _deck_panel
+
+
+## QA-ONLY CHEAT: pads the deck with `n` extra cards cycling through the player's reward pool (every 4th one
+## upgraded "+") to test long decks.
+func qa_give_cards(n: int) -> void:
+	if _run == null:
+		return
+	var pool: Array[CardData] = _data.get_reward_pool(_run.player_id)
+	if pool.is_empty():
+		return
+	for i: int in n:
+		var card: CardData = pool[i % pool.size()]
+		if i % 4 == 3:
+			var up: CardData = card.upgraded_copy(_data.get_upgrade_rules())
+			card = up if up != null else card
+		_run.add_card(card)
+	_refresh_hud()
+
+
+## True while a modal card picker (Centre upgrade, Mart removal) is shown.
+func _picker_open() -> bool:
+	return (_center_screen != null and _center_screen.get_picker().is_open()) \
+			or (_mart_screen != null and _mart_screen.get_picker().is_open())
+
+
+## The Deck button is disabled while a modal picker is open (the picker and the panel must not stack).
+func _process(_delta: float) -> void:
+	if _hud != null and _hud.visible:
+		_hud.set_deck_enabled(not _picker_open())
+
+
 # --- QA: story 007 (Champion, evolution, victory / defeat, new run) ----------------------------------
 
 ## QA: the live EvolutionScreen (null outside the evolution).
@@ -563,8 +634,7 @@ func reward_open_deck() -> void:
 
 ## QA: presses "Fermer" on the deck overlay.
 func reward_close_deck() -> void:
-	if _reward_screen != null:
-		_reward_screen.close_deck()
+	close_deck()
 
 
 ## QA-ONLY CHEAT (walkthroughs): sets the run HP (and the live battle's player HP) to `value`,
@@ -587,6 +657,7 @@ func _show_map() -> void:
 	_clear_screens()
 	_map_screen = MAP_SCENE.instantiate() as MapScreen
 	_map_screen.node_chosen.connect(_on_node_chosen)
+	_map_screen.deck_requested.connect(open_deck)
 	_set_screen(_map_screen, SCREEN_MAP)
 	_map_screen.setup(_data, _run)
 
@@ -650,6 +721,7 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_reward_screen = REWARD_SCENE.instantiate() as RewardScreen
 	_reward_screen.card_chosen.connect(_on_card_chosen)
 	_reward_screen.skipped.connect(_after_reward)
+	_reward_screen.deck_requested.connect(open_deck)
 	_set_screen(_reward_screen, SCREEN_REWARD)
 	_reward_screen.setup(_data, _run, _offers)
 	_reward_screen.set_loot(_last_loot if not _fight_room_type.is_empty() else {})
@@ -833,6 +905,9 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 	var show_hud: bool = _run != null and screen_name not in [SCREEN_STARTER, SCREEN_VICTORY, SCREEN_DEFEAT]
 	_hud.visible = show_hud
 	screen.offset_top = RunHud.HEIGHT if show_hud else 0.0
+	if _deck_panel != null:
+		_deck_panel.close()  # a new screen always starts with the panel closed
+		move_child(_deck_panel, get_child_count() - 1)
 	move_child(_hud, get_child_count() - 1)
 	_refresh_hud()
 

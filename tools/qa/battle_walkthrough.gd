@@ -10,6 +10,7 @@ extends SceneTree
 ## 009 (switch shots 01-actif-salameche .. 07-deck, run FIRST, see _switch_shots),
 ## 006 (items / services shots 01-hud-carte .. 07b-mart-apres-retrait, see _items_shots),
 ## 007 (Champion / evolution / victory / defeat / new run shots, see _champion_shots).
+## 011 (deck access shots: deck panel on map / battle tabs / 45 cards / Mart, see _deck_shots; filter `story-011`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
@@ -40,6 +41,11 @@ const CHAMPION_ITEM: String = "restes"
 const CHAMPION_MONEY: int = 187
 const CHAMPION_WARMUP: Array[String] = ["solo_bidoof", "trio_vol"]  # defeat part: one win, then the lost fight
 const CHAMPION_PICK: int = 1
+
+## Story 011: run seed, fight used for the pile shots and the deck size of the long-deck shot.
+const DECK_SEED: int = 2026
+const DECK_ENCOUNTER: String = "trio_vol"
+const DECK_BIG: int = 45
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -445,7 +451,95 @@ func _champion_shots() -> void:
 	await _shot("06b-nouvelle-partie-carte")
 
 
+## Battle state that opening / closing the deck panel must not change.
+func _battle_fingerprint(b: Battle) -> String:
+	var keys: PackedStringArray = PackedStringArray()
+	for pile: Array in [b.draw_pile, b.hand, b.discard_pile]:
+		var ks: PackedStringArray = PackedStringArray()
+		for c: CardData in pile:
+			ks.append(c.deck_key())
+		keys.append(",".join(ks))
+	return "state=%d energy=%d hp=%d block=%d | %s" % [b.state, b.energy, b.player.hp, b.player.block, " | ".join(keys)]
+
+
+## Story 011 shots: deck panel on the map, in a battle (Deck complet / Pioche / Défausse after two cards),
+## with a 45-card deck (scrolling) and at the Mart. Also checks that opening / closing changes nothing.
+func _deck_shots() -> void:
+	_main.forced_starter_id = "salameche"
+	_main.start_new_run(DECK_SEED)
+	var run: RunState = _main.get_run_state()
+	var deck_before: String = str(run.deck.map(func(c: CardData) -> String: return c.deck_key()))
+	_main.map_open_deck()
+	var panel: DeckOverlay = _main.get_deck_panel()
+	print("map: panel open=%s tabs=%s lines=%s" % [panel.is_open(), panel.has_tabs(), panel.get_lines()])
+	await _shot("01-deck-carte")
+	_main.close_deck()
+	print("map: closed=%s deck unchanged=%s" % [not panel.is_open(), str(run.deck.map(func(c: CardData) -> String: return c.deck_key())) == deck_before])
+	# Battle: panel on the 3 tabs, state compared before / after.
+	_main.start_encounter(DECK_ENCOUNTER)
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var fp_before: String = _battle_fingerprint(b)
+	_main.open_deck("deck")
+	print("battle deck tab: titles=%s tabs=%s" % [panel.get_tab_titles(), panel.has_tabs()])
+	await _shot("02-deck-combat")
+	_main.open_deck("draw")
+	print("battle draw tab: lines=%s" % [panel.get_lines()])
+	await _shot("03-pioche-combat")
+	_main.close_deck()
+	print("battle: state unchanged after open/close = %s" % (_battle_fingerprint(b) == fp_before))
+	var played: int = 0
+	for i: int in b.hand.size():
+		if played >= 2:
+			break
+		var idx: int = 0
+		while idx < b.hand.size() and not (b.hand[idx].kind == CardData.KIND_ATTACK and b.can_play(idx)):
+			idx += 1
+		if idx < b.hand.size():
+			bs.select_card(idx)
+			bs.click_enemy(b.first_living_enemy())
+			played += 1
+	print("battle: played %d cards, discard=%d draw=%d hand=%d" % [played, b.discard_pile.size(), b.draw_pile.size(), b.hand.size()])
+	fp_before = _battle_fingerprint(b)
+	_main.open_deck("discard")
+	print("battle discard tab: titles=%s lines=%s" % [panel.get_tab_titles(), panel.get_lines()])
+	await _shot("04-defausse-combat")
+	_main.close_deck()
+	print("battle: state unchanged after open/close = %s" % (_battle_fingerprint(b) == fp_before))
+	# Long deck on the map.
+	_main.start_new_run(DECK_SEED)
+	run = _main.get_run_state()
+	_main.qa_give_cards(DECK_BIG - run.deck.size())
+	_main.open_deck()
+	print("long deck: %d cards, %d groups, scroll max=%s" % [run.deck.size(), panel.get_group_count(), panel.get_scroll().get_v_scroll_bar().max_value])
+	await _shot("05-deck-45-cartes")
+	panel.get_scroll().scroll_vertical = 100000
+	await process_frame
+	await _shot("05b-deck-45-cartes-bas")
+	_main.close_deck()
+	# Mart: panel open, then the removal picker disables the Deck button.
+	_main.qa_set_money(MART_MONEY)
+	_main.qa_open_room("mart")
+	_main.open_deck()
+	await _shot("06-deck-mart")
+	_main.close_deck()
+	_main.shop_open_remove()
+	await process_frame
+	await process_frame
+	var enabled: bool = _main.get_hud().is_deck_enabled()
+	var refused: bool = not _main.open_deck()
+	print("mart picker open (%s): deck button enabled=%s open_deck refused=%s" % [_main.get_shop_screen().get_picker().is_open(), enabled, refused])
+	_main.get_shop_screen().get_picker().cancel()
+	await process_frame
+	await process_frame
+	print("mart picker closed: deck button enabled=%s" % _main.get_hud().is_deck_enabled())
+
+
 func _run() -> void:
+	if _filter == "story-011":
+		await _deck_shots()
+		quit(0)
+		return
 	if _filter == "story-007":
 		await _champion_shots()
 		quit(0)

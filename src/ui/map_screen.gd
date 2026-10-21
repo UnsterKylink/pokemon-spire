@@ -6,6 +6,8 @@ extends Control
 
 ## Emitted when the player picks a reachable room.
 signal node_chosen(node_id: String)
+## Emitted by "Voir le deck" (Main opens the single deck panel).
+signal deck_requested
 
 const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
 const COLOR_TITLE: Color = Color(1.0, 0.9, 0.4)
@@ -23,7 +25,6 @@ var _info: Label
 var _legend: HBoxContainer
 var _scroll: ScrollContainer
 var _canvas: MapCanvas
-var _deck_overlay: DeckOverlay
 var _done: bool = false
 var _built: bool = false
 
@@ -50,13 +51,12 @@ func setup(data: GameData, run: RunState) -> void:
 		names[rt] = data.get_room_name(rt)
 	_build_legend(names)
 	_canvas.setup(progress, names)
-	_deck_overlay.close()
 	_scroll_to_focus()
 
 
-## Enters `node_id` if it is reachable (same path as a click). Ignored otherwise or while the deck is open.
+## Enters `node_id` if it is reachable (same path as a click). Ignored otherwise.
 func choose(node_id: String) -> void:
-	if _done or is_deck_open() or not _canvas.get_reachable_ids().has(node_id):
+	if _done or not _canvas.get_reachable_ids().has(node_id):
 		return
 	_done = true
 	node_chosen.emit(node_id)
@@ -77,19 +77,9 @@ func get_map_canvas() -> MapCanvas:
 	return _canvas
 
 
-## Opens the deck overlay ("Voir le deck").
+## "Voir le deck": asks Main to open the single deck panel (story 011).
 func open_deck() -> void:
-	_deck_overlay.open(_run)
-
-
-## Closes the deck overlay.
-func close_deck() -> void:
-	_deck_overlay.close()
-
-
-## True while the deck overlay is shown.
-func is_deck_open() -> bool:
-	return _deck_overlay.is_open()
+	deck_requested.emit()
 
 
 func _build_ui() -> void:
@@ -147,8 +137,6 @@ func _build_ui() -> void:
 	_scroll.add_child(_canvas)
 	# Re-apply the focus scroll whenever the scroll range is (re)computed by the layout.
 	_scroll.get_v_scroll_bar().changed.connect(_scroll_to_focus)
-	_deck_overlay = DeckOverlay.new()
-	add_child(_deck_overlay)
 
 
 func _build_legend(names: Dictionary) -> void:
