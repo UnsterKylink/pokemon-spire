@@ -1,9 +1,10 @@
 {
-	"_doc": "Economie et services (story 006). starting_money: Pokedollars au debut d'une partie. loot: par type de salle de combat (wild|elite|boss; absent = rien; le boss est la story 007) {money_min, money_max: Pokedollars tires au hasard apres une victoire, item_chance: probabilite 0..1 de gagner un objet tenu, potion_chance: probabilite 0..1 de gagner une potion s'il reste de la place}. item_rarity_weights: poids de tirage des objets par rarete. shop: contenu d'une visite du Poke Mart (nombre de cartes/potions, objets entre item_count_min et item_count_max, prix des cartes et des objets par rarete; le prix des potions est dans potions.json). card_removal: retirer une carte coute base_price puis +price_step a chaque retrait de la partie; le deck garde au moins min_deck_size cartes. upgrade_rules: amelioration d'une carte au Centre Pokemon, par kind de carte, bonus ajoutes aux champs damage/block (et cost, negatif = moins cher); une carte ne s'ameliore qu'une fois.",
+	"_doc": "Economie et services (story 006). starting_money: Pokedollars au debut d'une partie. loot: par type de salle de combat (wild|elite|boss; absent = rien; le boss = l'arene de la zone, story 012) {money_min, money_max: Pokedollars tires au hasard apres une victoire, item_chance: probabilite 0..1 de gagner un objet tenu, potion_chance: probabilite 0..1 de gagner une potion s'il reste de la place}. item_rarity_weights: poids de tirage des objets par rarete. shop: contenu d'une visite du Poke Mart (nombre de cartes/potions, objets entre item_count_min et item_count_max, prix des cartes et des objets par rarete; le prix des potions est dans potions.json). card_removal: retirer une carte coute base_price puis +price_step a chaque retrait de la partie; le deck garde au moins min_deck_size cartes. upgrade_rules: amelioration d'une carte au Centre Pokemon, par kind de carte, bonus ajoutes aux champs damage/block (et cost, negatif = moins cher); une carte ne s'ameliore qu'une fois.",
 	"starting_money": 50,
 	"loot": {
 		"wild": {"money_min": 10, "money_max": 20, "item_chance": 0.0, "potion_chance": 0.4},
-		"elite": {"money_min": 25, "money_max": 35, "item_chance": 1.0, "potion_chance": 0.0}
+		"elite": {"money_min": 25, "money_max": 35, "item_chance": 1.0, "potion_chance": 0.0},
+		"boss": {"money_min": 60, "money_max": 90, "item_chance": 1.0, "potion_chance": 0.5}
 	},
 	"item_rarity_weights": {"common": 60, "uncommon": 30, "rare": 10},
 	"shop": {

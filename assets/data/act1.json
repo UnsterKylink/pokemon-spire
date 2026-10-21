@@ -1,17 +1,17 @@
 {
-	"_doc": "Acte 1 (story 005). map: floors (nb d'etages, le dernier = boss), width (colonnes), start_nodes (salles de depart distinctes a l'etage 1), paths (marches aleatoires vers le haut qui construisent le graphe), boss_floor_nodes (doit valoir 1). placement: forced_floors (etage -> type de salle impose; l'etage 'floors' doit etre 'boss', et seul lui), no_consecutive (types qui ne peuvent pas se suivre sur deux salles reliees). room_types: id (wild|elite|center|mart|event|boss) -> name (FR), weight (>= 0, tirage aleatoire; au moins un > 0; boss = 0), min_floor, max_floor (optionnel), encounter_pool (cle de encounter_pools, salles de combat), encounter_pool_overrides (optionnel: [{pool, min_floor, max_floor}], le premier qui correspond a l'etage gagne), modifiers {hp_multiplier > 0, strength_bonus >= 0} (salles de combat), reward {rarity_weights: null ou {rarete: poids > 0} qui remplace rewards.json}, heal_percent (optionnel, Centre: % des PV max rendus en entrant; provisoire en attendant la tache 006). encounter_pools: cle -> [{encounter (id de pokemon.json), weight > 0}]. event_pool: ids de events.json.",
+	"_doc": "Modele d'une carte de zone (story 005, reutilise par story 012 : chaque zone = une carte generee avec ce modele, les valeurs de map/placement sont les valeurs PAR DEFAUT, zones.json peut les surcharger par zone ; le champion de la zone est choisi par zones.json, le pool 'boss' ci-dessous n'est qu'un repli sans zone ; les modifiers de chaque salle de combat sont MULTIPLIES (pv) / ADDITIONNES (force) a ceux de la zone, voir zones.json ; pools 'type_<type>', 'elite_<type>', 'wild_duos', 'wild_trios', 'wild_trios_hard' : story 012). Ancien texte : Acte 1 (story 005). map: floors (nb d'etages, le dernier = boss), width (colonnes), start_nodes (salles de depart distinctes a l'etage 1), paths (marches aleatoires vers le haut qui construisent le graphe), boss_floor_nodes (doit valoir 1). placement: forced_floors (etage -> type de salle impose; l'etage 'floors' doit etre 'boss', et seul lui), no_consecutive (types qui ne peuvent pas se suivre sur deux salles reliees). room_types: id (wild|elite|center|mart|event|boss) -> name (FR), weight (>= 0, tirage aleatoire; au moins un > 0; boss = 0), min_floor, max_floor (optionnel), encounter_pool (cle de encounter_pools, salles de combat), encounter_pool_overrides (optionnel: [{pool, min_floor, max_floor}], le premier qui correspond a l'etage gagne), modifiers {hp_multiplier > 0, strength_bonus >= 0} (salles de combat), reward {rarity_weights: null ou {rarete: poids > 0} qui remplace rewards.json}, heal_percent (optionnel, Centre: % des PV max rendus en entrant; provisoire en attendant la tache 006). encounter_pools: cle -> [{encounter (id de pokemon.json), weight > 0}]. event_pool: ids de events.json.",
 	"map": {
-		"floors": 15,
-		"width": 7,
+		"floors": 6,
+		"width": 6,
 		"start_nodes": 3,
-		"paths": 5,
+		"paths": 4,
 		"boss_floor_nodes": 1
 	},
 	"placement": {
 		"forced_floors": {
 			"1": "wild",
-			"14": "center",
-			"15": "boss"
+			"5": "center",
+			"6": "boss"
 		},
 		"no_consecutive": [
 			"elite",
@@ -43,7 +43,7 @@
 		"elite": {
 			"name": "Dresseur élite",
 			"weight": 12,
-			"min_floor": 5,
+			"min_floor": 3,
 			"encounter_pool": "elite",
 			"modifiers": {
 				"hp_multiplier": 1.4,
@@ -76,14 +76,18 @@
 		"boss": {
 			"name": "Champion d'arène",
 			"weight": 0,
-			"min_floor": 15,
+			"min_floor": 6,
 			"encounter_pool": "boss",
 			"modifiers": {
-				"hp_multiplier": 1.5,
-				"strength_bonus": 1
+				"hp_multiplier": 1.0,
+				"strength_bonus": 0
 			},
 			"reward": {
-				"rarity_weights": null
+				"rarity_weights": {
+					"common": 10,
+					"uncommon": 45,
+					"rare": 45
+				}
 			}
 		}
 	},
@@ -498,6 +502,27 @@
 				"weight": 1
 			}
 		],
+		"type_normal": [{"encounter": "duo", "weight": 3}, {"encounter": "duo_nuit", "weight": 3}, {"encounter": "trio", "weight": 2}, {"encounter": "trio_vol", "weight": 2}, {"encounter": "solo_hoothoot", "weight": 2}, {"encounter": "solo_bidoof", "weight": 2}, {"encounter": "solo_patrat", "weight": 2}, {"encounter": "solo_lillipup", "weight": 2}, {"encounter": "solo_pidove", "weight": 2}, {"encounter": "solo_fletchling", "weight": 2}, {"encounter": "solo_yungoos", "weight": 2}, {"encounter": "solo_wooloo", "weight": 2}, {"encounter": "solo_skwovet", "weight": 2}, {"encounter": "solo_lechonk", "weight": 2}, {"encounter": "duo_r1", "weight": 3}, {"encounter": "duo_r2", "weight": 3}, {"encounter": "duo_r4", "weight": 3}, {"encounter": "duo_r11", "weight": 3}, {"encounter": "duo_r12", "weight": 3}, {"encounter": "duo_r13", "weight": 3}, {"encounter": "duo_r14", "weight": 3}, {"encounter": "trio_r1", "weight": 2}, {"encounter": "trio_r2", "weight": 2}, {"encounter": "trio_r4", "weight": 2}, {"encounter": "trio_r5", "weight": 2}, {"encounter": "trio_r6", "weight": 2}, {"encounter": "trio_r7", "weight": 2}, {"encounter": "trio_r8", "weight": 2}, {"encounter": "trio_r9", "weight": 2}, {"encounter": "solo", "weight": 2}, {"encounter": "solo_roucool", "weight": 2}, {"encounter": "solo_sentret", "weight": 2}, {"encounter": "solo_zigzagoon", "weight": 2}, {"encounter": "solo_taillow", "weight": 2}, {"encounter": "solo_starly", "weight": 2}, {"encounter": "solo_bunnelby", "weight": 2}, {"encounter": "solo_pikipek", "weight": 2}],
+		"elite_normal": [{"encounter": "elite_normal", "weight": 1}],
+		"type_fire": [{"encounter": "solo_cyndaquil", "weight": 2}, {"encounter": "solo_torchic", "weight": 2}, {"encounter": "solo_chimchar", "weight": 2}, {"encounter": "solo_tepig", "weight": 2}, {"encounter": "solo_fennekin", "weight": 2}, {"encounter": "solo_litten", "weight": 2}, {"encounter": "solo_scorbunny", "weight": 2}, {"encounter": "solo_fuecoco", "weight": 2}, {"encounter": "duo_r7", "weight": 3}, {"encounter": "trio_r4", "weight": 2}, {"encounter": "trio_r10", "weight": 2}],
+		"elite_fire": [{"encounter": "elite_fire", "weight": 1}],
+		"type_water": [{"encounter": "solo_ptitard", "weight": 2}, {"encounter": "duo_elements", "weight": 3}, {"encounter": "solo_squirtle", "weight": 2}, {"encounter": "solo_totodile", "weight": 2}, {"encounter": "solo_mudkip", "weight": 2}, {"encounter": "solo_piplup", "weight": 2}, {"encounter": "solo_oshawott", "weight": 2}, {"encounter": "solo_froakie", "weight": 2}, {"encounter": "solo_popplio", "weight": 2}, {"encounter": "solo_sobble", "weight": 2}, {"encounter": "solo_quaxly", "weight": 2}, {"encounter": "duo_r1", "weight": 3}, {"encounter": "duo_r2", "weight": 3}, {"encounter": "duo_r5", "weight": 3}, {"encounter": "duo_r12", "weight": 3}, {"encounter": "duo_r13", "weight": 3}, {"encounter": "trio_r9", "weight": 2}, {"encounter": "trio_r10", "weight": 2}],
+		"elite_water": [{"encounter": "elite_water", "weight": 1}],
+		"type_grass": [{"encounter": "solo_mystherbe", "weight": 2}, {"encounter": "trio_mix", "weight": 2}, {"encounter": "solo_bulbasaur", "weight": 2}, {"encounter": "solo_chikorita", "weight": 2}, {"encounter": "solo_treecko", "weight": 2}, {"encounter": "solo_turtwig", "weight": 2}, {"encounter": "solo_snivy", "weight": 2}, {"encounter": "solo_chespin", "weight": 2}, {"encounter": "solo_rowlet", "weight": 2}, {"encounter": "solo_grookey", "weight": 2}, {"encounter": "solo_sprigatito", "weight": 2}, {"encounter": "solo_sewaddle", "weight": 2}, {"encounter": "duo_r5", "weight": 3}, {"encounter": "duo_r7", "weight": 3}, {"encounter": "duo_r9", "weight": 3}, {"encounter": "duo_r10", "weight": 3}, {"encounter": "trio_r1", "weight": 2}, {"encounter": "trio_r2", "weight": 2}, {"encounter": "trio_r3", "weight": 2}, {"encounter": "trio_r6", "weight": 2}, {"encounter": "trio_r7", "weight": 2}, {"encounter": "solo_seedot", "weight": 2}],
+		"elite_grass": [{"encounter": "elite_grass", "weight": 1}],
+		"type_electric": [{"encounter": "solo_pikachu", "weight": 2}, {"encounter": "trio_mix", "weight": 2}, {"encounter": "solo_shinx", "weight": 2}, {"encounter": "solo_blitzle", "weight": 2}, {"encounter": "solo_pawmi", "weight": 2}, {"encounter": "duo_r8", "weight": 3}, {"encounter": "duo_r14", "weight": 3}, {"encounter": "trio_r1", "weight": 2}, {"encounter": "trio_r3", "weight": 2}, {"encounter": "trio_r4", "weight": 2}, {"encounter": "trio_r5", "weight": 2}, {"encounter": "trio_r8", "weight": 2}],
+		"elite_electric": [{"encounter": "elite_electric", "weight": 1}],
+		"type_bug": [{"encounter": "duo", "weight": 3}, {"encounter": "duo_insectes", "weight": 3}, {"encounter": "trio", "weight": 2}, {"encounter": "trio_vol", "weight": 2}, {"encounter": "solo_wurmple", "weight": 2}, {"encounter": "solo_sewaddle", "weight": 2}, {"encounter": "solo_grubbin", "weight": 2}, {"encounter": "duo_r3", "weight": 3}, {"encounter": "duo_r6", "weight": 3}, {"encounter": "duo_r10", "weight": 3}, {"encounter": "trio_r2", "weight": 2}, {"encounter": "solo_chenipan", "weight": 2}, {"encounter": "solo_aspicot", "weight": 2}, {"encounter": "solo_ledyba", "weight": 2}, {"encounter": "solo_kricketot", "weight": 2}, {"encounter": "solo_scatterbug", "weight": 2}, {"encounter": "solo_tarountula", "weight": 2}],
+		"elite_bug": [{"encounter": "elite_bug", "weight": 1}],
+		"type_poison": [{"encounter": "solo_mystherbe", "weight": 2}, {"encounter": "duo", "weight": 3}, {"encounter": "duo_insectes", "weight": 3}, {"encounter": "duo_nuit", "weight": 3}, {"encounter": "trio", "weight": 2}, {"encounter": "trio_vol", "weight": 2}, {"encounter": "trio_mix", "weight": 2}, {"encounter": "solo_bulbasaur", "weight": 2}, {"encounter": "duo_r8", "weight": 3}, {"encounter": "trio_r3", "weight": 2}, {"encounter": "solo_aspicot", "weight": 2}, {"encounter": "solo_nosferapti", "weight": 2}],
+		"elite_poison": [{"encounter": "elite_poison", "weight": 1}],
+		"type_flying": [{"encounter": "duo", "weight": 3}, {"encounter": "duo_nuit", "weight": 3}, {"encounter": "trio", "weight": 2}, {"encounter": "trio_vol", "weight": 2}, {"encounter": "solo_rowlet", "weight": 2}, {"encounter": "solo_hoothoot", "weight": 2}, {"encounter": "solo_pidove", "weight": 2}, {"encounter": "solo_fletchling", "weight": 2}, {"encounter": "duo_r4", "weight": 3}, {"encounter": "duo_r6", "weight": 3}, {"encounter": "duo_r8", "weight": 3}, {"encounter": "duo_r10", "weight": 3}, {"encounter": "duo_r12", "weight": 3}, {"encounter": "trio_r1", "weight": 2}, {"encounter": "trio_r3", "weight": 2}, {"encounter": "trio_r5", "weight": 2}, {"encounter": "trio_r6", "weight": 2}, {"encounter": "trio_r8", "weight": 2}, {"encounter": "solo_roucool", "weight": 2}, {"encounter": "solo_nosferapti", "weight": 2}, {"encounter": "solo_ledyba", "weight": 2}, {"encounter": "solo_taillow", "weight": 2}, {"encounter": "solo_starly", "weight": 2}, {"encounter": "solo_pikipek", "weight": 2}, {"encounter": "solo_rookidee", "weight": 2}],
+		"elite_flying": [{"encounter": "elite_flying", "weight": 1}],
+		"type_rock": [{"encounter": "solo_racaillou", "weight": 2}, {"encounter": "duo_elements", "weight": 3}, {"encounter": "trio_mix", "weight": 2}, {"encounter": "solo_roggenrola", "weight": 2}, {"encounter": "solo_rockruff", "weight": 2}, {"encounter": "duo_r9", "weight": 3}, {"encounter": "duo_r11", "weight": 3}, {"encounter": "trio_r6", "weight": 2}],
+		"elite_rock": [{"encounter": "elite_rock", "weight": 1}],
+		"wild_duos": [{"encounter": "duo", "weight": 3}, {"encounter": "duo_insectes", "weight": 3}, {"encounter": "duo_nuit", "weight": 3}, {"encounter": "duo_elements", "weight": 3}, {"encounter": "duo_r1", "weight": 3}, {"encounter": "duo_r2", "weight": 3}, {"encounter": "duo_r3", "weight": 3}, {"encounter": "duo_r4", "weight": 3}, {"encounter": "duo_r5", "weight": 3}, {"encounter": "duo_r6", "weight": 3}, {"encounter": "duo_r7", "weight": 3}, {"encounter": "duo_r8", "weight": 3}, {"encounter": "duo_r9", "weight": 3}, {"encounter": "duo_r10", "weight": 3}, {"encounter": "duo_r11", "weight": 3}, {"encounter": "duo_r12", "weight": 3}, {"encounter": "duo_r13", "weight": 3}, {"encounter": "duo_r14", "weight": 3}],
+		"wild_trios": [{"encounter": "trio", "weight": 3}, {"encounter": "trio_vol", "weight": 3}, {"encounter": "trio_mix", "weight": 3}, {"encounter": "trio_r1", "weight": 3}, {"encounter": "trio_r2", "weight": 3}, {"encounter": "trio_r3", "weight": 3}, {"encounter": "trio_r4", "weight": 3}, {"encounter": "trio_r5", "weight": 3}, {"encounter": "trio_r6", "weight": 3}, {"encounter": "trio_r7", "weight": 3}, {"encounter": "trio_r8", "weight": 3}, {"encounter": "trio_r9", "weight": 3}, {"encounter": "trio_r10", "weight": 3}],
+		"wild_trios_hard": [{"encounter": "trio_mix", "weight": 4}, {"encounter": "trio_r1", "weight": 4}, {"encounter": "trio_r2", "weight": 4}, {"encounter": "trio_r3", "weight": 4}, {"encounter": "trio_r4", "weight": 4}, {"encounter": "trio_r5", "weight": 4}, {"encounter": "trio_r6", "weight": 4}, {"encounter": "trio_r7", "weight": 4}, {"encounter": "trio_r8", "weight": 4}, {"encounter": "trio_r9", "weight": 4}, {"encounter": "trio_r10", "weight": 4}],
 		"boss": [
 			{
 				"encounter": "boss_champion",

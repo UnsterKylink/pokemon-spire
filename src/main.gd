@@ -9,6 +9,9 @@ extends Control
 ## story-007-champion-evolution-fin-de-partie (boss win -> evolution of the starter + 1-of-N card choice ->
 ## victory summary; HP 0 -> defeat summary; "Nouvelle partie" resets the whole run back to the starter choice).
 ## story-011-acces-au-deck (RunHud "Deck" button + the single DeckOverlay panel owned here: open_deck / close_deck).
+## story-012-structure-8-arenes (8 zones, each with its own map and gym; gym win -> loot + card reward -> BADGE screen
+## -> [evolution after the badges listed in zones.json] -> next zone map, or the victory after the last badge;
+## zone types are drawn with the run's seeded RNG). Badge flow API: get_last_badge() / get_badges() / badge_continue().
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -32,9 +35,11 @@ const SCREEN_ROOM: String = "room"
 const SCREEN_CENTER: String = "center"
 const SCREEN_MART: String = "mart"
 const SCREEN_EVOLUTION: String = "evolution"
+## Story 012: the badge screen (a PlaceholderRoomScreen until the UI agent replaces it; leave it with badge_continue()).
+const SCREEN_BADGE: String = "badge"
 const SCREEN_VICTORY: String = "victory"
 const SCREEN_DEFEAT: String = "defeat"
-## Room type whose win ends the act (no reward screen: evolution -> victory instead).
+## Room type of the zone's gym fight (story 012: its win pays loot + a card reward, then the badge; the last zone ends the run).
 const ROOM_BOSS: String = "boss"
 ## QA: player turns qa_lose_battle() ends at most before giving up.
 const QA_LOSE_MAX_TURNS: int = 60
@@ -49,6 +54,10 @@ var _starter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 ## Story 006: win loot (money / item / potion) and Poké Mart stock; appended to the rng list so older seeds are unchanged.
 var _loot_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _shop_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Story 012: draws the zone (gym) types at the start of a run; appended last so older seeds are unchanged.
+var _zone_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## The badge just awarded ({} before the first gym win): see RunState.award_badge.
+var _last_badge: Dictionary = {}
 ## What the last won fight paid: {"money": int, "item": ItemData|null, "potion": PotionData|null} ({} before any win).
 var _last_loot: Dictionary = {}
 ## Non-empty = every new run starts with this Pokémon without showing the choice (QA / `--starter=`).
@@ -134,11 +143,12 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_clear_screens()
 	_run = null
 	_last_loot = {}
+	_last_badge = {}
 	_encounter_id = ""
 	_fight_room_type = ""
 	_evolution_summary = {}
 	_hud.visible = false
-	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng]
+	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng, _zone_rng]
 	for i: int in rngs.size():
 		if act_seed != 0:
 			rngs[i].seed = act_seed + i + 1
@@ -157,6 +167,7 @@ func _begin_run(starter_id: String, act_seed: int) -> void:
 	var run: RunState = RunState.create_with_starter(_data, starter_id)
 	if run == null:
 		return
+	run.set_zones(_data.draw_zones(_zone_rng))  # story 012: the 8 gym types, in zone order
 	if not run.start_act(_data, act_seed):
 		push_error("Main: could not start the act")
 		return
@@ -201,6 +212,41 @@ func starter_choose(index_or_id: Variant) -> void:
 		_starter_screen.choose(index_or_id)
 	else:
 		_starter_screen.choose(_starter_choices.find(String(index_or_id)))
+
+
+# --- Zones and badges (story 012) --------------------------------------------------------------
+
+## Index (0-based) of the current zone; 0 without a run.
+func get_zone_index() -> int:
+	return _run.zone_index if _run != null else 0
+
+
+## The current zone's dict ({} without a run): type_id, type_name, leader, badge_name, modifiers... (GameData.draw_zones).
+func get_zone() -> Dictionary:
+	return _run.current_zone() if _run != null else {}
+
+
+## The badges earned so far, in order (see RunState.award_badge for the dict).
+func get_badges() -> Array[Dictionary]:
+	return _run.badges if _run != null else ([] as Array[Dictionary])
+
+
+## The badge awarded by the last gym win ({} before the first). While the badge screen is up it is the badge shown:
+## {id, name, index, zone_index, type_id, type_name, color: Color, leader, bonus, bonus_text, healed, max_hp_gain, unlocks}.
+func get_last_badge() -> Dictionary:
+	return _last_badge
+
+
+## Leaves the badge screen (the UI badge screen's button calls this too): evolution if zones.json
+## evolution_after_badges lists this badge, then the next zone's map, or the victory after the last badge. Ignored
+## outside the badge screen.
+func badge_continue() -> void:
+	if _screen_name != SCREEN_BADGE:
+		return
+	if _data.get_evolution_after_badges().has(_run.badges.size()) and not _run.evolution_applied:
+		_show_evolution()
+	else:
+		_next_zone_or_victory()
 
 
 ## QA: the live StarterScreen (null outside the choice).
@@ -577,14 +623,57 @@ func battle_defeat_continue() -> void:
 		_battle_screen.press_defeat_continue()
 
 
-## QA-ONLY: starts the Champion fight ("boss" room: its pool encounter and hp / strength modifiers, as on the map)
-## with the CURRENT run, without walking the map. The win goes to the evolution like the real boss.
+## QA-ONLY: starts the current zone's Champion fight ("boss" room: the zone's gym encounter and gym modifiers, as on the
+## map) with the CURRENT run, without walking the map. The win goes through the real gym flow (reward -> badge...).
 func qa_start_boss() -> void:
 	if _run == null:
 		return
-	var encounter_id: String = _data.pick_encounter(ROOM_BOSS, _run.total_floors(), _encounter_rng)
-	var mods: Dictionary = _data.get_room_modifiers(ROOM_BOSS)
+	var encounter_id: String = _data.pick_encounter(ROOM_BOSS, _run.zone_floors(), _encounter_rng, _run.current_zone())
+	var mods: Dictionary = _data.get_fight_modifiers(ROOM_BOSS, _run.current_zone())
 	_launch_battle(encounter_id, _data.create_enemies(encounter_id, float(mods["hp_multiplier"]), int(mods["strength_bonus"])), ROOM_BOSS)
+
+
+## QA-ONLY alias of qa_start_boss (story 012 wording).
+func qa_start_gym() -> void:
+	qa_start_boss()
+
+
+## QA-ONLY CHEAT: wins the current zone's gym through the real win path (starts the gym fight if none is running, then
+## the battle-won handler): loot + card reward screen next, then badge_continue-able badge screen after the reward.
+func qa_win_gym() -> void:
+	if _run == null:
+		return
+	if _battle_screen == null or _fight_room_type != ROOM_BOSS:
+		qa_start_boss()
+	if _battle_screen == null:
+		return
+	var ids: Array[String] = []
+	for e: Combatant in _battle_screen.get_battle().enemies:
+		ids.append(e.id)
+	_on_battle_won(ids)
+
+
+## QA-ONLY CHEAT: jumps to zone `index` (0-based) with a fresh map, keeping HP / deck / money / items; no badge or bonus is
+## granted for the zones skipped. False if the index is out of range.
+func qa_set_zone(index: int) -> bool:
+	if _run == null or index < 0 or index >= _run.zones.size():
+		return false
+	_run.jump_to_zone(index)
+	if not _run.start_act(_data, 0):
+		return false
+	_show_map()
+	return true
+
+
+## QA-ONLY CHEAT: enters the current zone's gym room directly (marks it visited) and starts the Champion fight.
+func qa_skip_to_gym() -> void:
+	if _run == null or _run.act == null:
+		return
+	var gym_id: String = _run.act.graph.boss_id()
+	_run.act.current_node_id = gym_id
+	if not _run.act.visited.has(gym_id):
+		_run.act.visited.append(gym_id)
+	_start_room_fight(_run.act.current_node())
 
 
 ## QA-ONLY CHEAT: sets every living enemy of the live battle to `value` HP (clamped 1..max), to win quickly.
@@ -680,8 +769,8 @@ func _on_node_chosen(node_id: String) -> void:
 
 
 func _start_room_fight(node: MapNode) -> void:
-	var encounter_id: String = _data.pick_encounter(node.room_type, node.floor, _encounter_rng)
-	var mods: Dictionary = _data.get_room_modifiers(node.room_type)
+	var encounter_id: String = _data.pick_encounter(node.room_type, node.floor, _encounter_rng, _run.current_zone())
+	var mods: Dictionary = _data.get_fight_modifiers(node.room_type, _run.current_zone())
 	var enemies: Array[Combatant] = _data.create_enemies(encounter_id, float(mods["hp_multiplier"]), int(mods["strength_bonus"]))
 	if enemies.is_empty():
 		push_error("Main: no enemies for room '%s' (encounter '%s')" % [node.id, encounter_id])
@@ -710,9 +799,6 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_run.record_battle_result(_battle_screen.get_battle().player, defeated_ids)
-	if _fight_room_type == ROOM_BOSS:
-		_show_evolution()  # story 007: the Champion pays no loot and no reward screen
-		return
 	_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
 	var weights: Dictionary = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
 	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
@@ -732,8 +818,41 @@ func _on_card_chosen(card: CardData) -> void:
 	_after_reward()
 
 
-## Back to the map (the boss never reaches the reward screen since story 007).
+## Back to the map; after a gym win (story 012) the badge comes first.
 func _after_reward() -> void:
+	if _fight_room_type == ROOM_BOSS:
+		_show_badge()
+	else:
+		_show_map()
+
+
+## Story 012: awards the zone's badge (RunState.award_badge: bonuses + heal, data) and shows the badge screen. Until the UI
+## agent builds the real screen this is a PlaceholderRoomScreen (get_room_screen()); its button calls badge_continue().
+func _show_badge() -> void:
+	_last_badge = _run.award_badge(_data)
+	_clear_screens()
+	if _last_badge.is_empty():  # no zones configured: nothing to award
+		_next_zone_or_victory()
+		return
+	_room_screen = ROOM_SCENE.instantiate() as PlaceholderRoomScreen
+	_room_screen.finished.connect(badge_continue)
+	_set_screen(_room_screen, SCREEN_BADGE)
+	var b: Dictionary = _last_badge
+	var body: String = "Tu as battu %s, Champion de l'arène %s !\n%s\n\nBadges : %d/%d" % [b["leader"], b["type_name"],
+			b["bonus_text"], _run.badges.size(), _run.zones.size()]
+	_room_screen.setup("%s obtenu !" % b["name"], body, "Continuer" if not _run.is_final_zone() else "Terminer", b["color"])
+
+
+## After the badge (and the evolution): the next zone's map, or the victory once the last zone's gym is beaten
+## (temporary end until story 013, Conseil 4).
+func _next_zone_or_victory() -> void:
+	if _run.is_final_zone() or not _run.advance_zone():
+		_show_victory()
+		return
+	if not _run.start_act(_data, 0):
+		push_error("Main: could not start zone %d" % (_run.zone_index + 1))
+		_show_victory()
+		return
 	_show_map()
 
 
@@ -749,7 +868,7 @@ func _on_new_run_requested() -> void:
 	start_new_run(_cli_seed)
 
 
-## Story 007: the Champion is beaten -> the chosen starter evolves (RunState.evolve_starter, data-driven), then
+## Story 007 (story 012: after the badges of zones.json evolution_after_badges): the chosen starter evolves (RunState.evolve_starter, data-driven), then
 ## the evolved form offers its cards (EvolutionOffer). The run's HP / deck change here; the screen only displays.
 func _show_evolution() -> void:
 	_clear_screens()  # before the offers: it resets _evolution_offers
@@ -757,7 +876,7 @@ func _show_evolution() -> void:
 	_evolution_offers = EvolutionOffer.generate(_data, _run)
 	_evolution_screen = EvolutionScreen.new()
 	_evolution_screen.card_chosen.connect(_on_evolution_card_chosen)
-	_evolution_screen.finished.connect(_show_victory)
+	_evolution_screen.finished.connect(_next_zone_or_victory)
 	_set_screen(_evolution_screen, SCREEN_EVOLUTION)
 	_evolution_screen.setup(_data, _run, _evolution_summary, _evolution_offers)
 

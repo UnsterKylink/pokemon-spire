@@ -4,6 +4,8 @@ extends RefCounted
 ## Pure logic, no Node access. Implements: story-004-recompenses-vol-attaque, criterion 4.
 ## Story 007 (story-007-champion-evolution-fin-de-partie): evolve_starter() after the Champion, run stats for the
 ## victory / defeat summary (get_summary), is_defeated().
+## Story 012 (story-012-structure-8-arenes): the run is `zones` (drawn at the start, zone_index = the current one);
+## each zone has its own act map; beating a gym awards a badge (permanent bonuses, data: zones.json badge_rewards).
 
 var player_id: String = ""
 var display_name: String = ""
@@ -36,8 +38,23 @@ var _data: GameData
 ## Pokémon on the field at the start of every battle (GameData.get_starter_pokemon_id, story 009).
 var starter_pokemon_id: String = ""
 var _pokemon_infos: Dictionary = {}  # pokemon id -> info dict (GameData.get_pokemon_info)
-## Progress on the act map (null until start_act is called).
+## Progress on the act map of the CURRENT zone (null until start_act is called).
 var act: ActProgress = null
+## Story 012: index (0-based) of the current zone in `zones`.
+var zone_index: int = 0
+## Story 012: the zones of this run (GameData.draw_zones): type, leader, modifiers... Empty = a single legacy act.
+var zones: Array[Dictionary] = []
+## Story 012: badges earned so far, in order: see award_badge().
+var badges: Array[Dictionary] = []
+## Permanent badge bonuses on top of hand_size / energy_per_turn (story 012).
+var bonus_hand_size: int = 0
+var bonus_energy: int = 0
+## Seed of the first zone's map; the next zones derive theirs from it (deterministic).
+var _base_map_seed: int = 0
+## Rooms entered in the zones already left (summary: floors climbed across zones).
+var _floors_done: int = 0
+## Added to the base map seed per zone index to derive a zone's map seed.
+const ZONE_SEED_STEP: int = 1000003
 
 
 ## Starts a run from the player's data: full HP, starter deck copy. Null if the id is unknown.
@@ -140,12 +157,12 @@ func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: Random
 
 ## Energy per turn including the (single) energy_up_per_turn item.
 func effective_energy_per_turn() -> int:
-	return energy_per_turn + ItemEffects.passive_total(items, "energy_up_per_turn")
+	return energy_per_turn + bonus_energy + ItemEffects.passive_total(items, "energy_up_per_turn")
 
 
 ## Cards drawn per turn including draw_up items.
 func effective_hand_size() -> int:
-	return hand_size + ItemEffects.passive_total(items, "draw_up")
+	return hand_size + bonus_hand_size + ItemEffects.passive_total(items, "draw_up")
 
 
 func _on_battle_potion_used(potion: PotionData) -> void:
@@ -169,14 +186,105 @@ func is_defeated() -> bool:
 	return hp <= 0
 
 
-## Rooms entered on the act map (one per floor), 0 without an act.
+## Rooms entered across the whole run (zones already left + the current map), 0 without an act.
 func floors_climbed() -> int:
-	return act.visited.size() if act != null else 0
+	return _floors_done + (act.visited.size() if act != null else 0)
 
 
-## Floors of the act map, 0 without an act.
+## Floors of the whole run (sum of the zones' maps; the single act's floors without zones), 0 without an act.
 func total_floors() -> int:
+	if not zones.is_empty() and _data != null:
+		var total: int = 0
+		for z: Dictionary in zones:
+			total += _data.get_zone_floors(int(z["number"]))
+		return total
 	return act.graph.floors if act != null and act.graph != null else 0
+
+
+## Floors of the CURRENT zone's map (what the map header shows), 0 without an act.
+func zone_floors() -> int:
+	return act.graph.floors if act != null and act.graph != null else 0
+
+
+# --- Zones and badges (story 012) -------------------------------------------------------------------
+
+## Sets the run's zones (GameData.draw_zones) and goes back to the first one.
+func set_zones(new_zones: Array[Dictionary]) -> void:
+	zones = new_zones
+	zone_index = 0
+	badges = []
+	_floors_done = 0
+	_base_map_seed = 0
+
+
+## The current zone's dict ({} without zones): see GameData.draw_zones.
+func current_zone() -> Dictionary:
+	return zones[zone_index] if zone_index >= 0 and zone_index < zones.size() else {}
+
+
+## True on the last zone (its gym ends the run). True without zones (a single act).
+func is_final_zone() -> bool:
+	return zones.is_empty() or zone_index >= zones.size() - 1
+
+
+## Moves to the next zone; its map is NOT built yet (call start_act). False (no change) on the last zone.
+## HP, deck, money, items, potions and badges are kept; the floors of the zone just left are added to the stats.
+func advance_zone() -> bool:
+	if is_final_zone():
+		return false
+	_floors_done += act.visited.size() if act != null else 0
+	zone_index += 1
+	act = null
+	return true
+
+
+## QA-ONLY: jumps to zone `index` (0-based, clamped) without playing the zones before: no badge, no bonus.
+## The map is NOT built (call start_act).
+func jump_to_zone(index: int) -> void:
+	zone_index = clampi(index, 0, maxi(zones.size() - 1, 0))
+	act = null
+	_floors_done = 0
+	if _data != null:
+		for i: int in zone_index:
+			_floors_done += _data.get_zone_floors(i + 1)
+
+
+## The current zone's gym is beaten: awards its badge (once per zone; a second call returns the same badge) and applies
+## the badge's data bonus (zones.json badge_rewards[n]): max HP (+HP), +cards per turn, +energy, then the heal of
+## heal_percent % of max HP. Returns {id, name, index (1-based badge number), zone_index, type_id, type_name, color,
+## leader, bonus: the reward dict, bonus_text (FR), healed: HP restored, max_hp_gain, unlocks: {wild, elite} pool ids}.
+## {} without zones.
+func award_badge(data: GameData) -> Dictionary:
+	var zone: Dictionary = current_zone()
+	if zone.is_empty():
+		return {}
+	if badges.size() > zone_index:
+		return badges[zone_index]
+	var number: int = badges.size() + 1
+	var reward: Dictionary = data.get_badge_reward(number)
+	var parts: Array[String] = []
+	var hp_gain: int = int(reward.get("max_hp", 0))
+	if hp_gain > 0:
+		gain_max_hp(hp_gain)
+		parts.append("+%d PV max" % hp_gain)
+	var cards: int = int(reward.get("hand_size", 0))
+	if cards > 0:
+		bonus_hand_size += cards
+		parts.append("+%d carte piochée par tour" % cards)
+	var energy: int = int(reward.get("energy_per_turn", 0))
+	if energy > 0:
+		bonus_energy += energy
+		parts.append("+%d énergie par tour" % energy)
+	var healed: int = heal_percent(float(reward.get("heal_percent", 0)))
+	if healed > 0:
+		parts.append("%d PV rendus" % healed)
+	var badge: Dictionary = {"id": String(zone["badge_id"]), "name": String(zone["badge_name"]), "index": number,
+			"zone_index": zone_index, "type_id": String(zone["type_id"]), "type_name": String(zone["type_name"]),
+			"color": data.get_type_color(String(zone["type_id"])), "leader": String(zone["leader"]), "bonus": reward,
+			"bonus_text": ", ".join(parts), "healed": healed, "max_hp_gain": hp_gain,
+			"unlocks": (reward.get("unlock_pools", {}) as Dictionary).duplicate(true)}
+	badges.append(badge)
+	return badge
 
 
 ## Story 007: the Champion is beaten. Applies the official evolution of the chosen starter (GameData.get_evolution,
@@ -217,13 +325,18 @@ func evolve_starter(data: GameData) -> Dictionary:
 
 
 ## Story 007: everything the victory / defeat screen shows, read from the run:
-## {pokemon_id, name, sprite, types, hp, max_hp, floors, total_floors, enemies_defeated, battles_won, money,
-##  item_names: Array[String], deck_size, evolved}.
+## {pokemon_id, name, sprite, types, hp, max_hp, floors (across all zones), total_floors (all zones), enemies_defeated,
+##  battles_won, money, item_names: Array[String], deck_size, evolved, zone (1-based current zone), zone_count,
+##  badges (count), badge_names: Array[String]}.
 func get_summary() -> Dictionary:
 	var item_names: Array[String] = []
 	for it: ItemData in items:
 		item_names.append(it.display_name)
-	return {"pokemon_id": starter_pokemon_id, "name": display_name, "sprite": sprite_path, "types": type_ids.duplicate(),
+	var badge_names: Array[String] = []
+	for b: Dictionary in badges:
+		badge_names.append(String(b["name"]))
+	return {"zone": zone_index + 1, "zone_count": maxi(zones.size(), 1), "badges": badges.size(), "badge_names": badge_names,
+			"pokemon_id": starter_pokemon_id, "name": display_name, "sprite": sprite_path, "types": type_ids.duplicate(),
 			"hp": hp, "max_hp": max_hp, "floors": floors_climbed(), "total_floors": total_floors(),
 			"enemies_defeated": enemies_defeated, "battles_won": battles_won, "money": money,
 			"item_names": item_names, "deck_size": deck.size(), "evolved": evolved}
@@ -253,14 +366,20 @@ func get_deck_entries() -> Array[Dictionary]:
 	return entries
 
 
-## Generates the act map and starts progress on it (seed 0 = random; graph.seed holds the used seed).
+## Generates the map of the CURRENT zone (the single act without zones) and starts progress on it (seed 0 = random for
+## the first zone, derived from the first zone's seed for the next ones; graph.seed holds the used seed).
 ## Returns false if `data` has no valid act config.
 func start_act(data: GameData, act_seed: int = 0) -> bool:
-	var config: Dictionary = data.get_act_config()
+	var config: Dictionary = data.get_zone_act_config(zone_index + 1) if not zones.is_empty() else data.get_act_config()
 	if config.is_empty():
 		push_error("RunState: no act config loaded")
 		return false
-	act = ActProgress.create(MapGenerator.generate(config, act_seed))
+	var used_seed: int = act_seed
+	if used_seed == 0 and zone_index > 0 and _base_map_seed != 0:
+		used_seed = _base_map_seed + zone_index * ZONE_SEED_STEP
+	act = ActProgress.create(MapGenerator.generate(config, used_seed))
+	if zone_index == 0:
+		_base_map_seed = act.graph.seed
 	return true
 
 

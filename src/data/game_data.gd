@@ -15,6 +15,12 @@ const FIGHT_ROOM_TYPES: Array[String] = ["wild", "elite", "boss"]
 const DEFAULT_ITEMS_PATH: String = "res://assets/data/items.json"
 const DEFAULT_POTIONS_PATH: String = "res://assets/data/potions.json"
 const DEFAULT_SHOP_PATH: String = "res://assets/data/shop.json"
+## Story 012: zones, gym types, tiers, badge rewards.
+const DEFAULT_ZONES_PATH: String = "res://assets/data/zones.json"
+## Room types whose fights are biased toward the zone type and scaled by the zone "modifiers" (the gym uses "gym_modifiers").
+const ZONE_TYPED_ROOMS: Array[String] = ["wild", "elite"]
+## The room type that holds the zone's gym fight.
+const ROOM_GYM: String = "boss"
 const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "nothing"]
 const NO_FLOOR_LIMIT: int = 1000000
 ## Minimum number of types the type table must define (story 003).
@@ -45,14 +51,15 @@ var _shop_cfg: Dictionary = {}  # validated shop.json
 var _evolutions: Dictionary = {}  # base pokemon id -> validated evolution entry (story 007)
 var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (for get_pokemon_info)
 var _evolution_hp_bonus_default: int = 0
+var _zones_cfg: Dictionary = {}  # validated zones.json (story 012)
 
 
-## Loads all nine files (act and events story 005; items, potions, shop story 006). Returns false (after push_error) if anything is missing or invalid.
+## Loads all ten files (act and events story 005; items, potions, shop story 006; zones story 012). Returns false (after push_error) if anything is missing or invalid.
 func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
 		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH,
 		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH,
 		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
-		shop_path: String = DEFAULT_SHOP_PATH) -> bool:
+		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_cards.clear()
 	_players.clear()
@@ -76,6 +83,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_evolutions = {}
 	_evolved_forms = {}
 	_evolution_hp_bonus_default = 0
+	_zones_cfg = {}
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -85,9 +93,10 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	var items_root: Dictionary = _read_json(items_path)
 	var potions_root: Dictionary = _read_json(potions_path)
 	var shop_root: Dictionary = _read_json(shop_path)
+	var zones_root: Dictionary = _read_json(zones_path)
 	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty() or rewards_root.is_empty() \
 			or act_root.is_empty() or events_root.is_empty() or items_root.is_empty() or potions_root.is_empty() \
-			or shop_root.is_empty():
+			or shop_root.is_empty() or zones_root.is_empty():
 		return false
 	var chart: TypeChart = TypeChart.from_dict(types_root)
 	if chart == null:
@@ -111,6 +120,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_items(items_root) and ok
 	ok = _load_potions(potions_root) and ok
 	ok = _load_shop(shop_root) and ok
+	ok = _load_zones(zones_root) and ok
 	return ok
 
 
@@ -296,14 +306,27 @@ func get_room_rarity_weights(room_type: String) -> Dictionary:
 
 ## Picks an encounter id for a fight room at `floor_number` (weighted, from the room's pool for that floor).
 ## "" (after push_error) if the room has no pool.
-func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGenerator) -> String:
+## Story 012: with a `zone` (RunState.current_zone()), the gym room returns the zone's Champion encounter; wild / elite
+## rooms draw from the zone's type pool with probability wild_type_share / elite_type_share (one extra rng roll),
+## else from the room's pool (the early-floor override only if the zone's tier has early_pool) PLUS the pools
+## unlocked by the badges already earned. Without a zone nothing changes (same rolls as before story 012).
+func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGenerator, zone: Dictionary = {}) -> String:
+	if not zone.is_empty() and room_type == ROOM_GYM:
+		return String(zone["gym_encounter"])
 	var room: Dictionary = get_room_type(room_type)
-	var pool_id: String = _pool_id_for(room, floor_number)
+	var pool_id: String = _pool_id_for(room, floor_number, zone.is_empty() or bool(zone.get("early_pool", true)))
 	var pools: Dictionary = _act.get("encounter_pools", {})
 	if pool_id.is_empty() or not pools.has(pool_id):
 		push_error("GameData: room type '%s' has no encounter pool" % room_type)
 		return ""
 	var entries: Array = pools[pool_id]
+	if not zone.is_empty() and room_type in ZONE_TYPED_ROOMS:
+		if rng.randf() < float(zone.get(room_type + "_type_share", 0.0)):
+			entries = pools[String(zone[room_type + "_pool"])]
+		else:
+			entries = entries.duplicate()
+			for extra: String in zone.get("unlocked_" + room_type + "_pools", []):
+				entries.append_array(pools[extra])
 	var total: float = 0.0
 	for entry: Dictionary in entries:
 		total += float(entry["weight"])
@@ -329,6 +352,309 @@ func get_event(event_id: String) -> Dictionary:
 		push_error("GameData: unknown event id '%s'" % event_id)
 		return {}
 	return (_events[event_id] as Dictionary).duplicate(true)
+
+
+# --- Zones, gyms, badges (story 012) ----------------------------------------------------------------
+
+## Number of zones (= gyms = badges) in a run (zones.json zone_count).
+func get_zone_count() -> int:
+	return int(_zones_cfg.get("zone_count", 0))
+
+
+## Gym type ids that may be drawn (pool of zones.json gym_types), sorted.
+func get_gym_type_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for k: String in (_zones_cfg.get("gym_types", {}) as Dictionary).keys():
+		ids.append(k)
+	ids.sort()
+	return ids
+
+
+## Draws the zones of a new run with the injected (seeded) rng: `zone_count` DIFFERENT gym types out of the pool,
+## in draw order = zone order (difficulty comes from the zone index, not from the type). Each zone is a dict:
+## {index (0-based), number (1-based), type_id, type_name, leader, gym_encounter, badge_id, badge_name, wild_pool,
+## elite_pool, gym_modifiers {hp_multiplier, strength_bonus}, modifiers {hp_multiplier, strength_bonus},
+## wild_type_share, elite_type_share, early_pool, unlocked_wild_pools, unlocked_elite_pools}.
+## Empty (push_error) if the data is not loaded. Same rng state = same zones.
+func draw_zones(rng: RandomNumberGenerator) -> Array[Dictionary]:
+	var zones: Array[Dictionary] = []
+	var count: int = get_zone_count()
+	var pool: Array[String] = get_gym_type_ids()
+	if count <= 0 or pool.size() < count:
+		push_error("GameData: zones are not loaded or the gym type pool is too small")
+		return zones
+	for i: int in range(pool.size() - 1, 0, -1):  # Fisher-Yates
+		var j: int = rng.randi_range(0, i)
+		var tmp: String = pool[i]
+		pool[i] = pool[j]
+		pool[j] = tmp
+	var gyms: Dictionary = _zones_cfg["gym_types"]
+	var tiers: Array = _zones_cfg["tiers"]
+	for i: int in count:
+		var type_id: String = pool[i]
+		var g: Dictionary = gyms[type_id]
+		var tier: Dictionary = tiers[i]
+		var zone: Dictionary = {"index": i, "number": i + 1, "type_id": type_id, "type_name": get_type_name(type_id),
+				"leader": String(g["leader"]), "gym_encounter": String(g["encounter"]), "badge_id": String(g["badge_id"]),
+				"badge_name": String(g["badge_name"]), "wild_pool": String(g["wild_pool"]), "elite_pool": String(g["elite_pool"]),
+				"gym_modifiers": _modifiers_of(tier["gym_modifiers"]), "modifiers": _modifiers_of(tier["modifiers"]),
+				"wild_type_share": float(tier["wild_type_share"]), "elite_type_share": float(tier["elite_type_share"]),
+				"early_pool": bool(tier["early_pool"]), "unlocked_wild_pools": [], "unlocked_elite_pools": []}
+		for badge_number: int in range(1, i + 1):  # badges earned in the previous zones
+			var unlock: Dictionary = (get_badge_reward(badge_number).get("unlock_pools", {}) as Dictionary)
+			for pool_id: String in unlock.get("wild", []):
+				if not (zone["unlocked_wild_pools"] as Array).has(pool_id):
+					(zone["unlocked_wild_pools"] as Array).append(pool_id)
+			for pool_id: String in unlock.get("elite", []):
+				if not (zone["unlocked_elite_pools"] as Array).has(pool_id):
+					(zone["unlocked_elite_pools"] as Array).append(pool_id)
+		zones.append(zone)
+	return zones
+
+
+func _modifiers_of(m: Dictionary) -> Dictionary:
+	return {"hp_multiplier": float(m["hp_multiplier"]), "strength_bonus": int(m["strength_bonus"])}
+
+
+## The act config (same shape as get_act_config) for zone number `zone_number` (1-based): act1.json with the
+## zone_overrides of zones.json merged in (map fields, forced_floors). Feed it to MapGenerator.generate.
+func get_zone_act_config(zone_number: int) -> Dictionary:
+	var config: Dictionary = get_act_config()
+	if config.is_empty():
+		return config
+	var ov: Dictionary = (_zones_cfg.get("zone_overrides", {}) as Dictionary).get(str(zone_number), {})
+	for key: String in (ov.get("map", {}) as Dictionary).keys():
+		config["map"][key] = ov["map"][key]
+	if ov.has("forced_floors"):
+		config["placement"]["forced_floors"] = (ov["forced_floors"] as Dictionary).duplicate()
+	return config
+
+
+## Floors of the map of zone `zone_number` (1-based).
+func get_zone_floors(zone_number: int) -> int:
+	return int((get_zone_act_config(zone_number).get("map", {}) as Dictionary).get("floors", 0))
+
+
+## Fight modifiers for a fight in `room_type` inside `zone`: the room's (act1.json) combined with the zone's
+## (hp_multiplier multiplied, strength_bonus added). The gym uses the tier's gym_modifiers, wild / elite its
+## modifiers, other rooms nothing. Without a zone = get_room_modifiers.
+func get_fight_modifiers(room_type: String, zone: Dictionary = {}) -> Dictionary:
+	var m: Dictionary = get_room_modifiers(room_type)
+	if zone.is_empty():
+		return m
+	var zm: Dictionary = {}
+	if room_type == ROOM_GYM:
+		zm = zone["gym_modifiers"]
+	elif room_type in ZONE_TYPED_ROOMS:
+		zm = zone["modifiers"]
+	else:
+		return m
+	return {"hp_multiplier": float(m["hp_multiplier"]) * float(zm["hp_multiplier"]),
+			"strength_bonus": int(m["strength_bonus"]) + int(zm["strength_bonus"])}
+
+
+## Reward of badge number `badge_number` (1-based) {max_hp, hand_size, energy_per_turn, heal_percent (always set),
+## unlock_pools {wild, elite}} (copy); {} if unknown.
+func get_badge_reward(badge_number: int) -> Dictionary:
+	var rewards: Dictionary = _zones_cfg.get("badge_rewards", {})
+	if not rewards.has(str(badge_number)):
+		return {}
+	var r: Dictionary = (rewards[str(badge_number)] as Dictionary).duplicate(true)
+	if not r.has("heal_percent"):
+		r["heal_percent"] = float(_zones_cfg.get("badge_heal_percent", 0))
+	return r
+
+
+## Badge numbers after which the starter evolves (zones.json evolution_after_badges).
+func get_evolution_after_badges() -> Array[int]:
+	var result: Array[int] = []
+	for n: Variant in _zones_cfg.get("evolution_after_badges", []):
+		result.append(int(n))
+	return result
+
+
+## Validates zones.json against the loaded cards / pokemon / act data. Reports every problem, never crashes.
+func _load_zones(root: Dictionary) -> bool:
+	var ok: bool = true
+	if not _is_positive_int(root.get("zone_count", null)):
+		push_error("GameData: zones file needs a positive integer 'zone_count'")
+		return false
+	var count: int = int(root["zone_count"])
+	if not _is_positive_int(root.get("gym_team_size", null)):
+		push_error("GameData: zones file needs a positive integer 'gym_team_size'")
+		return false
+	var team_size: int = int(root["gym_team_size"])
+	var pools: Dictionary = _act.get("encounter_pools", {})
+	# Gym types.
+	var gyms_v: Variant = root.get("gym_types", null)
+	if not (gyms_v is Dictionary):
+		push_error("GameData: zones file needs a 'gym_types' object")
+		return false
+	var gyms: Dictionary = gyms_v
+	if gyms.size() < count:
+		push_error("GameData: gym_types has %d types, zone_count is %d" % [gyms.size(), count])
+		ok = false
+	var badge_ids: Dictionary = {}
+	for type_id: String in gyms.keys():
+		var label: String = "gym type '%s'" % type_id
+		var g_v: Variant = gyms[type_id]
+		if not _type_chart.is_known_type(type_id) or not _starter_cards_by_type.has(type_id) or not (g_v is Dictionary):
+			push_error("GameData: %s must be an object for a known type that has starter cards" % label)
+			ok = false
+			continue
+		var g: Dictionary = g_v
+		for key: String in ["leader", "badge_id", "badge_name"]:
+			if not (g.get(key, null) is String) or String(g[key]).is_empty():
+				push_error("GameData: %s needs a non-empty '%s'" % [label, key])
+				ok = false
+		if g.get("badge_id", null) is String:
+			if badge_ids.has(g["badge_id"]):
+				push_error("GameData: %s: badge_id '%s' is already used" % [label, g["badge_id"]])
+				ok = false
+			badge_ids[g["badge_id"]] = true
+		for key: String in ["wild_pool", "elite_pool"]:
+			if not (g.get(key, null) is String) or not pools.has(g[key]):
+				push_error("GameData: %s: '%s' must name an encounter pool of the act file" % [label, key])
+				ok = false
+		var team_v: Variant = _encounters.get(g.get("encounter", null), null) if g.get("encounter", null) is String else null
+		if not (team_v is Array) or (team_v as Array).size() != team_size:
+			push_error("GameData: %s: 'encounter' must name an encounter of exactly %d Pokémon" % [label, team_size])
+			ok = false
+		else:
+			var carriers: int = 0
+			for enemy_id: String in (team_v as Array):
+				if (get_pokemon_info(enemy_id)["types"] as Array).has(type_id):
+					carriers += 1
+			if carriers < 1:
+				push_error("GameData: %s: nobody in the team '%s' has that type" % [label, g["encounter"]])
+				ok = false
+		if get_carriers_for_type(type_id).size() < team_size:
+			push_error("GameData: %s: fewer than %d roster Pokémon carry that type" % [label, team_size])
+			ok = false
+	# Tiers.
+	var tiers_v: Variant = root.get("tiers", null)
+	if not (tiers_v is Array) or (tiers_v as Array).size() != count:
+		push_error("GameData: zones file needs a 'tiers' array with one entry per zone (%d)" % count)
+		return false
+	var prev_hp: float = 0.0
+	var prev_str: int = 0
+	for i: int in count:
+		var tier_v: Variant = (tiers_v as Array)[i]
+		var label: String = "tier #%d" % (i + 1)
+		if not (tier_v is Dictionary):
+			push_error("GameData: %s must be an object" % label)
+			ok = false
+			continue
+		var tier: Dictionary = tier_v
+		var tier_ok: bool = true
+		for key: String in ["gym_modifiers", "modifiers"]:
+			var m_v: Variant = tier.get(key, null)
+			if not (m_v is Dictionary) or not _is_number((m_v as Dictionary).get("hp_multiplier", null)) \
+					or (m_v as Dictionary)["hp_multiplier"] <= 0 or not _is_number((m_v as Dictionary).get("strength_bonus", null)) \
+					or (m_v as Dictionary)["strength_bonus"] < 0 or (m_v as Dictionary)["strength_bonus"] != floorf((m_v as Dictionary)["strength_bonus"]):
+				push_error("GameData: %s.%s needs {hp_multiplier > 0, strength_bonus integer >= 0}" % [label, key])
+				tier_ok = false
+		for key: String in ["wild_type_share", "elite_type_share"]:
+			if not (_is_number(tier.get(key, null)) and tier[key] >= 0 and tier[key] <= 1):
+				push_error("GameData: %s.%s must be between 0 and 1" % [label, key])
+				tier_ok = false
+		if not (tier.get("early_pool", null) is bool):
+			push_error("GameData: %s.early_pool must be a boolean" % label)
+			tier_ok = false
+		if tier_ok:
+			var gm: Dictionary = tier["gym_modifiers"]
+			if float(gm["hp_multiplier"]) < prev_hp or int(gm["strength_bonus"]) < prev_str:
+				push_error("GameData: %s: gym difficulty must not decrease from one zone to the next" % label)
+				tier_ok = false
+			prev_hp = float(gm["hp_multiplier"])
+			prev_str = int(gm["strength_bonus"])
+		ok = ok and tier_ok
+	# Per-zone map overrides: the merged config must still describe a valid map.
+	var overrides_v: Variant = root.get("zone_overrides", {})
+	if not (overrides_v is Dictionary):
+		push_error("GameData: zones 'zone_overrides' must be an object")
+		return false
+	for key: String in (overrides_v as Dictionary).keys():
+		if not key.is_valid_int() or int(key) < 1 or int(key) > count or not ((overrides_v as Dictionary)[key] is Dictionary):
+			push_error("GameData: zone_overrides['%s'] must be an object for a zone number 1..%d" % [key, count])
+			ok = false
+			continue
+		var m: Dictionary = (_act.get("map", {}) as Dictionary).duplicate()
+		var forced: Dictionary = ((_act.get("placement", {}) as Dictionary).get("forced_floors", {}) as Dictionary).duplicate()
+		var ov: Dictionary = (overrides_v as Dictionary)[key]
+		for k: String in (ov.get("map", {}) as Dictionary).keys():
+			m[k] = ov["map"][k]
+		if ov.has("forced_floors") and ov["forced_floors"] is Dictionary:
+			forced = ov["forced_floors"]
+		var map_ok: bool = true
+		for k: String in ["floors", "width", "start_nodes", "paths", "boss_floor_nodes"]:
+			map_ok = map_ok and _is_positive_int(m.get(k, null))
+		if map_ok:
+			map_ok = int(m["floors"]) >= 3 and int(m["start_nodes"]) <= int(m["width"]) and int(m["paths"]) >= int(m["start_nodes"]) \
+					and int(m["boss_floor_nodes"]) == 1 and forced.get(str(int(m["floors"])), null) == "boss"
+		if not map_ok:
+			push_error("GameData: zone_overrides['%s'] gives an invalid map (floors >= 3, start_nodes <= width, paths >= start_nodes, last floor 'boss')" % key)
+			ok = false
+	# Badge rewards.
+	var rewards_v: Variant = root.get("badge_rewards", null)
+	if not (rewards_v is Dictionary):
+		push_error("GameData: zones file needs a 'badge_rewards' object")
+		return false
+	var limits_v: Variant = root.get("bonus_limits", {})
+	var limits: Dictionary = limits_v if limits_v is Dictionary else {}
+	var totals: Dictionary = {"hand_size": 0, "energy_per_turn": 0}
+	if not (_is_number(root.get("badge_heal_percent", null)) and root["badge_heal_percent"] >= 0 and root["badge_heal_percent"] <= 100):
+		push_error("GameData: zones file needs 'badge_heal_percent' between 0 and 100")
+		ok = false
+	for n: int in range(1, count + 1):
+		var r_v: Variant = (rewards_v as Dictionary).get(str(n), null)
+		var label: String = "badge_rewards['%d']" % n
+		if not (r_v is Dictionary):
+			push_error("GameData: %s is missing (one reward per badge)" % label)
+			ok = false
+			continue
+		var r: Dictionary = r_v
+		for key: String in ["max_hp", "hand_size", "energy_per_turn"]:
+			if r.has(key):
+				if not (_is_number(r[key]) and r[key] >= 0 and r[key] == floorf(r[key])):
+					push_error("GameData: %s.%s must be an integer >= 0" % [label, key])
+					ok = false
+				elif totals.has(key):
+					totals[key] += int(r[key])
+		if r.has("heal_percent") and not (_is_number(r["heal_percent"]) and r["heal_percent"] >= 0 and r["heal_percent"] <= 100):
+			push_error("GameData: %s.heal_percent must be between 0 and 100" % label)
+			ok = false
+		var unlock_v: Variant = r.get("unlock_pools", {})
+		if not (unlock_v is Dictionary):
+			push_error("GameData: %s.unlock_pools must be an object" % label)
+			ok = false
+			continue
+		for key: String in (unlock_v as Dictionary).keys():
+			var list_v: Variant = (unlock_v as Dictionary)[key]
+			if key not in ZONE_TYPED_ROOMS or not (list_v is Array):
+				push_error("GameData: %s.unlock_pools['%s'] must be an array under 'wild' or 'elite'" % [label, key])
+				ok = false
+				continue
+			for pool_id: Variant in (list_v as Array):
+				if not (pool_id is String) or not pools.has(pool_id):
+					push_error("GameData: %s unlocks unknown encounter pool '%s'" % [label, str(pool_id)])
+					ok = false
+	for key: String in totals.keys():
+		if totals[key] > int(limits.get(key, 0)):
+			push_error("GameData: badge rewards give %d total '%s', the limit (bonus_limits) is %d" % [totals[key], key, int(limits.get(key, 0))])
+			ok = false
+	var evo_v: Variant = root.get("evolution_after_badges", null)
+	if not (evo_v is Array):
+		push_error("GameData: zones file needs an 'evolution_after_badges' array")
+		ok = false
+	else:
+		for n_v: Variant in (evo_v as Array):
+			if not _is_positive_int(n_v) or int(n_v) > count:
+				push_error("GameData: evolution_after_badges has an invalid badge number '%s'" % str(n_v))
+				ok = false
+	if ok:
+		_zones_cfg = root
+	return ok
 
 
 # --- Items, potions, economy (story 006) ----------------------------------------------------------
@@ -1067,8 +1393,8 @@ func _load_rewards(root: Dictionary) -> bool:
 	return ok
 
 
-func _pool_id_for(room: Dictionary, floor_number: int) -> String:
-	var overrides: Array = room.get("encounter_pool_overrides", [])
+func _pool_id_for(room: Dictionary, floor_number: int, use_overrides: bool = true) -> String:
+	var overrides: Array = room.get("encounter_pool_overrides", []) if use_overrides else []
 	for o: Dictionary in overrides:
 		if floor_number >= int(o.get("min_floor", 1)) and floor_number <= int(o.get("max_floor", NO_FLOOR_LIMIT)):
 			return String(o["pool"])

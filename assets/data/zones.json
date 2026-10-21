@@ -1,0 +1,40 @@
+{
+	"_doc": "Structure en 8 zones (story 012). zone_count: nombre de zones (= arenes = badges) d'une partie. Chaque zone = sa propre carte (modele map/placement/room_types de act1.json, 6 etages : 1-5 salles normales, le dernier = l'arene 'boss'). zone_overrides (optionnel): '<numero de zone 1..zone_count>' -> {map: {floors,width,start_nodes,paths,boss_floor_nodes} (champs partiels), forced_floors: {etage: type}} qui remplacent les valeurs par defaut de act1.json pour cette zone. gym_types: pool des types d'arene tires au hasard au debut de chaque partie (zone_count types DIFFERENTS parmi eux, graine de Main) ; par type: leader (nom FR du Champion), encounter (equipe du Champion = id d'encounters de pokemon.json, gym_team_size Pokemon du type), badge_id, badge_name (FR), wild_pool et elite_pool (ids de act1.json encounter_pools : combats sauvages / elites 'du type'). Un type n'entre dans le pool que si starter_cards_by_type le connait et si assez de Pokemon le portent. tiers: un par zone, dans l'ordre de passage (la difficulte monte avec l'indice de zone, pas avec le type) : gym_modifiers {hp_multiplier > 0, strength_bonus >= 0} pour le Champion, modifiers pour les combats sauvages/elites (multiplies/additionnes a ceux de la salle dans act1.json), wild_type_share / elite_type_share (0..1: probabilite qu'un combat sauvage/elite de la zone vienne du pool du type de la zone), early_pool (true = les etages du pool wild_early de act1.json restent actifs dans cette zone). Les modifiers du Champion ne doivent pas baisser d'une zone a l'autre. badge_rewards: '<numero de badge>' -> bonus permanent de run : max_hp (PV max et PV, +n), hand_size (+n cartes piochees), energy_per_turn (+n energie), heal_percent (% des PV max rendus au badge, sinon badge_heal_percent), unlock_pools {wild: [...], elite: [...]} (pools ajoutes aux combats des zones SUIVANTES). bonus_limits: plafond du cumul sur toute la partie par bonus (hand_size, energy_per_turn). evolution_after_badges: apres quels badges (numeros) le starter evolue (ecran d'evolution). Le Champion de la derniere zone reste sous le Conseil 4 / Ethernatos (story 013).",
+	"zone_count": 8,
+	"gym_team_size": 3,
+	"badge_heal_percent": 30,
+	"evolution_after_badges": [1],
+	"bonus_limits": {"hand_size": 1, "energy_per_turn": 1},
+	"zone_overrides": {},
+	"gym_types": {
+		"rock":     {"leader": "Pierre",  "encounter": "gym_rock",     "badge_id": "badge_roche",   "badge_name": "Badge Roche",   "wild_pool": "type_rock",     "elite_pool": "elite_rock"},
+		"water":    {"leader": "Ondine",  "encounter": "gym_water",    "badge_id": "badge_cascade", "badge_name": "Badge Cascade", "wild_pool": "type_water",    "elite_pool": "elite_water"},
+		"electric": {"leader": "Major Bob", "encounter": "gym_electric", "badge_id": "badge_foudre", "badge_name": "Badge Foudre",  "wild_pool": "type_electric", "elite_pool": "elite_electric"},
+		"grass":    {"leader": "Érika",   "encounter": "gym_grass",    "badge_id": "badge_prairie", "badge_name": "Badge Prairie", "wild_pool": "type_grass",    "elite_pool": "elite_grass"},
+		"poison":   {"leader": "Koga",    "encounter": "gym_poison",   "badge_id": "badge_marais",  "badge_name": "Badge Marais",  "wild_pool": "type_poison",   "elite_pool": "elite_poison"},
+		"fire":     {"leader": "Auguste", "encounter": "gym_fire",     "badge_id": "badge_volcan",  "badge_name": "Badge Volcan",  "wild_pool": "type_fire",     "elite_pool": "elite_fire"},
+		"bug":      {"leader": "Artie",   "encounter": "gym_bug",      "badge_id": "badge_ruche",   "badge_name": "Badge Ruche",   "wild_pool": "type_bug",      "elite_pool": "elite_bug"},
+		"flying":   {"leader": "Albert",  "encounter": "gym_flying",   "badge_id": "badge_plume",   "badge_name": "Badge Plume",   "wild_pool": "type_flying",   "elite_pool": "elite_flying"},
+		"normal":   {"leader": "Norman",  "encounter": "gym_normal",   "badge_id": "badge_plaine",  "badge_name": "Badge Plaine",  "wild_pool": "type_normal",   "elite_pool": "elite_normal"}
+	},
+	"tiers": [
+		{"gym_modifiers": {"hp_multiplier": 1.0,  "strength_bonus": 0}, "modifiers": {"hp_multiplier": 1.0,  "strength_bonus": 0}, "wild_type_share": 0.5, "elite_type_share": 0.5, "early_pool": true},
+		{"gym_modifiers": {"hp_multiplier": 1.15, "strength_bonus": 0}, "modifiers": {"hp_multiplier": 1.05, "strength_bonus": 0}, "wild_type_share": 0.5, "elite_type_share": 0.5, "early_pool": false},
+		{"gym_modifiers": {"hp_multiplier": 1.3,  "strength_bonus": 1}, "modifiers": {"hp_multiplier": 1.1,  "strength_bonus": 0}, "wild_type_share": 0.5, "elite_type_share": 0.5, "early_pool": false},
+		{"gym_modifiers": {"hp_multiplier": 1.45, "strength_bonus": 1}, "modifiers": {"hp_multiplier": 1.2,  "strength_bonus": 1}, "wild_type_share": 0.5, "elite_type_share": 0.6, "early_pool": false},
+		{"gym_modifiers": {"hp_multiplier": 1.6,  "strength_bonus": 2}, "modifiers": {"hp_multiplier": 1.3,  "strength_bonus": 1}, "wild_type_share": 0.5, "elite_type_share": 0.6, "early_pool": false},
+		{"gym_modifiers": {"hp_multiplier": 1.75, "strength_bonus": 2}, "modifiers": {"hp_multiplier": 1.4,  "strength_bonus": 1}, "wild_type_share": 0.5, "elite_type_share": 0.7, "early_pool": false},
+		{"gym_modifiers": {"hp_multiplier": 1.9,  "strength_bonus": 3}, "modifiers": {"hp_multiplier": 1.5,  "strength_bonus": 2}, "wild_type_share": 0.5, "elite_type_share": 0.7, "early_pool": false},
+		{"gym_modifiers": {"hp_multiplier": 2.0,  "strength_bonus": 3}, "modifiers": {"hp_multiplier": 1.6,  "strength_bonus": 2}, "wild_type_share": 0.5, "elite_type_share": 0.7, "early_pool": false}
+	],
+	"badge_rewards": {
+		"1": {"max_hp": 6, "unlock_pools": {"wild": ["wild_duos"], "elite": []}},
+		"2": {"max_hp": 6},
+		"3": {"max_hp": 8, "unlock_pools": {"wild": ["wild_trios"], "elite": []}},
+		"4": {"hand_size": 1},
+		"5": {"max_hp": 8, "unlock_pools": {"wild": ["wild_trios_hard"], "elite": []}},
+		"6": {"energy_per_turn": 1},
+		"7": {"max_hp": 8},
+		"8": {"max_hp": 10}
+	}
+}
