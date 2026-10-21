@@ -410,6 +410,9 @@ func _champion_shots() -> void:
 	if _main.get_current_screen_name() != "battle":
 		print("ERROR: not on the Champion fight: ", _main.get_current_screen_name())
 	_win_battle(true)
+	_main.reward_skip()  # story 012: the gym pays loot + a card reward, then the badge, then the evolution (badge 1)
+	await _shot("01b-badge")
+	_main.badge_continue()
 	print("evolution summary: ", _main.get_evolution_summary())
 	await _shot("02-evolution")
 	_main.evolution_continue()
@@ -417,6 +420,11 @@ func _champion_shots() -> void:
 	_main.evolution_pick(CHAMPION_PICK)
 	print("evolution result: ", _main.get_evolution_screen().get_result_text())
 	_main.evolution_continue()
+	# story 012: the evolution leads to zone 2; jump to the last zone and win its gym for the (temporary) victory.
+	_main.qa_set_zone(7)
+	_main.qa_win_gym()
+	_main.reward_skip()
+	_main.badge_continue()
 	await _shot("04-victoire")
 	print("victory stats: ", _main.get_victory_screen().get_stats())
 	_main.victory_new_run()
@@ -612,7 +620,8 @@ func _run() -> void:
 				if rt == "center":
 					_main.center_heal()  # story 006: the centre no longer heals on entry
 				_main.room_continue()
-	_main.evolution_continue()  # story 007: the boss win now leads to the evolution, then the victory
+	_main.badge_continue()  # story 012: gym reward -> badge -> evolution (badge 1) -> zone 2 map
+	_main.evolution_continue()
 	_main.evolution_skip()
 	_main.evolution_continue()
 	await _shot("10-acte-termine")
