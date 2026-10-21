@@ -25,6 +25,10 @@ var type_id: String = ""
 var rarity: String = ""
 ## Pokémon carrying this card (id from pokemon.json); required for attacks, empty for skills (story 009).
 var pokemon_id: String = ""
+## True once improved at a Centre Pokémon (story 006): name gets a "+" suffix, stats are boosted. Once only.
+var upgraded: bool = false
+## Optional per-card improvement from cards.json ("upgrade": {damage, block, cost} deltas); {} = use the global rules.
+var upgrade_override: Dictionary = {}
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -51,6 +55,11 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	card.type_id = String(d.get("type", ""))
 	card.rarity = String(d.get("rarity", ""))
 	card.pokemon_id = String(d.get("pokemon", ""))
+	var up: Variant = d.get("upgrade", {})
+	if not (up is Dictionary) or not valid_upgrade_rule(up):
+		push_error("CardData: card '%s' has an invalid 'upgrade' (expected {damage, block, cost} integers)" % card_id)
+		return null
+	card.upgrade_override = (up as Dictionary).duplicate()
 	return card
 
 
@@ -61,6 +70,12 @@ func needs_target() -> bool:
 
 ## A copy of this card carried by another Pokémon (stolen cards, story 009).
 func with_pokemon(pid: String) -> CardData:
+	var copy: CardData = _copy()
+	copy.pokemon_id = pid
+	return copy
+
+
+func _copy() -> CardData:
 	var copy := CardData.new()
 	copy.id = id
 	copy.display_name = display_name
@@ -71,13 +86,62 @@ func with_pokemon(pid: String) -> CardData:
 	copy.description = description
 	copy.type_id = type_id
 	copy.rarity = rarity
-	copy.pokemon_id = pid
+	copy.pokemon_id = pokemon_id
+	copy.upgraded = upgraded
+	copy.upgrade_override = upgrade_override
 	return copy
 
 
-## Key grouping identical cards: card id + carrying Pokémon ("griffe@salameche"; just the id for skills).
+## True if `rule` is a dictionary of integer deltas among damage / block / cost (cost <= 0 = cheaper).
+static func valid_upgrade_rule(rule: Dictionary) -> bool:
+	for k: Variant in rule.keys():
+		if k not in ["damage", "block", "cost"]:
+			return false
+		var v: Variant = rule[k]
+		if not ((v is int) or (v is float and v == floorf(v))):
+			return false
+	return true
+
+
+## The improvement that applies to this card: its own "upgrade" if any, else rules[kind] (rules = GameData.get_upgrade_rules()).
+func _rule(rules: Dictionary) -> Dictionary:
+	return upgrade_override if not upgrade_override.is_empty() else (rules.get(kind, {}) as Dictionary)
+
+
+## The upgraded copy of this card (name + "+", boosted damage/block, lower cost, description numbers updated),
+## or null if already upgraded or the rule would change nothing.
+func upgraded_copy(rules: Dictionary) -> CardData:
+	if upgraded:
+		return null
+	var rule: Dictionary = _rule(rules)
+	var new_damage: int = damage + (int(rule.get("damage", 0)) if damage > 0 else 0)
+	var new_block: int = block + (int(rule.get("block", 0)) if block > 0 else 0)
+	var new_cost: int = maxi(0, cost + int(rule.get("cost", 0)))
+	if new_damage == damage and new_block == block and new_cost == cost:
+		return null
+	var copy: CardData = _copy()
+	copy.upgraded = true
+	copy.display_name = display_name + "+"
+	copy.damage = new_damage
+	copy.block = new_block
+	copy.cost = new_cost
+	if new_damage != damage:
+		copy.description = copy.description.replace(str(damage), str(new_damage))
+	if new_block != block:
+		copy.description = copy.description.replace(str(block), str(new_block))
+	return copy
+
+
+## True if upgraded_copy(rules) would succeed.
+func can_upgrade(rules: Dictionary) -> bool:
+	return upgraded_copy(rules) != null
+
+
+## Key grouping identical cards: card id + carrying Pokémon + upgrade ("griffe@salameche", "griffe@salameche+";
+## just the id for plain skills). Upgraded and plain copies never merge.
 func deck_key() -> String:
-	return id if pokemon_id.is_empty() else "%s@%s" % [id, pokemon_id]
+	var key: String = id if pokemon_id.is_empty() else "%s@%s" % [id, pokemon_id]
+	return key + "+" if upgraded else key
 
 
 ## "Griffe — Salamèche" when `pokemon_name` is given and the card has a Pokémon, else the plain name.

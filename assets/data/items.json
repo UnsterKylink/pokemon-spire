@@ -1,0 +1,16 @@
+{
+	"_doc": "Objets tenus (permanents, sans doublon dans une partie). id -> {name, description, rarity common|uncommon|rare, trigger, effects:[{type, value|percent}]}. trigger: battle_start (avant le 1er tour), battle_end (combat GAGNE), turn_start, turn_end, card_played (au moment ou une carte est jouee), on_pickup (a la reception), passive (modifie les stats de combat en permanence). Option 'first_attack_each_battle': true = ne s'applique qu'a la 1re carte d'attaque jouee de chaque combat. Effets par trigger: battle_start/turn_start/turn_end = heal_flat, heal_percent_max (percent), block_flat; battle_end = heal_flat, heal_percent_max, money_bonus_on_win (Pokedollars en plus apres la victoire); card_played = damage_bonus (degats en plus des cartes d'attaque); on_pickup = max_hp_up, heal_flat, heal_percent_max; passive = draw_up (cartes piochees par tour), energy_up_per_turn (un seul objet peut en donner). Les valeurs sont celles du jeu: modifier ici suffit.",
+	"items": {
+		"restes": {"name": "Restes", "description": "Récupère 6 PV à la fin de chaque combat gagné.", "rarity": "common", "trigger": "battle_end", "effects": [{"type": "heal_flat", "value": 6}]},
+		"bandeau": {"name": "Bandeau", "description": "La première attaque de chaque combat inflige 3 dégâts de plus.", "rarity": "uncommon", "trigger": "card_played", "first_attack_each_battle": true, "effects": [{"type": "damage_bonus", "value": 3}]},
+		"baie_oran": {"name": "Baie Oran", "description": "Augmente les PV max de 8.", "rarity": "common", "trigger": "on_pickup", "effects": [{"type": "max_hp_up", "value": 8}]},
+		"orbe_vie": {"name": "Orbe Vie", "description": "Augmente les PV max de 12.", "rarity": "uncommon", "trigger": "on_pickup", "effects": [{"type": "max_hp_up", "value": 12}]},
+		"cloche_eclat": {"name": "Cloche Éclat", "description": "Pioche 1 carte de plus à chaque tour.", "rarity": "rare", "trigger": "passive", "effects": [{"type": "draw_up", "value": 1}]},
+		"peau_metal": {"name": "Peau Métal", "description": "Commence chaque combat avec 4 points de protection.", "rarity": "common", "trigger": "battle_start", "effects": [{"type": "block_flat", "value": 4}]},
+		"piece_rune": {"name": "Pièce Rune", "description": "Gagne 10 Pokédollars de plus après chaque combat gagné.", "rarity": "uncommon", "trigger": "battle_end", "effects": [{"type": "money_bonus_on_win", "value": 10}]},
+		"lunettes_choix": {"name": "Lunettes Choix", "description": "Toutes tes attaques infligent 1 dégât de plus.", "rarity": "uncommon", "trigger": "card_played", "effects": [{"type": "damage_bonus", "value": 1}]},
+		"ceinture_force": {"name": "Ceinture Force", "description": "Gagne 2 points de protection au début de chaque tour.", "rarity": "uncommon", "trigger": "turn_start", "effects": [{"type": "block_flat", "value": 2}]},
+		"gemme_energie": {"name": "Gemme Énergie", "description": "Gagne 1 énergie de plus à chaque tour.", "rarity": "rare", "trigger": "passive", "effects": [{"type": "energy_up_per_turn", "value": 1}]},
+		"poudre_soin": {"name": "Poudre Soin", "description": "Récupère 1 PV à la fin de chaque tour.", "rarity": "common", "trigger": "turn_end", "effects": [{"type": "heal_flat", "value": 1}]}
+	}
+}

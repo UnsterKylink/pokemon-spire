@@ -34,6 +34,11 @@ var _encounter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _reward_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _event_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _starter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Story 006: win loot (money / item / potion) and Poké Mart stock; appended to the rng list so older seeds are unchanged.
+var _loot_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _shop_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## What the last won fight paid: {"money": int, "item": ItemData|null, "potion": PotionData|null} ({} before any win).
+var _last_loot: Dictionary = {}
 ## Non-empty = every new run starts with this Pokémon without showing the choice (QA / `--starter=`).
 var forced_starter_id: String = ""
 var _pending_act_seed: int = 0
@@ -88,7 +93,7 @@ func _ready() -> void:
 ## `starter_id` (or `forced_starter_id`) is given. `act_seed` 0 = random map and RNGs; any other value makes
 ## the map, the starter draw AND the run RNGs reproducible (QA).
 func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
-	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng]
+	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng]
 	for i: int in rngs.size():
 		if act_seed != 0:
 			rngs[i].seed = act_seed + i + 1
@@ -155,6 +160,17 @@ func starter_choose(index_or_id: Variant) -> void:
 ## QA: the live StarterScreen (null outside the choice).
 func get_starter_screen() -> StarterScreen:
 	return _starter_screen
+
+
+## What the last won fight paid and gave, already applied to the run: {"money": int, "item": ItemData|null,
+## "potion": PotionData|null}; {} before any win / for debug fights without a room type. For the reward screen.
+func get_last_loot() -> Dictionary:
+	return _last_loot
+
+
+## A fresh Poké Mart stock for the current run (seeded shop RNG: deterministic with --seed). Call once per visit.
+func create_shop_inventory() -> ShopInventory:
+	return ShopInventory.generate(_data, _run, _shop_rng)
 
 
 ## QA: the run state (HP, deck, act progress).
@@ -339,6 +355,7 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_run.record_battle_result(_battle_screen.get_battle().player)
+	_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
 	var weights: Dictionary = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
 	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
 	_clear_screens()

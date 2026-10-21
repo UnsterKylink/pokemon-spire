@@ -12,6 +12,9 @@ const DEFAULT_EVENTS_PATH: String = "res://assets/data/events.json"
 const ROOM_TYPES: Array[String] = ["wild", "elite", "center", "mart", "event", "boss"]
 ## Room types that start a battle (need encounter_pool + modifiers).
 const FIGHT_ROOM_TYPES: Array[String] = ["wild", "elite", "boss"]
+const DEFAULT_ITEMS_PATH: String = "res://assets/data/items.json"
+const DEFAULT_POTIONS_PATH: String = "res://assets/data/potions.json"
+const DEFAULT_SHOP_PATH: String = "res://assets/data/shop.json"
 const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "nothing"]
 const NO_FLOOR_LIMIT: int = 1000000
 ## Minimum number of types the type table must define (story 003).
@@ -35,12 +38,18 @@ var _starter_candidates: Array[String] = []
 var _starter_cards_by_type: Dictionary = {}  # type id -> {"basic": card id, "strong": card id}
 var _deck_template: Dictionary = {}  # basic_count / skill / skill_count / strong_count (story 010)
 var _carriers_by_type: Dictionary = {}  # type id -> Array[String] (roster Pokémon having that type)
+var _items: Dictionary = {}    # String -> ItemData (story 006)
+var _potions: Dictionary = {}  # String -> PotionData
+var _max_potions: int = 0
+var _shop_cfg: Dictionary = {}  # validated shop.json
 
 
-## Loads all six files (act and events last, story 005). Returns false (after push_error) if anything is missing or invalid.
+## Loads all nine files (act and events story 005; items, potions, shop story 006). Returns false (after push_error) if anything is missing or invalid.
 func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
 		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH,
-		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH) -> bool:
+		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH,
+		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
+		shop_path: String = DEFAULT_SHOP_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_cards.clear()
 	_players.clear()
@@ -57,14 +66,22 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_starter_cards_by_type = {}
 	_deck_template = {}
 	_carriers_by_type = {}
+	_items.clear()
+	_potions.clear()
+	_max_potions = 0
+	_shop_cfg = {}
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
 	var rewards_root: Dictionary = _read_json(rewards_path)
 	var act_root: Dictionary = _read_json(act_path)
 	var events_root: Dictionary = _read_json(events_path)
+	var items_root: Dictionary = _read_json(items_path)
+	var potions_root: Dictionary = _read_json(potions_path)
+	var shop_root: Dictionary = _read_json(shop_path)
 	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty() or rewards_root.is_empty() \
-			or act_root.is_empty() or events_root.is_empty():
+			or act_root.is_empty() or events_root.is_empty() or items_root.is_empty() or potions_root.is_empty() \
+			or shop_root.is_empty():
 		return false
 	var chart: TypeChart = TypeChart.from_dict(types_root)
 	if chart == null:
@@ -84,6 +101,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_starters(pokemon_root) and ok
 	ok = _load_events(events_root) and ok
 	ok = _load_act(act_root) and ok
+	ok = _load_items(items_root) and ok
+	ok = _load_potions(potions_root) and ok
+	ok = _load_shop(shop_root) and ok
 	return ok
 
 
@@ -302,6 +322,214 @@ func get_event(event_id: String) -> Dictionary:
 		push_error("GameData: unknown event id '%s'" % event_id)
 		return {}
 	return (_events[event_id] as Dictionary).duplicate(true)
+
+
+# --- Items, potions, economy (story 006) ----------------------------------------------------------
+
+## Held item by id, or null (with push_error) if unknown.
+func get_item(item_id: String) -> ItemData:
+	if not _items.has(item_id):
+		push_error("GameData: unknown item id '%s'" % item_id)
+		return null
+	return _items[item_id]
+
+
+## Every held item id, in file order.
+func get_item_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for k: String in _items.keys():
+		ids.append(k)
+	return ids
+
+
+## Potion by id, or null (with push_error) if unknown.
+func get_potion(potion_id: String) -> PotionData:
+	if not _potions.has(potion_id):
+		push_error("GameData: unknown potion id '%s'" % potion_id)
+		return null
+	return _potions[potion_id]
+
+
+## Every potion id, in file order.
+func get_potion_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for k: String in _potions.keys():
+		ids.append(k)
+	return ids
+
+
+## Potions a run may carry at once (potions.json max_carried).
+func get_max_potions() -> int:
+	return _max_potions
+
+
+## Pokédollars a new run starts with (shop.json).
+func get_starting_money() -> int:
+	return int(_shop_cfg.get("starting_money", 0))
+
+
+## Loot rule of a fight room type {money_min, money_max, item_chance, potion_chance}; {} = no loot (e.g. boss).
+func get_loot_config(room_type: String) -> Dictionary:
+	return ((_shop_cfg.get("loot", {}) as Dictionary).get(room_type, {}) as Dictionary).duplicate()
+
+
+## Rarity -> weight used to draw held items (shop.json item_rarity_weights).
+func get_item_rarity_weights() -> Dictionary:
+	return (_shop_cfg.get("item_rarity_weights", {}) as Dictionary).duplicate()
+
+
+## Poké Mart config (copy): card_count, item_count_min/max, potion_count, card_prices, item_prices.
+func get_shop_config() -> Dictionary:
+	return (_shop_cfg.get("shop", {}) as Dictionary).duplicate(true)
+
+
+## Card removal pricing (copy): base_price, price_step, min_deck_size.
+func get_removal_config() -> Dictionary:
+	return (_shop_cfg.get("card_removal", {}) as Dictionary).duplicate()
+
+
+## Card upgrade rules by card kind (copy), e.g. {"attack": {"damage": 3}, "skill": {"block": 3}}.
+func get_upgrade_rules() -> Dictionary:
+	return (_shop_cfg.get("upgrade_rules", {}) as Dictionary).duplicate(true)
+
+
+func _load_items(root: Dictionary) -> bool:
+	var raw: Variant = root.get("items", null)
+	if not (raw is Dictionary) or (raw as Dictionary).is_empty():
+		push_error("GameData: items file needs a non-empty 'items' object")
+		return false
+	var ok: bool = true
+	var energy_items: int = 0
+	for item_id: String in (raw as Dictionary).keys():
+		var def: Variant = (raw as Dictionary)[item_id]
+		var item: ItemData = ItemData.from_dict(item_id, def) if def is Dictionary else null
+		if item == null:
+			push_error("GameData: item '%s' is invalid" % item_id)
+			ok = false
+			continue
+		if item.total("energy_up_per_turn") > 0:
+			energy_items += 1
+		_items[item_id] = item
+	if energy_items > 1:
+		push_error("GameData: at most one item may grant energy_up_per_turn (found %d)" % energy_items)
+		ok = false
+	return ok
+
+
+func _load_potions(root: Dictionary) -> bool:
+	if not _is_positive_int(root.get("max_carried", null)):
+		push_error("GameData: potions file needs a positive integer 'max_carried'")
+		return false
+	_max_potions = int(root["max_carried"])
+	var raw: Variant = root.get("potions", null)
+	if not (raw is Dictionary) or (raw as Dictionary).is_empty():
+		push_error("GameData: potions file needs a non-empty 'potions' object")
+		return false
+	var ok: bool = true
+	for potion_id: String in (raw as Dictionary).keys():
+		var def: Variant = (raw as Dictionary)[potion_id]
+		var potion: PotionData = PotionData.from_dict(potion_id, def) if def is Dictionary else null
+		if potion == null:
+			push_error("GameData: potion '%s' is invalid" % potion_id)
+			ok = false
+		else:
+			_potions[potion_id] = potion
+	return ok
+
+
+## Validates a {rarity: number} object whose keys must be non-starter rarities; `positive` = values > 0 else >= 0.
+func _check_rarity_numbers(label: String, v: Variant, positive: bool) -> bool:
+	if not (v is Dictionary) or (v as Dictionary).is_empty():
+		push_error("GameData: shop file needs a non-empty '%s' object" % label)
+		return false
+	var ok: bool = true
+	for rarity: String in (v as Dictionary).keys():
+		var n: Variant = (v as Dictionary)[rarity]
+		if rarity not in CardData.RARITIES or rarity == CardData.RARITY_STARTER \
+				or not (_is_number(n) and (n > 0 or (not positive and n == 0))):
+			push_error("GameData: shop '%s' has an invalid entry for '%s'" % [label, rarity])
+			ok = false
+	return ok
+
+
+func _load_shop(root: Dictionary) -> bool:
+	var ok: bool = true
+	var money: Variant = root.get("starting_money", null)
+	if not (_is_number(money) and money >= 0):
+		push_error("GameData: shop file needs 'starting_money' >= 0")
+		ok = false
+	# Loot per fight room type.
+	var loot_v: Variant = root.get("loot", null)
+	if not (loot_v is Dictionary):
+		push_error("GameData: shop file needs a 'loot' object")
+		return false
+	for room: String in (loot_v as Dictionary).keys():
+		var l_v: Variant = (loot_v as Dictionary)[room]
+		if room not in FIGHT_ROOM_TYPES or not (l_v is Dictionary):
+			push_error("GameData: shop loot['%s'] must be an object for a fight room type" % room)
+			ok = false
+			continue
+		var l: Dictionary = l_v
+		if not (_is_number(l.get("money_min", null)) and l["money_min"] >= 0 and _is_number(l.get("money_max", null))
+				and l["money_max"] >= l["money_min"]):
+			push_error("GameData: shop loot['%s'] needs 0 <= money_min <= money_max" % room)
+			ok = false
+		for key: String in ["item_chance", "potion_chance"]:
+			if not (_is_number(l.get(key, null)) and l[key] >= 0 and l[key] <= 1):
+				push_error("GameData: shop loot['%s'].%s must be between 0 and 1" % [room, key])
+				ok = false
+	ok = _check_rarity_numbers("item_rarity_weights", root.get("item_rarity_weights", null), true) and ok
+	# Shop.
+	var shop_v: Variant = root.get("shop", null)
+	if not (shop_v is Dictionary):
+		push_error("GameData: shop file needs a 'shop' object")
+		return false
+	var sh: Dictionary = shop_v
+	var counts_ok: bool = true
+	for key: String in ["card_count", "item_count_min", "item_count_max", "potion_count"]:
+		if not (_is_number(sh.get(key, null)) and sh[key] >= 0 and sh[key] == floorf(sh[key])):
+			push_error("GameData: shop.%s must be an integer >= 0" % key)
+			counts_ok = false
+	if counts_ok and sh["item_count_max"] < sh["item_count_min"]:
+		push_error("GameData: shop.item_count_max must be >= item_count_min")
+		counts_ok = false
+	ok = ok and counts_ok
+	ok = _check_rarity_numbers("shop.card_prices", sh.get("card_prices", null), false) and ok
+	ok = _check_rarity_numbers("shop.item_prices", sh.get("item_prices", null), false) and ok
+	# Every rarity that can be sold needs a price.
+	var item_weights_v: Variant = root.get("item_rarity_weights", null)
+	var item_prices_v: Variant = sh.get("item_prices", null)
+	var card_prices_v: Variant = sh.get("card_prices", null)
+	if item_weights_v is Dictionary and item_prices_v is Dictionary:
+		for rarity: String in (item_weights_v as Dictionary).keys():
+			if not (item_prices_v as Dictionary).has(rarity):
+				push_error("GameData: shop.item_prices has no price for rarity '%s'" % rarity)
+				ok = false
+	if card_prices_v is Dictionary:
+		for rarity: String in _rarity_weights.keys():
+			if not (card_prices_v as Dictionary).has(rarity):
+				push_error("GameData: shop.card_prices has no price for rarity '%s'" % rarity)
+				ok = false
+	# Card removal.
+	var rm_v: Variant = root.get("card_removal", null)
+	if not (rm_v is Dictionary) or not (_is_number((rm_v as Dictionary).get("base_price", null)) and rm_v["base_price"] >= 0) \
+			or not (_is_number((rm_v as Dictionary).get("price_step", null)) and rm_v["price_step"] >= 0) \
+			or not _is_positive_int((rm_v as Dictionary).get("min_deck_size", null)):
+		push_error("GameData: shop file needs card_removal {base_price >= 0, price_step >= 0, min_deck_size >= 1}")
+		ok = false
+	# Upgrade rules.
+	var up_v: Variant = root.get("upgrade_rules", null)
+	if not (up_v is Dictionary):
+		push_error("GameData: shop file needs an 'upgrade_rules' object")
+		return false
+	for kind: String in [CardData.KIND_ATTACK, CardData.KIND_SKILL]:
+		var r: Variant = (up_v as Dictionary).get(kind, null)
+		if not (r is Dictionary) or (r as Dictionary).is_empty() or not CardData.valid_upgrade_rule(r):
+			push_error("GameData: upgrade_rules['%s'] must be a non-empty object of integer damage/block/cost deltas" % kind)
+			ok = false
+	if ok:
+		_shop_cfg = root.duplicate(true)
+	return ok
 
 
 # --- Starter choice (story 010) ---------------------------------------------------------------------

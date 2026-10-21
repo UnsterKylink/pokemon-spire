@@ -1,0 +1,12 @@
+{
+	"_doc": "Potions a usage unique, utilisables pendant le tour du joueur en combat (sans cout d'energie). max_carried: potions portees au maximum. id -> {name, description, price (Pokedollars au Poke Mart), effects:[{type, value|percent}]}. Effets: heal_flat, heal_percent_max (percent), block_flat, energy_gain (energie immediate), draw_cards, damage_bonus_turn (degats en plus sur chaque attaque jusqu'a la fin du tour).",
+	"max_carried": 3,
+	"potions": {
+		"potion": {"name": "Potion", "description": "Soigne 20 PV.", "price": 40, "effects": [{"type": "heal_flat", "value": 20}]},
+		"super_potion": {"name": "Super Potion", "description": "Soigne 40 PV.", "price": 70, "effects": [{"type": "heal_flat", "value": 40}]},
+		"attaque_plus": {"name": "Attaque +", "description": "Tes attaques infligent 5 dégâts de plus ce tour.", "price": 45, "effects": [{"type": "damage_bonus_turn", "value": 5}]},
+		"defense_plus": {"name": "Défense +", "description": "Gagne 12 points de protection.", "price": 45, "effects": [{"type": "block_flat", "value": 12}]},
+		"energie_plus": {"name": "Énergie +", "description": "Gagne 2 énergie.", "price": 50, "effects": [{"type": "energy_gain", "value": 2}]},
+		"pioche": {"name": "Pioche", "description": "Pioche 3 cartes.", "price": 50, "effects": [{"type": "draw_cards", "value": 3}]}
+	}
+}

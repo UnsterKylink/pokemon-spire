@@ -97,6 +97,15 @@ func take_damage(amount: int) -> int:
 	return hp_lost
 
 
+## Restores up to `amount` HP (never above max HP). Returns the HP actually restored.
+func heal(amount: int) -> int:
+	var before: int = hp
+	hp = mini(max_hp, hp + maxi(amount, 0))
+	if hp != before:
+		changed.emit()
+	return hp - before
+
+
 ## Adds block points.
 func add_block(amount: int) -> void:
 	block += maxi(amount, 0)

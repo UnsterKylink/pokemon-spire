@@ -8,11 +8,12 @@ extends RefCounted
 ## Returns up to offer_count DISTINCT offers (fewer only if the data cannot supply enough cards).
 ## The stolen card (if any) is at a random position. Seedable through the injected rng.
 ## `rarity_weights_override` (non-empty) replaces the rarity weights of rewards.json (elite rooms, story 005).
+## `count_override` >= 0 replaces offer_count (the Poké Mart reuses this to stock cards, story 006).
 static func generate(data: GameData, player_id: String, defeated_enemy_ids: Array[String],
-		rng: RandomNumberGenerator, rarity_weights_override: Dictionary = {}) -> Array[RewardOffer]:
+		rng: RandomNumberGenerator, rarity_weights_override: Dictionary = {}, count_override: int = -1) -> Array[RewardOffer]:
 	var offers: Array[RewardOffer] = []
 	var used: Dictionary = {}  # card id -> true
-	var count: int = data.get_offer_count()
+	var count: int = data.get_offer_count() if count_override < 0 else count_override
 	# 1. One stolen card among everything the defeated enemies teach.
 	var candidates: Array[RewardOffer] = []
 	var seen: Dictionary = {}

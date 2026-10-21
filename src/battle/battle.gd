@@ -20,6 +20,10 @@ signal hit_resolved(target: Combatant, amount: int, multiplier: float)
 signal active_pokemon_changed(old_id: String, new_id: String)
 signal battle_won
 signal battle_lost
+## Emitted when a held item's effect fired (UI feedback). Story 006.
+signal item_triggered(item: ItemData)
+## Emitted after a potion of `potions` was drunk (already removed from `potions`). Story 006.
+signal potion_used(potion: PotionData)
 
 var player: Combatant
 ## Id of the Pokémon currently on the field (shared HP/block; story 009). Read-only for the UI.
@@ -32,6 +36,13 @@ var hand_size: int = 0
 var draw_pile: Array[CardData] = []
 var hand: Array[CardData] = []
 var discard_pile: Array[CardData] = []
+## Held items active in this battle (story 006); their triggers are fired by this class.
+var items: Array[ItemData] = []
+## Potions carried into the battle, usable with use_potion (removed once used).
+var potions: Array[PotionData] = []
+## Extra damage on every attack card until the end of this turn (potion "Attaque +").
+var turn_damage_bonus: int = 0
+var _attacks_played: int = 0
 
 var _rng: RandomNumberGenerator
 var _type_chart: TypeChart
@@ -40,12 +51,17 @@ var _pokemon_lookup: Callable = Callable()
 
 ## Starts a battle. pokemon_lookup(pokemon_id) -> Dictionary {id, name, sprite_path, types} (GameData.get_pokemon_info)
 ## lets cards bring other Pokémon in; starter_pokemon_id is the active Pokémon at battle start. rng is injected so shuffles and weighted intents are seedable.
+## held_items / carried_potions (story 006) fire their triggers / can be drunk; passive items (extra draw / energy)
+## are NOT handled here: the caller adds them to energy_per_turn / cards_per_turn (RunState.create_battle does).
 ## Expects 1..3 enemies: extra enemies are ignored, an empty list is reported (push_error).
 ## type_chart is injected; null means no types (every hit neutral).
 func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Array[CardData],
 		energy_per_turn: int, cards_per_turn: int, rng: RandomNumberGenerator,
-		type_chart: TypeChart = null, pokemon_lookup: Callable = Callable(), starter_pokemon_id: String = "") -> void:
+		type_chart: TypeChart = null, pokemon_lookup: Callable = Callable(), starter_pokemon_id: String = "",
+			held_items: Array[ItemData] = [], carried_potions: Array[PotionData] = []) -> void:
 	player = player_combatant
+	items = held_items.duplicate()
+	potions = carried_potions.duplicate()
 	_pokemon_lookup = pokemon_lookup
 	active_pokemon_id = starter_pokemon_id if not starter_pokemon_id.is_empty() else player.active_pokemon_id
 	if active_pokemon_id.is_empty():
@@ -73,7 +89,8 @@ func start() -> void:
 		return
 	for e: Combatant in enemies:
 		_roll_intent(e)
-	_start_player_turn()
+	_fire_items(ItemData.TRIGGER_BATTLE_START)
+	_start_player_turn(true)
 
 
 ## True if the card at hand index can be played now (state, index, energy).
@@ -119,8 +136,13 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	var hit_mult: float = 1.0
 	if card.damage > 0:
 		hit_target = enemies[target_index]
+		# Bonuses (items, "Attaque +") are added BEFORE the type multiplier, like enemy strength.
+		var bonus: int = turn_damage_bonus
+		for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
+			bonus += item.total("damage_bonus")
+			item_triggered.emit(item)
 		hit_mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
-		hit_amount = _type_chart.final_damage(card.damage, card.type_id, hit_target.type_ids)
+		hit_amount = _type_chart.final_damage(card.damage + bonus, card.type_id, hit_target.type_ids)
 		hit_target.take_damage(hit_amount)  # block absorbs AFTER the type multiplier
 		if not hit_target.is_alive():
 			hit_target.intent = null  # a K.O. enemy no longer acts
@@ -128,8 +150,11 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		player.add_block(card.block)
 	if hit_target != null:
 		hit_resolved.emit(hit_target, hit_amount, hit_mult)
+	if card.kind == CardData.KIND_ATTACK:
+		_attacks_played += 1
 	card_played.emit(card)
 	if first_living_enemy() < 0:
+		_fire_items(ItemData.TRIGGER_BATTLE_END)  # before the win is announced, so the HP is persisted by the caller
 		state = State.WON
 		state_changed.emit()
 		battle_won.emit()
@@ -146,6 +171,8 @@ func end_turn() -> bool:
 		return false
 	discard_pile.append_array(hand)
 	hand.clear()
+	_fire_items(ItemData.TRIGGER_TURN_END)
+	turn_damage_bonus = 0
 	for e: Combatant in enemies:
 		if not e.is_alive() or e.intent == null:
 			continue
@@ -160,6 +187,32 @@ func end_turn() -> bool:
 	for e: Combatant in enemies:
 		_roll_intent(e)
 	_start_player_turn()
+	return true
+
+
+## True if the potion at index can be drunk now (player's turn, valid index). Potions cost no energy.
+func can_use_potion(index: int) -> bool:
+	return state == State.PLAYER_TURN and index >= 0 and index < potions.size()
+
+
+## Drinks potions[index]: applies its effects, removes it and emits potion_used. False (no change) if invalid.
+func use_potion(index: int) -> bool:
+	if not can_use_potion(index):
+		return false
+	var potion: PotionData = potions[index]
+	potions.remove_at(index)
+	for e: Dictionary in potion.effects:
+		match String(e["type"]):
+			"energy_gain":
+				energy += int(e["value"])
+			"draw_cards":
+				_draw_cards(int(e["value"]))
+			"damage_bonus_turn":
+				turn_damage_bonus += int(e["value"])
+			_:
+				ItemEffects.apply_to_combatant(e, player)
+	potion_used.emit(potion)
+	state_changed.emit()
 	return true
 
 
@@ -232,9 +285,26 @@ func _roll_intent(enemy: Combatant) -> void:
 	enemy.intent = rolled
 
 
-func _start_player_turn() -> void:
-	player.reset_block()
+## Fires every held item bound to `trigger` on the player (heal / block effects); emits item_triggered if it did something.
+func _fire_items(trigger: String) -> void:
+	for item: ItemData in items:
+		if item.trigger != trigger:
+			continue
+		var did: bool = false
+		for e: Dictionary in item.effects:
+			if ItemEffects.apply_to_combatant(e, player) > 0:
+				did = true
+		if did:
+			item_triggered.emit(item)
+
+
+## `first` = the battle's first turn: block gained from battle_start items must survive.
+func _start_player_turn(first: bool = false) -> void:
+	if not first:
+		player.reset_block()
 	energy = max_energy
+	turn_damage_bonus = 0
+	_fire_items(ItemData.TRIGGER_TURN_START)
 	_draw_cards(hand_size)
 	turn_started.emit()
 	state_changed.emit()
