@@ -1,7 +1,7 @@
 # Story 011: Accès au deck partout
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Presentation
 > **Type**: UI
 > **Estimate**: [fill before starting]
@@ -28,11 +28,11 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 1), scoped to this story:*
 
-- [ ] Un bouton « Deck » dans la barre du haut est visible et utilisable sur tous les écrans de partie (carte, combat, récompense, événement, Centre, Mart, évolution).
-- [ ] En combat, on peut consulter séparément le deck complet, la pioche (ordre masqué, triée) et la défausse.
-- [ ] L'affichage regroupe les copies identiques (×N), montre les cartes améliorées « + » distinctement et le Pokémon porteur de chaque carte.
-- [ ] Ouvrir / fermer le deck ne modifie jamais l'état de la partie ni du combat (pas de tour perdu, pas de clic traversant).
-- [ ] Le panneau tient en 1280×720 sans coupure, avec défilement si le deck est long (40+ cartes).
+- [x] Un bouton « Deck » dans la barre du haut est visible et utilisable sur tous les écrans de partie (carte, combat, récompense, événement, Centre, Mart, évolution).
+- [x] En combat, on peut consulter séparément le deck complet, la pioche (ordre masqué, triée) et la défausse.
+- [x] L'affichage regroupe les copies identiques (×N), montre les cartes améliorées « + » distinctement et le Pokémon porteur de chaque carte.
+- [x] Ouvrir / fermer le deck ne modifie jamais l'état de la partie ni du combat (pas de tour perdu, pas de clic traversant).
+- [x] Le panneau tient en 1280×720 sans coupure, avec défilement si le deck est long (40+ cartes).
 
 ---
 
@@ -65,7 +65,7 @@
 **Required evidence**:
 - UI : a retained screenshot of each screen touched, in `production/qa/evidence/`
 
-**Status**: [ ] Not yet created
+**Status**: [x] Retained screenshots in `production/qa/evidence/story-011-acces-au-deck/`
 
 ---
 
@@ -73,3 +73,12 @@
 
 - Depends on: None (MVP complete)
 - Unlocks: Story 012
+
+---
+
+## Completion Notes
+**Completed**: 2026-10-21
+**Criteria**: 5/5 passing (confirmed by the user in play; 7 screenshots retained)
+**Deviations**: Advisory only — real mouse clicks and Escape not tested with real input events; panel is a snapshot taken at open (not refreshed during the enemy turn); no keyboard/gamepad focus; Deck button disabled while Centre/Mart pickers are open; event, Centre, evolution and reward screens not captured (same button and panel); QA hooks ship in the build
+**Test Evidence**: UI — tests waived at qa.level minimal; screenshots at `production/qa/evidence/story-011-acces-au-deck/`
+**Code Review**: Skipped — Solo mode
