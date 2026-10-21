@@ -575,6 +575,8 @@ func _gym_line(tag: String) -> void:
 ## Wins the current zone's gym through the real flow: gym fight -> reward (skipped) -> badge screen (left with
 ## badge_continue) -> evolution after badge 1 (skipped) -> next map.
 func _clear_gym(shoot_badge: bool = false) -> void:
+	if _main.get_current_screen_name() != "battle":
+		_main.qa_skip_to_gym()  # enters the gym room (counted in the floors), then the cheat win
 	_main.qa_win_gym()
 	_main.reward_skip()
 	if shoot_badge:

@@ -33,6 +33,8 @@ const TEXT_DECK_BLOCKED: String = "Termine d'abord le choix de carte en cours."
 const TEXT_BADGES: String = "Badges :"
 const TEXT_ITEMS: String = "Objets :"
 const TEXT_NO_ITEM: String = "aucun"
+## Story 012: chip shown when the item chips do not all fit in the bar ("+3"; tooltip = the hidden items).
+const TEXT_MORE_ITEMS: String = "+%d"
 const TEXT_POTIONS: String = "Potions :"
 const TEXT_EMPTY_SLOT: String = "— vide —"
 const TEXT_POTION_HINT: String = "Clique pour l'utiliser (sans coût d'énergie)."
@@ -40,6 +42,8 @@ const TEXT_POTION_LATER: String = "Utilisable pendant ton tour, en combat."
 
 var _money: Label
 var _items_box: HBoxContainer
+var _items_scroll: ScrollContainer
+var _more_chip: PanelContainer
 var _badges_box: HBoxContainer
 var _badges_caption: Label
 var _potions_box: HBoxContainer
@@ -93,6 +97,8 @@ func _init() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	row.add_child(scroll)
+	_items_scroll = scroll
+	scroll.resized.connect(_fit_items)
 	_items_box = HBoxContainer.new()
 	_items_box.name = "Items"
 	_items_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -140,6 +146,13 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 	for child: Node in _potions_box.get_children():
 		_potions_box.remove_child(child)
 		child.queue_free()
+	_more_chip = null
+	if not run.items.is_empty():
+		_more_chip = _make_chip(TEXT_MORE_ITEMS % 0, "", COLOR_CAPTION)
+		_more_chip.name = "MoreItems"
+		_more_chip.visible = false
+		_items_box.add_child(_more_chip)
+	_fit_items()
 	var potions: Array[PotionData] = battle.potions if battle != null else run.potions
 	for i: int in maxi(run.max_potions(), potions.size()):
 		_potions_box.add_child(_make_potion_slot(potions, i, battle))
@@ -216,6 +229,47 @@ func get_potion_texts() -> Array[String]:
 func is_potion_usable(index: int) -> bool:
 	var slot: Button = _potion_button(index)
 	return slot != null and not slot.disabled
+
+
+## Story 012: keeps the item chips that fit in the bar's item area (in order) and folds the others into a "+N" chip
+## whose tooltip lists them (every item stays reachable by tooltip).
+func _fit_items() -> void:
+	if _more_chip == null or not is_instance_valid(_more_chip) or _items_scroll == null:
+		return
+	var avail: float = _items_scroll.size.x
+	if avail <= 0.0:
+		return
+	var sep: float = float(_items_box.get_theme_constant("separation"))
+	var chips: Array[PanelContainer] = []
+	for id: String in _chips:
+		chips.append(_chips[id])
+	var total: float = 0.0
+	for chip: PanelContainer in chips:
+		total += chip.get_combined_minimum_size().x + sep
+	var all_fit: bool = total - sep <= avail
+	var more_w: float = _more_chip.get_combined_minimum_size().x + sep + 12.0  # room for a two-digit count
+	var used: float = 0.0
+	var hidden: Array[String] = []
+	for chip: PanelContainer in chips:
+		var w: float = chip.get_combined_minimum_size().x + sep
+		var fits: bool = all_fit or (hidden.is_empty() and used + w + more_w <= avail)
+		chip.visible = fits
+		if fits:
+			used += w
+		else:
+			hidden.append(chip.tooltip_text)
+	_more_chip.visible = not hidden.is_empty()
+	((_more_chip.get_child(0)) as Label).text = TEXT_MORE_ITEMS % hidden.size()
+	_more_chip.tooltip_text = "\n\n".join(hidden)
+
+
+## Item chips actually shown in the bar, plus the "+N" overflow text if any, for the QA harness.
+func get_visible_item_texts() -> Array[String]:
+	var texts: Array[String] = []
+	for child: Node in _items_box.get_children():
+		if child is PanelContainer and (child as Control).visible:
+			texts.append(((child as PanelContainer).get_child(0) as Label).text)
+	return texts
 
 
 func _potion_button(index: int) -> Button:

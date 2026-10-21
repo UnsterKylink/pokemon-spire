@@ -21,6 +21,10 @@ const SPRITE_SOURCE_SIZE: float = 96.0
 const ENEMY_SPRITE_SCALES: Array[float] = [2.0, 2.0, 1.6]
 const PLAYER_SPRITE_SCALE: float = 2.0
 const CARD_SIZE: Vector2 = Vector2(170, 200)
+## Hand layout: normal / tight card spacing and the usable width (1280 minus side margins).
+const HAND_SEPARATION: int = 12
+const HAND_SEPARATION_TIGHT: int = 6
+const HAND_MAX_WIDTH: float = 1240.0
 const COLOR_HP_PLAYER: Color = Color(0.3, 0.8, 0.35)
 const COLOR_HP_ENEMY: Color = Color(0.9, 0.3, 0.3)
 const COLOR_ATTACK: Color = Color(0.85, 0.35, 0.3)
@@ -706,10 +710,18 @@ func _rebuild_hand() -> void:
 	for child: Node in _hand_box.get_children():
 		_hand_box.remove_child(child)
 		child.queue_free()
-	for i: int in _battle.hand.size():
+	var n: int = _battle.hand.size()
+	# Large hands (badge / item draw bonuses): tighten spacing, then narrow the cards to fit the width.
+	var sep: int = HAND_SEPARATION if n <= 6 else HAND_SEPARATION_TIGHT
+	_hand_box.add_theme_constant_override("separation", sep)
+	var card_size: Vector2 = CARD_SIZE
+	if n > 0:
+		var fit_w: float = floorf((HAND_MAX_WIDTH - sep * (n - 1)) / float(n))
+		card_size.x = minf(CARD_SIZE.x, fit_w)
+	for i: int in n:
 		var card: CardData = _battle.hand[i]
 		var b := Button.new()
-		b.custom_minimum_size = CARD_SIZE
+		b.custom_minimum_size = card_size
 		_fill_card_content(b, card)
 		b.disabled = not _battle.can_play(i)
 		var kind_color: Color = COLOR_SKILL if card.kind == CardData.KIND_SKILL else COLOR_ATTACK

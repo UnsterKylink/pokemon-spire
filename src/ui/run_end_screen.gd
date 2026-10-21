@@ -16,8 +16,8 @@ const COLOR_DEFEAT: Color = Color(0.95, 0.38, 0.35)
 const COLOR_PANEL: Color = Color(0.16, 0.17, 0.23)
 const COLOR_PANEL_BORDER: Color = Color(0.38, 0.4, 0.5)
 const COLOR_CAPTION: Color = Color(0.7, 0.72, 0.82)
-const SPRITE_SIZE: Vector2 = Vector2(120, 120)
-const BADGE_SIDE: float = 30.0
+const SPRITE_SIZE: Vector2 = Vector2(110, 110)
+const BADGE_SIDE: float = 32.0
 const LEFT_PANEL_WIDTH: float = 470.0
 const DECK_COLUMNS: int = 2
 const TEXT_VICTORY: String = "Victoire ! Tu as battu le Champion d'arène"
@@ -156,16 +156,20 @@ func press_new_run() -> void:
 
 func _add_stat(caption: String, value: String) -> void:
 	_stats[caption] = value
-	var c: Label = CardView.make_label(22)
+	var c: Label = CardView.make_label(20)
 	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	c.text = caption
 	c.add_theme_color_override("font_color", COLOR_CAPTION)
 	_stats_grid.add_child(c)
-	var v: Label = CardView.make_label(22)
+	var v: Label = CardView.make_label(20)
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# One line per stat (story 012: a long item list is cut with "…", the full list is the tooltip).
+	v.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	v.custom_minimum_size = Vector2(1, 0)
 	v.text = value
+	v.tooltip_text = value
+	v.mouse_filter = Control.MOUSE_FILTER_PASS
 	_stats_grid.add_child(v)
 
 
@@ -244,8 +248,10 @@ func _build_ui() -> void:
 	lbox.add_child(_stats_grid)
 	var badge_box := HBoxContainer.new()
 	badge_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	badge_box.add_theme_constant_override("separation", 12)
-	lbox.add_child(badge_box)
+	root.add_child(badge_box)
+	root.move_child(badge_box, _subtitle.get_index() + 1)
 	_badge_caption = CardView.make_label(22)
 	_badge_caption.name = "BadgeCaption"
 	_badge_caption.add_theme_color_override("font_color", COLOR_CAPTION)
