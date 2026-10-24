@@ -15,6 +15,8 @@ extends SceneTree
 ## badges, defeat summary; see _zones_shots; filter `story-012`).
 ## 013 (league shots: Route Victoire list, Conseil 4 fight with trainer header + HUD progress, intermission heal, Maître,
 ## Éthernatos intro / fight, final victory, league defeat; see _league_shots; filter `story-013`).
+## 013b (roster diversity shots: roster starter in the choice, roster wild fights in zones 1 and 6, reward carriers, a
+## newly possible gym type, a roster starter's deck; see _diversity_shots; filter `story-013b`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
@@ -739,7 +741,107 @@ func _league_shots() -> void:
 	await _shot("08-defaite-conseil")
 
 
+## Story 013b: first seed (from `from`) whose starter choice holds a roster candidate.
+const DIVERSITY_SEED: int = 2026
+const DIVERSITY_NEW_GYMS: Array[String] = ["dark", "fairy", "ghost", "dragon", "ice", "steel", "psychic", "fighting", "ground"]
+
+
+func _roster_line(tag: String) -> void:
+	var data: GameData = GameData.new()
+	data.load_all()
+	var bs: BattleScreen = _main.get_battle_screen()
+	var parts: PackedStringArray = PackedStringArray()
+	if bs != null:
+		for e: Combatant in bs.get_battle().enemies:
+			var r: Dictionary = data.get_roster_entry(e.id)
+			parts.append("%s(%s gen%s tier%s %s)" % [e.id, e.display_name, str(r.get("generation", "-")), str(r.get("tier", "-")), str(e.type_ids)])
+	print("013b %s: zone=%s enc=%s enemies=%s" % [tag, str(_main.get_zone().get("type_id", "")), _main.get_encounter_id(), parts])
+
+
+## Enters the first reachable room of type `room_type`; restarts the zone map (qa_set_zone) until the fight is a
+## roster encounter. True on success.
+func _enter_roster_fight(zone_index: int, data: GameData) -> bool:
+	for attempt: int in 40:
+		_main.qa_set_zone(zone_index)
+		for node_id: String in _main.map_reachable_ids():
+			if _main.get_run_state().act.graph.get_node(node_id).room_type == "wild":
+				_main.map_choose(node_id)
+				break
+		if _main.get_current_screen_name() == "battle" and data.is_roster_encounter(_main.get_encounter_id()) \
+				and (zone_index == 0 or data.get_encounter_enemy_ids(_main.get_encounter_id()).size() >= 2):
+			return true
+	return false
+
+
+func _diversity_shots() -> void:
+	var data: GameData = GameData.new()
+	data.load_all()
+	var roster_cands: Array[String] = data.get_roster_starter_candidates()
+	_main.forced_starter_id = ""
+	var seed_used: int = DIVERSITY_SEED
+	var roster_pick: String = ""
+	for s: int in range(DIVERSITY_SEED, DIVERSITY_SEED + 200):
+		_main.start_new_run(s)
+		for id: String in _main.get_starter_choices():
+			if roster_cands.has(id) and not data.get_evolution(id).is_empty():
+				roster_pick = id
+		if not roster_pick.is_empty():
+			seed_used = s
+			break
+	print("013b starter seed=%d choices=%s roster pick=%s" % [seed_used, _main.get_starter_choices(), roster_pick])
+	await _shot("01-choix-depart")
+	_main.starter_choose(roster_pick)
+	print("013b run starter=%s deck=%s" % [_main.get_run_state().starter_pokemon_id, _main.get_run_state().deck.map(func(c: CardData) -> String: return c.deck_key())])
+	if _enter_roster_fight(0, data):
+		await create_timer(FLOAT_WAIT).timeout
+		_roster_line("zone 1 wild")
+		await _shot("02-sauvage-zone1")
+	else:
+		print("013b: no roster fight found in zone 1")
+	_main.qa_set_hp(_main.get_run_state().max_hp)
+	if _enter_roster_fight(5, data):
+		await create_timer(FLOAT_WAIT).timeout
+		_roster_line("zone 6 wild")
+		await _shot("03-sauvage-zone6")
+		await _win_battle(true)
+		var carriers: PackedStringArray = PackedStringArray()
+		for o: RewardOffer in _main.get_reward_offers():
+			carriers.append("%s<-%s" % [o.card.id, o.card.pokemon_id])
+		print("013b reward carriers=%s" % [carriers])
+		await _shot("04-recompense")
+		_main.reward_skip()
+	else:
+		print("013b: no roster fight found in zone 6")
+	# A newly possible gym type (dark first): first seed whose zones hold one, then that zone's gym.
+	var gym_zone: int = -1
+	for s: int in range(DIVERSITY_SEED, DIVERSITY_SEED + 200):
+		_main.start_new_run(s, roster_pick)
+		for wanted: String in DIVERSITY_NEW_GYMS:
+			for z: Dictionary in _main.get_run_state().zones:
+				if String(z["type_id"]) == wanted and gym_zone < 0:
+					gym_zone = int(z["index"])
+			if gym_zone >= 0:
+				break
+		if gym_zone >= 0:
+			print("013b gym seed=%d zone=%s" % [s, str(_main.get_run_state().zones[gym_zone])])
+			break
+	_main.qa_set_zone(gym_zone)
+	_main.qa_skip_to_gym()
+	await create_timer(FLOAT_WAIT).timeout
+	_roster_line("gym")
+	await _shot("05-arene-nouveau-type")
+	_main.qa_set_zone(gym_zone)
+	_main.map_open_deck()
+	print("013b deck of %s: %d cards" % [_main.get_run_state().starter_pokemon_id, _main.get_run_state().deck.size()])
+	await _shot("06-deck")
+	_main.map_close_deck()
+
+
 func _run() -> void:
+	if _filter == "story-013b":
+		await _diversity_shots()
+		quit(0)
+		return
 	if _filter == "story-013":
 		await _league_shots()
 		quit(0)
