@@ -176,8 +176,10 @@ func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: Random
 		capture_allowed: bool = false) -> Battle:
 	var battle := Battle.new(build_player_combatant(), enemies, deck.duplicate(), effective_energy_per_turn(),
 			effective_hand_size(), rng, type_chart, get_pokemon_info, starter_pokemon_id, items, potions,
-			_data.get_status_book() if _data != null else null)
+			_data.get_status_book() if _data != null else null, _data.get_capture_rules() if _data != null else null,
+			_data.get_ball_book() if _data != null else {}, balls, capture_allowed)
 	battle.potion_used.connect(_on_battle_potion_used)
+	battle.ball_thrown.connect(_on_battle_ball_thrown)
 	return battle
 
 

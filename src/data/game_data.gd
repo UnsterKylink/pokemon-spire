@@ -79,7 +79,7 @@ var _roster_candidates: Array[String] = []  # roster ids with roles.candidate_st
 var _starter_roster_share: float = 0.0  # pokemon.json starter_choice.roster_share
 
 
-## Loads all twelve files (act and events story 005; items, potions, shop story 006; zones story 012; league story 013;
+## Loads all the files (balls story 017, skipped when `balls_path` is ""; act and events story 005; items, potions, shop story 006; zones story 012; league story 013;
 ## roster story 013b, skipped when `roster_path` is ""). Returns false (after push_error) if anything is missing or invalid.
 func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
 		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH,
@@ -87,7 +87,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
 		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
 		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH,
-		statuses_path: String = DEFAULT_STATUSES_PATH) -> bool:
+		statuses_path: String = DEFAULT_STATUSES_PATH, balls_path: String = DEFAULT_BALLS_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_status_book = StatusBook.new()
 	_cards.clear()

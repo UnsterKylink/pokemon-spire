@@ -88,6 +88,8 @@ var _league_screen: Control
 var _last_badge: Dictionary = {}
 ## What the last won fight paid: {"money": int, "item": ItemData|null, "potion": PotionData|null} ({} before any win).
 var _last_loot: Dictionary = {}
+## Story 017: RunState.apply_captures rows of the last won battle (empty if nothing was captured).
+var _last_captures: Array[Dictionary] = []
 ## Non-empty = every new run starts with this Pokémon without showing the choice (QA / `--starter=`).
 var forced_starter_id: String = ""
 ## `--seed=` value (0 = none): every "Nouvelle partie" reuses it so a QA run stays reproducible; else random.
@@ -182,6 +184,7 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_clear_screens()
 	_run = null
 	_last_loot = {}
+	_last_captures = []
 	_last_badge = {}
 	_last_league_heal = -1
 	_encounter_id = ""
@@ -309,6 +312,12 @@ func get_starter_screen() -> StarterScreen:
 ## "potion": PotionData|null}; {} before any win / for debug fights without a room type. For the reward screen.
 func get_last_loot() -> Dictionary:
 	return _last_loot
+
+
+## Story 017: the Pokémon captured in the last won battle (RunState.apply_captures rows: id, name, sprite, types, cards,
+## first_time). Empty if none.
+func get_last_captures() -> Array[Dictionary]:
+	return _last_captures
 
 
 ## A fresh Poké Mart stock for the current run (seeded shop RNG: deterministic with --seed). Call once per visit.
@@ -453,6 +462,20 @@ func battle_use_potion(index: int) -> bool:
 	return _battle_screen.use_potion(index)
 
 
+## QA (story 017): throws ball `ball` (id or index into Battle.ball_ids()) at enemy `enemy_index` of the current battle,
+## straight through Battle.use_ball (the UI agent may route it through the battle screen). {} outside a battle.
+func battle_use_ball(ball: Variant, enemy_index: int) -> Dictionary:
+	if _battle_screen == null or _battle_screen.get_battle() == null:
+		return {}
+	return _battle_screen.get_battle().use_ball(ball, enemy_index)
+
+
+## QA-ONLY CHEAT (story 017): gives one ball `ball_id` (if the bag has room).
+func qa_give_ball(ball_id: String) -> void:
+	if _run != null and _run.add_ball(ball_id):
+		_refresh_hud()
+
+
 ## QA: Centre "Se soigner".
 func center_heal() -> void:
 	if _center_screen != null:
@@ -506,6 +529,12 @@ func shop_buy_item(index: int) -> void:
 func shop_buy_potion(index: int) -> void:
 	if _mart_screen != null:
 		_mart_screen.buy_potion(index)
+
+
+## QA (story 017): buys ball article `index` at the Mart (same path as a MartScreen buy_requested("ball", index)).
+func shop_buy_ball(index: int) -> void:
+	if _mart_screen != null and _shop != null:
+		_on_shop_buy(ShopEntry.KIND_BALL, index)
 
 
 ## QA: "Retirer une carte" (opens the removal picker).
@@ -1111,7 +1140,8 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	_clear_screens()
 	_encounter_id = encounter_id
 	_fight_room_type = room_type
-	var battle: Battle = _run.create_battle(enemies, _data.get_type_chart(), _battle_rng)
+	# Story 017: balls only in the room types of balls.json capture.allowed_room_types (wild); never gyms / league / QA "".
+	var battle: Battle = _run.create_battle(enemies, _data.get_type_chart(), _battle_rng, _data.capture_allowed_in(room_type))
 	battle.state_changed.connect(_refresh_hud)
 	battle.item_triggered.connect(_on_item_triggered)
 	_battle_screen = BATTLE_SCENE.instantiate() as BattleScreen
@@ -1124,7 +1154,10 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
-	_run.record_battle_result(_battle_screen.get_battle().player, defeated_ids)
+	var won_battle: Battle = _battle_screen.get_battle()
+	_run.record_battle_result(won_battle.player, defeated_ids)
+	# Story 017: captured Pokémon left the battle (not in defeated_ids: no xp / stolen card); they join the team now.
+	_last_captures = _run.apply_captures(won_battle.captured_ids)
 	var weights: Dictionary = {}
 	if _fight_room_type == ROOM_LEAGUE:  # story 013: no loot; the final boss ends the run with the victory
 		_run.win_league_fight()
@@ -1370,6 +1403,9 @@ func _on_shop_buy(kind: String, index: int) -> void:
 		ShopEntry.KIND_POTION:
 			label = _shop.potions[index].get_name()
 			ok = _shop.buy_potion(index)
+		ShopEntry.KIND_BALL:
+			label = _shop.balls[index].get_name()
+			ok = _shop.buy_ball(index)
 	_refresh_hud()
 	_mart_screen.refresh("Acheté : %s." % label if ok else "Achat impossible.")
 

@@ -88,11 +88,19 @@ var _status_book: StatusBook
 ## are NOT handled here: the caller adds them to energy_per_turn / cards_per_turn (RunState.create_battle does).
 ## Expects 1..3 enemies: extra enemies are ignored, an empty list is reported (push_error).
 ## type_chart is injected; null means no types (every hit neutral).
+## Story 017: capture_rules / ball_book (id -> BallData) / carried_balls (id -> count, copied) / can_capture enable use_ball.
 func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Array[CardData],
 		energy_per_turn: int, cards_per_turn: int, rng: RandomNumberGenerator,
 		type_chart: TypeChart = null, pokemon_lookup: Callable = Callable(), starter_pokemon_id: String = "",
 			held_items: Array[ItemData] = [], carried_potions: Array[PotionData] = [],
-			status_book: StatusBook = null) -> void:
+			status_book: StatusBook = null, capture_rules: CaptureRules = null, ball_book: Dictionary = {},
+			carried_balls: Dictionary = {}, can_capture: bool = false) -> void:
+	_capture_rules = capture_rules
+	_ball_book = ball_book
+	capture_allowed = can_capture
+	for bid: String in carried_balls.keys():
+		if int(carried_balls[bid]) > 0 and ball_book.has(bid):
+			ball_counts[bid] = int(carried_balls[bid])
 	_status_book = status_book if status_book != null else StatusBook.new()
 	player = player_combatant
 	items = held_items.duplicate()
