@@ -36,6 +36,8 @@ var _info: Label
 var _cards_box: HBoxContainer
 var _loot_box: HBoxContainer
 var _captures_box: HBoxContainer
+var _root: VBoxContainer
+var _margin: MarginContainer
 var _done: bool = false
 var _built: bool = false
 
@@ -105,6 +107,10 @@ func set_captures(captures: Array[Dictionary]) -> void:
 		_captures_box.remove_child(child)
 		child.queue_free()
 	_captures_box.visible = not captures.is_empty()
+	# The capture row costs ~60 px: tighter gaps / margins keep "Passer" inside 720 px.
+	_root.add_theme_constant_override("separation", 6 if _captures_box.visible else 14)
+	for side: String in ["top", "bottom"]:
+		_margin.add_theme_constant_override("margin_" + side, 10 if _captures_box.visible else 24)
 	for row: Dictionary in captures:
 		var n: int = (row.get("cards", []) as Array).size()
 		var text: String = (TEXT_CAPTURED if bool(row.get("first_time", true)) else TEXT_CAPTURED_AGAIN) % [String(row["name"]), n,
@@ -193,7 +199,9 @@ func _build_ui() -> void:
 	for side: String in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 24)
 	add_child(margin)
+	_margin = margin
 	var root := VBoxContainer.new()
+	_root = root
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_theme_constant_override("separation", 14)
 	margin.add_child(root)

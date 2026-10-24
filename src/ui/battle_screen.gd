@@ -111,7 +111,7 @@ const TEXT_CAPTURE_TRAINER: String = "Impossible de capturer un Pokémon de Dres
 const TEXT_CAPTURE_NONE: String = "Aucun Pokémon capturable dans ce combat."
 const TEXT_CAPTURE_NO_ENERGY: String = "Pas assez d'énergie (%d requise)."
 const TEXT_CAPTURE_WAIT: String = "Attends ton tour."
-const TEXT_CAPTURE_HINT: String = "Capture : choisis une Ball sur un Pokémon (%d énergie)"
+const TEXT_CAPTURE_HINT: String = "Ball : %d énergie"
 const TEXT_BALL_CHANCE: String = "%s %d %%"
 const TEXT_BALL_TIP: String = "%s ×%d — %d %% de chances de capturer %s.\n%s"
 const TEXT_NOT_CAPTURABLE: String = "Non capturable"
@@ -125,7 +125,7 @@ const MODULATE_CAPTURABLE: Color = Color(1.0, 0.85, 0.85)
 const CAPTURE_BUTTON_SIZE: Vector2 = Vector2(120, 44)
 const BALL_BUTTON_HEIGHT: float = 28.0
 const BALL_BUTTON_ICON: float = 16.0
-const CAPTURE_FLOAT_Y: float = 0.55
+const CAPTURE_FLOAT_Y: float = 0.9
 const INTENT_FONT_MIN: int = 14
 
 
@@ -597,6 +597,10 @@ func _build_ui() -> void:
 	info.add_child(_deck_label)
 	_hint_label = _make_label(18)
 	_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Story 017: the hint never widens the row (the capture button joined it): it shrinks with an ellipsis instead.
+	_hint_label.clip_text = true
+	_hint_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_hint_label.custom_minimum_size = Vector2(40, 0)
 	info.add_child(_hint_label)
 	_capture_button = Button.new()
 	_capture_button.name = "CaptureButton"

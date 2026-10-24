@@ -25,7 +25,7 @@ const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
 const CARD_SIZE: Vector2 = Vector2(170, 200)
 const TILE_SIZE: Vector2 = Vector2(224, 118)
 ## Story 017: the Poké Balls row (lower tiles so the row fits above the buttons).
-const BALL_TILE_SIZE: Vector2 = Vector2(320, 100)
+const BALL_TILE_SIZE: Vector2 = Vector2(600, 92)
 const TEXT_BALLS: String = "Poké Balls"
 const TEXT_BAG_FULL: String = "Sac de Balls plein (%d/%d)."
 const TEXT_TITLE: String = "Poké Mart"
