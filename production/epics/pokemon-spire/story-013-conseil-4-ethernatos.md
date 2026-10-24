@@ -1,7 +1,7 @@
 # Story 013: Conseil 4 et Éthernatos
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -28,10 +28,10 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 2), scoped to this story:*
 
-- [ ] Après le 8e badge, le Conseil 4 : 4 Dresseurs d'élite puis le Maître, avec équipes définies en données ; les règles d'enchaînement (soin ou non entre les combats) sont définies en données.
-- [ ] Éthernatos est le boss final, avec un comportement spécial défini en données (ex. plusieurs phases, intentions propres), plus difficile que le Maître.
-- [ ] Battre Éthernatos mène à l'écran de victoire finale, qui résume toute la partie (badges, Conseil, deck final).
-- [ ] Perdre à n'importe quel combat du Conseil ou contre Éthernatos mène à l'écran de défaite.
+- [x] Après le 8e badge, le Conseil 4 : 4 Dresseurs d'élite puis le Maître, avec équipes définies en données ; les règles d'enchaînement (soin ou non entre les combats) sont définies en données.
+- [x] Éthernatos est le boss final, avec un comportement spécial défini en données (ex. plusieurs phases, intentions propres), plus difficile que le Maître.
+- [x] Battre Éthernatos mène à l'écran de victoire finale, qui résume toute la partie (badges, Conseil, deck final).
+- [x] Perdre à n'importe quel combat du Conseil ou contre Éthernatos mène à l'écran de défaite.
 
 ---
 
@@ -65,7 +65,7 @@
 **Required evidence**:
 - Integration : `tests/integration/run/conseil-4-ethernatos_test.gd` OR playtest doc — advisory at `qa.level: minimal`, plus a retained screenshot in `production/qa/evidence/` when the story changes what the player sees.
 
-**Status**: [ ] Not yet created
+**Status**: [x] Retained screenshots in `production/qa/evidence/story-013-conseil-4-ethernatos/`
 
 ---
 
@@ -73,3 +73,13 @@
 
 - Depends on: Story 012
 - Unlocks: Story 014
+
+---
+
+## Completion Notes
+**Completed**: 2026-10-24
+**Criteria**: 4/4 passing (confirmed by the user in play; 8 screenshots retained)
+**Deviations**: Advisory only — league teams have 3 Pokémon (Battle.MAX_ENEMIES = 3); no money/loot during the league (no shop after badge 8); Éthernatos is one solo fight with a long action sequence, no phases (user's choice); league balance not playtested; the gym-type fallback for member types is coded but never triggered by the shipped data; defeat screenshot taken via QA skip (0 badges shown); QA hooks ship in the build
+**Design decisions (with the user)**: 25 % heal + 1-of-3 card between the 5 league fights; 4 member types drawn among Spectre/Glace/Combat/Psy/Ténèbres/Acier excluding the run's gym types; Maître Peter (Dragon); Éthernatos solo
+**Test Evidence**: Integration — tests waived at qa.level minimal; screenshots at `production/qa/evidence/story-013-conseil-4-ethernatos/`
+**Code Review**: Skipped — Solo mode
