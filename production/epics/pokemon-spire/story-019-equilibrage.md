@@ -1,12 +1,12 @@
 # Story 019: Équilibrage et cartes manquantes
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Feature
 > **Type**: Config/Data
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-10-24
 
 ## Context
 
@@ -73,5 +73,5 @@
 
 ## Dependencies
 
-- Depends on: Story 018
+- Depends on: Story 016 (order changed by the player 2026-10-24: balance now, re-run the simulator after 017 and 018)
 - Unlocks: Story 020
