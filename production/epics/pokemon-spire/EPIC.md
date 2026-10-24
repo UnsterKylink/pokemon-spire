@@ -36,3 +36,4 @@
 | 024 | Version .exe Windows et optimisation | Integration | Ready | N/A |
 | 025 | Pokédex | UI | Ready | N/A |
 | 026 | Niveaux de difficulté (façon Ascension) | Logic | Ready | N/A |
+| 013b | Grande diversité de Pokémon | Integration | Ready | N/A |
