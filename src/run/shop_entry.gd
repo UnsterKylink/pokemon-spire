@@ -26,6 +26,8 @@ func get_name() -> String:
 			return card.display_name
 		KIND_ITEM:
 			return item.display_name
+		KIND_BALL:
+			return ball.display_name
 	return potion.display_name
 
 
@@ -36,4 +38,6 @@ func get_description() -> String:
 			return card.description
 		KIND_ITEM:
 			return item.description
+		KIND_BALL:
+			return ball.description
 	return potion.description
