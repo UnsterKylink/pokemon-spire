@@ -15,7 +15,11 @@ Point de départ : `report-post-c.md` (0 / 600 victoires ; 51 % des parties meur
 | it05 | 600 | 1 | 19.0 % | Éthernatos 21 % (51 % de ceux qui l'atteignent), zone6_wild 7 % | Conseil/Maître ×2.1-2.6 → ×1.3-1.55, soin Ligue 25→40 % ; tier 3 encore réduit |
 | it06 | 600 | 1 | 20.8 % | Éthernatos 11.7 %, Maître 7.3 %, zone6_boss 6 % | Éthernatos 620→520 PV, force +5→+4 ; Conseil ×1.4-1.7, Maître ×1.8/+4 ; zone 1 élites plus petites |
 | it07 | 600 | 1 | 29.5 % | Éthernatos 16.5 % (36 % des arrivants), Maître 5.5 % | arènes zones 5-8 : équipes un tier plus bas ; Maître ×1.75/+3 |
-
+| it08 | 600 | 1 | 34.7 % | Éthernatos 11.3 % (25 % des arrivants), Maître 5.5 % | Éthernatos 520→470 PV |
+| it09 | 2000 | 7 | 31.6 % | zone 1 11.8 % (sauvages 5.3 %), Éthernatos 11.8 %, Maître 4.5 % | (même config, graine neuve) |
+| it10 | 2000 | 7 | 31.0 % | zone2_boss 6.3 %, Éthernatos 10.9 % | sauvages zone 1 ×0.8 ; arène zone 2 [1,2,2] (trop : mur en zone 2 → annulé) |
+| it11 | 2000 | 7 | 32.2 % | Éthernatos 10.8 %, zone 1 10.5 % (dont 51 combats bloqués par immunité) | zone 1 : part roster des sauvages 0.7→0.35 ; arène zone 2 ×1.0, [1,1,2] |
+| it12 | 2000 | 7 | 36.6 % | Éthernatos 9.5 % (21 % des arrivants), zone 1 10.5 %, Maître 2.8 % | Conseil ×1.4-1.6, Maître ×1.65/+3, Éthernatos 450 PV |
 ## Valeurs modifiées (fichier → clé → ancienne → nouvelle → pourquoi)
 
 (rempli au fil des itérations ; la version finale est en bas)
