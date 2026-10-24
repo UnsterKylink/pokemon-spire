@@ -25,6 +25,24 @@
   ["coup_d_boule", "Coup d'Boule", 1, "common", "normal", 7, "rattata"],
   ["poing_eclair", "Poing-Éclair", 2, "uncommon", "electric", 12, "electabuzz"],
   ["surf", "Surf", 2, "uncommon", "water", 12, "vaporeon"],
-  ["ultralaser", "Ultralaser", 3, "rare", "normal", 22, "snorlax"]
+  ["ultralaser", "Ultralaser", 3, "rare", "normal", 22, "snorlax"],
+  ["roue_de_feu", "Roue de Feu", 2, "uncommon", "fire", 12, "cyndaquil"],
+  ["cascade", "Cascade", 2, "uncommon", "water", 13, "totodile"],
+  ["eclair_fou", "Éclair Fou", 2, "uncommon", "electric", 13, "shinx"],
+  ["giga_sangsue", "Giga-Sangsue", 2, "uncommon", "grass", 12, "bulbasaur"],
+  ["poing_glace", "Poing-Glace", 2, "uncommon", "ice", 12, "jynx"],
+  ["coup_croix", "Coup-Croix", 2, "uncommon", "fighting", 13, "hitmonlee"],
+  ["crochet_venin", "Crochet Venin", 2, "uncommon", "poison", 12, "zubat"],
+  ["telluriforce", "Telluriforce", 2, "uncommon", "ground", 13, "sandslash"],
+  ["lame_d_air", "Lame d'Air", 2, "uncommon", "flying", 13, "rookidee"],
+  ["choc_psy", "Choc Psy", 2, "uncommon", "psychic", 13, "espeon"],
+  ["vampirisme", "Vampirisme", 2, "uncommon", "bug", 12, "ledyba"],
+  ["pouvoir_antique", "Pouvoir Antique", 2, "uncommon", "rock", 12, "roggenrola"],
+  ["griffe_ombre", "Griffe Ombre", 2, "uncommon", "ghost", 12, "banette"],
+  ["draco_charge", "Draco-Charge", 2, "uncommon", "dragon", 13, "salamence"],
+  ["coup_bas", "Coup Bas", 2, "uncommon", "dark", 12, "purrloin"],
+  ["gyroballe", "Gyroballe", 2, "uncommon", "steel", 13, "steelix"],
+  ["choc_emotionnel", "Choc Émotionnel", 2, "uncommon", "fairy", 13, "clefable"],
+  ["draco_meteore", "Draco Météore", 3, "rare", "dragon", 20, "dragonite"]
  ]
 }

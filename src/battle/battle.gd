@@ -2,7 +2,8 @@ class_name Battle
 extends RefCounted
 ## Pure combat logic (no nodes/scenes): 1 player Pokémon vs 1..3 enemies with data-driven intents.
 ## Implements: design/game-brief.md MVP features 1-2, story-001-combat-de-base,
-## story-002-intentions-et-multi-ennemis, story-003-types, story-016-statuts (incl. the anti-lock rules).
+## story-002-intentions-et-multi-ennemis, story-003-types, story-016-statuts (incl. the anti-lock rules),
+## story-019-equilibrage (an enemy attack uses its action's data type, see _attack_type_of).
 
 enum State { PLAYER_TURN, WON, LOST }
 
@@ -278,7 +279,7 @@ func refresh_intents() -> void:
 		if e.is_alive() and e.intent != null:
 			if e.intent.type == EnemyIntent.TYPE_ATTACK:
 				e.intent.value = _type_chart.final_damage(maxi(0, e.intent.base_value - _attack_penalty(e)),
-						e.get_primary_type(), player.type_ids)
+						_attack_type_of(e, e.intent), player.type_ids)
 			e.intent.skip_label = _skip_label(e)
 
 
@@ -305,13 +306,13 @@ func _execute_intent(enemy: Combatant) -> void:
 			player.take_damage(intent.value)
 			hit = true
 			if intent.value > 0:
-				_on_damaged(player, enemy.get_primary_type())
+				_on_damaged(player, _attack_type_of(enemy, intent))
 		EnemyIntent.TYPE_BLOCK:
 			enemy.add_block(intent.value)
 		EnemyIntent.TYPE_BUFF:
 			enemy.strength += intent.value
 	if hit:
-		var mult: float = _type_chart.damage_multiplier(enemy.get_primary_type(), player.type_ids)
+		var mult: float = _type_chart.damage_multiplier(_attack_type_of(enemy, intent), player.type_ids)
 		hit_resolved.emit(player, intent.value, mult)
 		# Status of the attack: applied unless the hit is fully immune (type multiplier 0), even if block absorbed it.
 		if not intent.status_id.is_empty() and mult > 0.0 and player.is_alive():
@@ -345,10 +346,17 @@ func _roll_intent(enemy: Combatant) -> void:
 	rolled.base_value = rolled.value
 	if rolled.type == EnemyIntent.TYPE_ATTACK:
 		# Strength is added BEFORE the type multiplier (burn subtracts its penalty there too); the displayed value is the final one.
-		rolled.value = _type_chart.final_damage(maxi(0, rolled.value - _attack_penalty(enemy)), enemy.get_primary_type(), player.type_ids)
+		rolled.attack_type = _attack_type_of(enemy, rolled)
+		rolled.attack_type_label = _type_chart.get_type_name(rolled.attack_type) if enemy.type_ids.size() > 1 else ""
+		rolled.value = _type_chart.final_damage(maxi(0, rolled.value - _attack_penalty(enemy)), rolled.attack_type, player.type_ids)
 		rolled.status_label = _status_book.name_of(rolled.status_id)
 	rolled.skip_label = _skip_label(enemy)
 	enemy.intent = rolled
+
+
+## Story 019: the type of an enemy attack = the action's data attack_type, else the enemy's primary type.
+func _attack_type_of(enemy: Combatant, intent: EnemyIntent) -> String:
+	return intent.attack_type if intent != null and not intent.attack_type.is_empty() else enemy.get_primary_type()
 
 
 ## Fires every held item bound to `trigger` on the player (heal / block effects); emits item_triggered if it did something.

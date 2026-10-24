@@ -109,6 +109,24 @@
 		"toxik": {"name": "Toxik", "cost": 1, "kind": "skill", "rarity": "common", "damage": 0, "block": 0, "description": "Empoisonne un ennemi : Poison 4.", "status": {"id": "poison", "value": 4}},
 		"poudre_toxik": {"name": "Poudre Toxik", "cost": 2, "kind": "skill", "rarity": "rare", "damage": 0, "block": 0, "description": "Empoisonne fortement un ennemi : Poison 8.", "status": {"id": "poison", "value": 8}},
 		"cage_eclair": {"name": "Cage-Éclair", "cost": 1, "kind": "skill", "rarity": "uncommon", "damage": 0, "block": 0, "description": "Paralyse un ennemi : Paralysie.", "status": {"id": "paralysis", "value": 1}},
-		"feu_follet": {"name": "Feu Follet", "cost": 1, "kind": "skill", "rarity": "common", "damage": 0, "block": 0, "description": "Brûle un ennemi : Brûlure 4.", "status": {"id": "burn", "value": 4}}
+		"feu_follet": {"name": "Feu Follet", "cost": 1, "kind": "skill", "rarity": "common", "damage": 0, "block": 0, "description": "Brûle un ennemi : Brûlure 4.", "status": {"id": "burn", "value": 4}},
+		"roue_de_feu": {"name": "Roue de Feu", "cost": 2, "kind": "attack", "pokemon": "cyndaquil", "rarity": "uncommon", "type": "fire", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"cascade": {"name": "Cascade", "cost": 2, "kind": "attack", "pokemon": "totodile", "rarity": "uncommon", "type": "water", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"eclair_fou": {"name": "Éclair Fou", "cost": 2, "kind": "attack", "pokemon": "shinx", "rarity": "uncommon", "type": "electric", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"giga_sangsue": {"name": "Giga-Sangsue", "cost": 2, "kind": "attack", "pokemon": "bulbasaur", "rarity": "uncommon", "type": "grass", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"poing_glace": {"name": "Poing-Glace", "cost": 2, "kind": "attack", "pokemon": "jynx", "rarity": "uncommon", "type": "ice", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"coup_croix": {"name": "Coup-Croix", "cost": 2, "kind": "attack", "pokemon": "hitmonlee", "rarity": "uncommon", "type": "fighting", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"crochet_venin": {"name": "Crochet Venin", "cost": 2, "kind": "attack", "pokemon": "zubat", "rarity": "uncommon", "type": "poison", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"telluriforce": {"name": "Telluriforce", "cost": 2, "kind": "attack", "pokemon": "sandslash", "rarity": "uncommon", "type": "ground", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"lame_d_air": {"name": "Lame d'Air", "cost": 2, "kind": "attack", "pokemon": "rookidee", "rarity": "uncommon", "type": "flying", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"choc_psy": {"name": "Choc Psy", "cost": 2, "kind": "attack", "pokemon": "espeon", "rarity": "uncommon", "type": "psychic", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"vampirisme": {"name": "Vampirisme", "cost": 2, "kind": "attack", "pokemon": "ledyba", "rarity": "uncommon", "type": "bug", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"pouvoir_antique": {"name": "Pouvoir Antique", "cost": 2, "kind": "attack", "pokemon": "roggenrola", "rarity": "uncommon", "type": "rock", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"griffe_ombre": {"name": "Griffe Ombre", "cost": 2, "kind": "attack", "pokemon": "banette", "rarity": "uncommon", "type": "ghost", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"draco_charge": {"name": "Draco-Charge", "cost": 2, "kind": "attack", "pokemon": "salamence", "rarity": "uncommon", "type": "dragon", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"coup_bas": {"name": "Coup Bas", "cost": 2, "kind": "attack", "pokemon": "purrloin", "rarity": "uncommon", "type": "dark", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"gyroballe": {"name": "Gyroballe", "cost": 2, "kind": "attack", "pokemon": "steelix", "rarity": "uncommon", "type": "steel", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"choc_emotionnel": {"name": "Choc Émotionnel", "cost": 2, "kind": "attack", "pokemon": "clefable", "rarity": "uncommon", "type": "fairy", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"draco_meteore": {"name": "Draco Météore", "cost": 3, "kind": "attack", "pokemon": "dragonite", "rarity": "rare", "type": "dragon", "damage": 20, "block": 0, "description": "Inflige 20 dégâts."}
 	}
 }

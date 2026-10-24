@@ -224,6 +224,23 @@ def add_status(slug, types, tier, acts):
     return acts
 
 
+def add_attack_types(types, acts):
+    """Story 019: a dual-typed Pokemon's STRONGEST attack action (highest value, the last one on ties) attacks with its
+    SECONDARY type ("attack_type"); its other attacks keep the default (primary type, no field). A single attack, or a
+    single-typed Pokemon, is left unchanged. In place; idempotent."""
+    attacks = [a for a in acts if a["type"] == "attack"]
+    for a in attacks:
+        a.pop("attack_type", None)
+    if len(types) < 2 or len(attacks) < 2:
+        return acts
+    best = attacks[0]
+    for a in attacks:
+        if a["value"] >= best["value"]:
+            best = a
+    best["attack_type"] = types[1]
+    return acts
+
+
 def pick(lst, key, i=0):
     return lst[(h(key) + i) % len(lst)]
 
@@ -327,6 +344,7 @@ def build():
         ty = [types[d][k] for k in sorted(types[d])]
         pat, acts = make_behaviour(slug, st, tier)
         acts = add_status(slug, ty, tier, acts)
+        acts = add_attack_types(ty, acts)
         nxt = min(children[d]) if d in children else None
         out[slug] = {
             "name": names[d], "dex": d, "generation": int(sp[d]["generation_id"]), "types": ty,
@@ -350,7 +368,7 @@ DOC = (
     "membres deja presents dans pokemon.json restent referencables par leur slug), evolves_to (slug de l'evolution suivante, "
     "branche de plus petit dex, null si aucune ; peut designer un Pokemon de pokemon.json), tier 1|2|3 (puissance utilisee "
     "pour les formules : = stage sauf especes sans evolution, rangees par BST), bst (total des stats de base), max_hp, "
-    "pattern 'sequence'|'weighted' + actions [{type attack|block|buff, value, weight? (weighted), status? {id, value} (attaque seulement, statuses.json)}] (meme format que "
+    "pattern 'sequence'|'weighted' + actions [{type attack|block|buff, value, weight? (weighted), status? {id, value} (attaque seulement, statuses.json), attack_type? (story 019 : type de l'attaque, absent = 1er type ; l'attaque la plus forte d'un double type = 2e type)}] (meme format que "
     "pokemon.json enemies), teaches [1-2 ids de cartes d'attaque de cards.json ; le 1er est toujours du type primaire], "
     "sprite (res://assets/sprites/pokemon/<slug>.png, 96px), roles {wild_ok: peut apparaitre sauvage/elite/arene, "
     "carrier_ok: peut porter une carte de recompense, candidate_start: stade 1 avec BST <= 330, proposable au depart}}. "

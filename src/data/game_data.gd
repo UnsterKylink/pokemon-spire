@@ -1946,6 +1946,9 @@ func _check_enemy_def(eid: String, def_v: Variant) -> bool:
 			elif not parsed.status_id.is_empty() and not _status_book.has(parsed.status_id):
 				push_error("GameData: enemy '%s' action #%d inflicts unknown status '%s'" % [eid, i, parsed.status_id])
 				ok = false
+			elif not parsed.attack_type.is_empty() and not _type_chart.is_known_type(parsed.attack_type):
+				push_error("GameData: enemy '%s' action #%d has unknown attack_type '%s'" % [eid, i, parsed.attack_type])
+				ok = false
 	return ok
 
 

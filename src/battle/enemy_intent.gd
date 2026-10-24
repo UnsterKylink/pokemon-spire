@@ -20,6 +20,11 @@ var status_id: String = ""
 var status_value: int = 0
 ## Display name of status_id (set by Battle from the StatusBook; falls back to the id).
 var status_label: String = ""
+## Story 019: type id of an attack action (data key "attack_type"; "" = the enemy's primary type, resolved by Battle when
+## the intent is rolled, so a rolled attack intent always carries its real type). Validated against types.json by GameData.
+var attack_type: String = ""
+## Story 019: display name of the attack type, set by Battle only for dual-typed enemies ("" = not shown).
+var attack_type_label: String = ""
 ## Non-empty while the enemy will lose its turn (set by Battle, e.g. "Dort"): display_text() shows it instead of the action.
 var skip_label: String = ""
 
@@ -57,6 +62,12 @@ static func from_dict(d: Dictionary) -> EnemyIntent:
 			return null
 		intent.status_id = String((status_v as Dictionary)["id"])
 		intent.status_value = int(sv)
+	var at_v: Variant = d.get("attack_type", null)
+	if at_v != null:
+		if type_value != TYPE_ATTACK or not (at_v is String) or String(at_v).is_empty():
+			push_error("EnemyIntent: 'attack_type' must be a type id and only applies to attack actions")
+			return null
+		intent.attack_type = String(at_v)
 	intent.type = type_value
 	intent.value = int(raw_value)
 	intent.weight = float(raw_weight)
@@ -73,19 +84,22 @@ func with_bonus(bonus: int) -> EnemyIntent:
 	copy.status_id = status_id
 	copy.status_value = status_value
 	copy.status_label = status_label
+	copy.attack_type = attack_type
+	copy.attack_type_label = attack_type_label
 	return copy
 
 
 ## French display text: "Attaque 7", "Protection 6", "Renforcement +2".
-## "Attaque 9 + Poison 3" when the attack inflicts a status; the skip label ("Dort") while the enemy loses its turn.
+## "Attaque 9 + Poison 3" when the attack inflicts a status; "Attaque 9 (Eau)" when attack_type_label is set (story 019); the skip label ("Dort") while the enemy loses its turn.
 func display_text() -> String:
 	if not skip_label.is_empty():
 		return skip_label
 	match type:
 		TYPE_ATTACK:
+			var suffix: String = " (%s)" % attack_type_label if not attack_type_label.is_empty() else ""
 			if not status_id.is_empty():
-				return "Attaque %d + %s %d" % [value, status_label if not status_label.is_empty() else status_id, status_value]
-			return "Attaque %d" % value
+				return "Attaque %d%s + %s %d" % [value, suffix, status_label if not status_label.is_empty() else status_id, status_value]
+			return "Attaque %d%s" % [value, suffix]
 		TYPE_BLOCK:
 			return "Protection %d" % value
 		TYPE_BUFF:
