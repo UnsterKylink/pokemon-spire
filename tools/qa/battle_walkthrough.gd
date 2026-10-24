@@ -433,6 +433,7 @@ func _champion_shots() -> void:
 	_main.qa_win_gym()
 	_main.reward_skip()
 	_main.badge_continue()
+	_win_league()  # story 013: badge 8 -> Conseil 4 -> Maître -> Éthernatos -> victory
 	await _shot("04-victoire")
 	print("victory stats: ", _main.get_victory_screen().get_stats())
 	_main.victory_new_run()
@@ -551,6 +552,17 @@ func _deck_shots() -> void:
 	print("mart picker closed: deck button enabled=%s" % _main.get_hud().is_deck_enabled())
 
 
+## Story 013: from the league screen, wins every league fight (QA cheat, reward skipped) up to the final victory.
+func _win_league() -> void:
+	for i: int in 10:
+		if _main.get_current_screen_name() != "league":
+			return
+		print("league fight: ", _main.get_league_member().get("name", ""))
+		_main.qa_win_league_fight()
+		if _main.get_current_screen_name() == "reward":
+			_main.reward_skip()
+
+
 func _zone_line(tag: String) -> void:
 	var run: RunState = _main.get_run_state()
 	var z: Dictionary = _main.get_zone()
@@ -617,6 +629,7 @@ func _zones_shots() -> void:
 	_gym_line("zone 8 gym")
 	await _shot("05-champion-zone-8")
 	await _clear_gym()
+	_win_league()  # story 013: the league screen follows badge 8
 	var vs: RunEndScreen = _main.get_victory_screen()
 	print("victory: title=\"%s\" stats=%s badges=%s" % [vs.get_title_text(), vs.get_stats(),
 			vs.get_badge_slots().map(func(d: Dictionary) -> String: return "1" if d["earned"] else "0")])

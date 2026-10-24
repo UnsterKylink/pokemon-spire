@@ -12,6 +12,8 @@ extends Control
 ## story-012-structure-8-arenes (8 zones, each with its own map and gym; gym win -> loot + card reward -> BADGE screen
 ## -> [evolution after the badges listed in zones.json] -> next zone map, or the victory after the last badge;
 ## zone types are drawn with the run's seeded RNG). Badge flow API: get_last_badge() / get_badges() / badge_continue().
+## story-013-conseil-4-ethernatos (after badge 8: league screen -> 4 Conseil 4 fights -> Maître -> Éthernatos -> victory;
+## heal + card reward between fights, data: league.json). API: get_league_stage() / get_league_member() / league_continue().
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -38,6 +40,10 @@ const SCREEN_EVOLUTION: String = "evolution"
 ## Story 012: the badge screen (BadgeScreen; leave it with badge_continue()).
 const SCREEN_BADGE: String = "badge"
 const SCREEN_VICTORY: String = "victory"
+## Story 013: league intro ("Route Victoire") / intermission between two league fights; league_continue() leaves it.
+const SCREEN_LEAGUE: String = "league"
+## Story 013: _fight_room_type of a league fight (no loot, league reward weights).
+const ROOM_LEAGUE: String = "league"
 const SCREEN_DEFEAT: String = "defeat"
 ## Room type of the zone's gym fight (story 012: its win pays loot + a card reward, then the badge; the last zone ends the run).
 const ROOM_BOSS: String = "boss"
@@ -56,6 +62,12 @@ var _loot_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _shop_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 ## Story 012: draws the zone (gym) types at the start of a run; appended last so older seeds are unchanged.
 var _zone_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Story 013: draws the Conseil 4 member types (seeded with the other run RNGs; last in the list so older seeds are unchanged).
+var _league_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Story 013: HP healed between the last two league fights (-1 = intro, no heal yet).
+var _last_league_heal: int = -1
+## Story 013: league intro / intermission screen (placeholder screen until the UI agent provides one).
+var _league_screen: Control
 ## The badge just awarded ({} before the first gym win): see RunState.award_badge.
 var _last_badge: Dictionary = {}
 ## What the last won fight paid: {"money": int, "item": ItemData|null, "potion": PotionData|null} ({} before any win).
@@ -146,11 +158,12 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_run = null
 	_last_loot = {}
 	_last_badge = {}
+	_last_league_heal = -1
 	_encounter_id = ""
 	_fight_room_type = ""
 	_evolution_summary = {}
 	_hud.visible = false
-	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng, _zone_rng]
+	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng, _zone_rng, _league_rng]
 	for i: int in rngs.size():
 		if act_seed != 0:
 			rngs[i].seed = act_seed + i + 1
@@ -170,6 +183,10 @@ func _begin_run(starter_id: String, act_seed: int) -> void:
 	if run == null:
 		return
 	run.set_zones(_data.draw_zones(_zone_rng))  # story 012: the 8 gym types, in zone order
+	var gym_types: Array[String] = []
+	for z: Dictionary in run.zones:
+		gym_types.append(String(z["type_id"]))
+	run.set_league(_data.draw_league(_league_rng, gym_types))  # story 013: 4 member types not used by the gyms
 	if not run.start_act(_data, act_seed):
 		push_error("Main: could not start the act")
 		return
@@ -749,6 +766,95 @@ func qa_set_hp(value: int) -> void:
 		_center_screen.setup(_data, _run, _run.rest_heal_preview(), _run.rest_heal_percent())
 
 
+# --- Conseil 4, Maître, Éthernatos (story 013) -------------------------------------------------
+
+## Current league stage: 0..member_count-1 = Conseil 4 members, member_count = the Maître, member_count+1 = the final
+## boss (Éthernatos); -1 outside the league (or without a run). With the shipped data: 0..5.
+func get_league_stage() -> int:
+	return _run.league_stage if _run != null and _run.is_in_league() else -1
+
+
+## The league fight of the current stage ({} outside the league): {name, type_id, type_name, title, index (1-based),
+## total (fights incl. Maître + boss), stage, kind ("member" | "champion" | "final_boss"), type_ids, encounter, modifiers,
+## color (Color of type_id)}.
+func get_league_member() -> Dictionary:
+	if _run == null or not _run.is_in_league():
+		return {}
+	var m: Dictionary = _run.current_league_fight()
+	m["color"] = _data.get_type_color(String(m["type_id"]))
+	return m
+
+
+## All league fights of this run in order (members drawn at the start of the run, Maître, final boss); see
+## GameData.draw_league. Readable before the league starts (e.g. a "Route Victoire" preview).
+func get_league() -> Array[Dictionary]:
+	return _run.league if _run != null else ([] as Array[Dictionary])
+
+
+## HP restored by the heal between the last two league fights; -1 on the intro (before the first league fight).
+func get_last_league_heal() -> int:
+	return _last_league_heal
+
+
+## True on the league screen before the first league fight (the "Route Victoire" intro), false on an intermission.
+func is_league_intro() -> bool:
+	return _screen_name == SCREEN_LEAGUE and _run != null and _run.league_fights_won == 0
+
+
+## Leaves the league screen (intro / intermission between two fights) and starts the current stage's fight with the
+## data modifiers. The UI's league screen button calls this. Ignored outside SCREEN_LEAGUE.
+func league_continue() -> void:
+	if _screen_name != SCREEN_LEAGUE or _run == null or not _run.is_in_league():
+		return
+	var fight: Dictionary = _run.current_league_fight()
+	var mods: Dictionary = fight["modifiers"]
+	var enemies: Array[Combatant] = _data.create_enemies(String(fight["encounter"]), float(mods["hp_multiplier"]),
+			int(mods["strength_bonus"]))
+	_launch_battle(String(fight["encounter"]), enemies, ROOM_LEAGUE)
+
+
+## QA: the live league screen (placeholder until the UI's own league screen replaces it; null elsewhere).
+func get_league_screen() -> Control:
+	return _league_screen
+
+
+## QA-ONLY CHEAT: jumps to the last zone and enters the league at stage 0 (league intro screen) without playing the
+## zones: no badge or bonus is granted.
+func qa_skip_to_league() -> void:
+	if _run == null or _run.league.is_empty():
+		return
+	_run.jump_to_zone(_run.zones.size() - 1)
+	_run.start_league()
+	_last_league_heal = -1
+	_show_league_screen()
+
+
+## QA-ONLY CHEAT: jumps to league stage `stage` (clamped) and shows the league screen; earlier fights count as won.
+func qa_set_league_stage(stage: int) -> void:
+	if _run == null or _run.league.is_empty():
+		return
+	if not _run.is_in_league():
+		_run.start_league()
+	_run.league_stage = clampi(stage, 0, _run.league.size() - 1)
+	_run.league_fights_won = _run.league_stage
+	_show_league_screen()
+
+
+## QA-ONLY CHEAT: wins the current league fight through the real win path (starts it from the league screen if needed,
+## then the battle-won handler): card reward next (members / Maître), or the final victory (final boss).
+func qa_win_league_fight() -> void:
+	if _run == null:
+		return
+	if _screen_name == SCREEN_LEAGUE:
+		league_continue()
+	if _battle_screen == null or _fight_room_type != ROOM_LEAGUE:
+		return
+	var ids: Array[String] = []
+	for e: Combatant in _battle_screen.get_battle().enemies:
+		ids.append(e.id)
+	_on_battle_won(ids)
+
+
 # --- Flow ----------------------------------------------------------------------------------------
 
 func _show_map() -> void:
@@ -808,8 +914,17 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_run.record_battle_result(_battle_screen.get_battle().player, defeated_ids)
-	_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
-	var weights: Dictionary = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
+	var weights: Dictionary = {}
+	if _fight_room_type == ROOM_LEAGUE:  # story 013: no loot; the final boss ends the run with the victory
+		_run.win_league_fight()
+		if _run.final_boss_defeated:
+			_show_victory()
+			return
+		_last_loot = {}
+		weights = _data.get_league_reward_weights()
+	else:
+		_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
+		weights = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
 	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
 	_clear_screens()
 	_offers = offers
@@ -819,7 +934,7 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_reward_screen.deck_requested.connect(open_deck)
 	_set_screen(_reward_screen, SCREEN_REWARD)
 	_reward_screen.setup(_data, _run, _offers)
-	_reward_screen.set_loot(_last_loot if not _fight_room_type.is_empty() else {})
+	_reward_screen.set_loot(_last_loot if not _fight_room_type.is_empty() and _fight_room_type != ROOM_LEAGUE else {})
 
 
 func _on_card_chosen(card: CardData) -> void:
@@ -827,9 +942,13 @@ func _on_card_chosen(card: CardData) -> void:
 	_after_reward()
 
 
-## Back to the map; after a gym win (story 012) the badge comes first.
+## Back to the map; after a gym win (story 012) the badge comes first; after a league fight (story 013) the heal of
+## league.json heal_percent_between_fights then the league intermission screen (next fight).
 func _after_reward() -> void:
-	if _fight_room_type == ROOM_BOSS:
+	if _fight_room_type == ROOM_LEAGUE:
+		_last_league_heal = _run.advance_league(_data.get_league_heal_percent())
+		_show_league_screen()
+	elif _fight_room_type == ROOM_BOSS:
 		_show_badge()
 	else:
 		_show_map()
@@ -849,11 +968,15 @@ func _show_badge() -> void:
 	_badge_screen.setup(_data, _run, _last_badge)
 
 
-## After the badge (and the evolution): the next zone's map, or the victory once the last zone's gym is beaten
-## (temporary end until story 013, Conseil 4).
+## After the badge (and the evolution): the next zone's map, or the league (story 013: Conseil 4 -> Maître -> final boss)
+## once the last zone's gym is beaten (the victory directly only without league data).
 func _next_zone_or_victory() -> void:
 	if _run.is_final_zone() or not _run.advance_zone():
-		_show_victory()
+		if _run.start_league():
+			_last_league_heal = -1
+			_show_league_screen()
+		else:
+			_show_victory()
 		return
 	if not _run.start_act(_data, 0):
 		push_error("Main: could not start zone %d" % (_run.zone_index + 1))
@@ -891,6 +1014,22 @@ func _on_evolution_card_chosen(index: int) -> void:
 	var card: CardData = _evolution_offers[index]
 	_run.add_card(card)
 	_evolution_screen.show_result("%s rejoint ton deck !" % card.display_name)
+
+
+## Story 013: league intro (before the first fight) / intermission (after a heal). PLACEHOLDER screen: the UI agent may
+## replace it by a dedicated screen — keep _league_screen / SCREEN_LEAGUE and call league_continue() from its button.
+func _show_league_screen() -> void:
+	_clear_screens()
+	var fight: Dictionary = get_league_member()
+	var screen: PlaceholderRoomScreen = ROOM_SCENE.instantiate() as PlaceholderRoomScreen
+	_league_screen = screen
+	screen.finished.connect(league_continue)
+	_set_screen(screen, SCREEN_LEAGUE)
+	var body: String = "Prochain combat (%d/%d) : %s — %s (%s)" % [int(fight["index"]), int(fight["total"]),
+			String(fight["name"]), String(fight["title"]), String(fight["type_name"])]
+	if _last_league_heal >= 0:
+		body = "Tu récupères %d PV.\n" % _last_league_heal + body
+	screen.setup("Route Victoire" if _run.league_fights_won == 0 else "Conseil 4", body, "Combattre", fight["color"])
 
 
 func _show_victory() -> void:
@@ -1060,6 +1199,7 @@ func _clear_screens() -> void:
 	_evolution_screen = null
 	_end_screen = null
 	_badge_screen = null
+	_league_screen = null
 	_evolution_offers = []
 	_shop = null
 	_offers = []

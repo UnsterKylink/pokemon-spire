@@ -17,6 +17,8 @@ const DEFAULT_POTIONS_PATH: String = "res://assets/data/potions.json"
 const DEFAULT_SHOP_PATH: String = "res://assets/data/shop.json"
 ## Story 012: zones, gym types, tiers, badge rewards.
 const DEFAULT_ZONES_PATH: String = "res://assets/data/zones.json"
+## Story 013: Conseil 4, Maître, final boss.
+const DEFAULT_LEAGUE_PATH: String = "res://assets/data/league.json"
 ## Room types whose fights are biased toward the zone type and scaled by the zone "modifiers" (the gym uses "gym_modifiers").
 const ZONE_TYPED_ROOMS: Array[String] = ["wild", "elite"]
 ## The room type that holds the zone's gym fight.
@@ -52,14 +54,16 @@ var _evolutions: Dictionary = {}  # base pokemon id -> validated evolution entry
 var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (for get_pokemon_info)
 var _evolution_hp_bonus_default: int = 0
 var _zones_cfg: Dictionary = {}  # validated zones.json (story 012)
+var _league_cfg: Dictionary = {}  # validated league.json (story 013)
 
 
-## Loads all ten files (act and events story 005; items, potions, shop story 006; zones story 012). Returns false (after push_error) if anything is missing or invalid.
+## Loads all eleven files (act and events story 005; items, potions, shop story 006; zones story 012; league story 013). Returns false (after push_error) if anything is missing or invalid.
 func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
 		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH,
 		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH,
 		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
-		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH) -> bool:
+		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
+		league_path: String = DEFAULT_LEAGUE_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_cards.clear()
 	_players.clear()
@@ -84,6 +88,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_evolved_forms = {}
 	_evolution_hp_bonus_default = 0
 	_zones_cfg = {}
+	_league_cfg = {}
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -94,9 +99,10 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	var potions_root: Dictionary = _read_json(potions_path)
 	var shop_root: Dictionary = _read_json(shop_path)
 	var zones_root: Dictionary = _read_json(zones_path)
+	var league_root: Dictionary = _read_json(league_path)
 	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty() or rewards_root.is_empty() \
 			or act_root.is_empty() or events_root.is_empty() or items_root.is_empty() or potions_root.is_empty() \
-			or shop_root.is_empty() or zones_root.is_empty():
+			or shop_root.is_empty() or zones_root.is_empty() or league_root.is_empty():
 		return false
 	var chart: TypeChart = TypeChart.from_dict(types_root)
 	if chart == null:
@@ -121,6 +127,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_potions(potions_root) and ok
 	ok = _load_shop(shop_root) and ok
 	ok = _load_zones(zones_root) and ok
+	ok = _load_league(league_root) and ok
 	return ok
 
 
@@ -654,6 +661,265 @@ func _load_zones(root: Dictionary) -> bool:
 				ok = false
 	if ok:
 		_zones_cfg = root
+	return ok
+
+
+# --- Conseil 4, Maître, boss final (story 013) -------------------------------------------------------
+
+## True once league.json is loaded and valid (the run goes to the Conseil 4 after the last badge).
+func has_league() -> bool:
+	return not _league_cfg.is_empty()
+
+
+## Number of Conseil 4 members per run (league.json member_count); 0 without a league.
+func get_league_member_count() -> int:
+	return int(_league_cfg.get("member_count", 0))
+
+
+## Total league fights of a run: members + the Maître + the final boss (0 without a league).
+func get_league_fight_count() -> int:
+	return get_league_member_count() + 2 if has_league() else 0
+
+
+## Member type pool (league.json member_type_pool), in file order.
+func get_league_type_pool() -> Array[String]:
+	var result: Array[String] = []
+	for t: Variant in _league_cfg.get("member_type_pool", []):
+		result.append(String(t))
+	return result
+
+
+## % of max HP healed after each won league fight (league.json heal_percent_between_fights).
+func get_league_heal_percent() -> float:
+	return float(_league_cfg.get("heal_percent_between_fights", 0))
+
+
+## Rarity weights of the card reward after a league fight (league.json reward_rarity_weights, copy).
+func get_league_reward_weights() -> Dictionary:
+	return (_league_cfg.get("reward_rarity_weights", {}) as Dictionary).duplicate()
+
+
+## True for an enemy flagged `boss: true` in pokemon.json (final boss: never capturable / proposable).
+func is_boss_pokemon(pokemon_id: String) -> bool:
+	return bool((_enemies.get(pokemon_id, {}) as Dictionary).get("boss", false))
+
+
+## Enemy ids of an encounter (copy; empty if unknown).
+func get_encounter_enemy_ids(encounter_id: String) -> Array[String]:
+	var result: Array[String] = []
+	result.assign(_encounters.get(encounter_id, []))
+	return result
+
+
+## Draws the league fights of a run with the injected (seeded) rng. `gym_type_ids` = the run's 8 gym types (excluded
+## from the member draw; if fewer than member_count pool types remain, the excluded pool types are reused as a fallback,
+## drawn after the others). Returns member_count + 2 dicts in fight order:
+## {stage (0-based), index (1-based), total, kind ("member" | "champion" | "final_boss"), name, title, type_id,
+##  type_name, type_ids (all types shown, e.g. the boss's 2 types), encounter, modifiers {hp_multiplier, strength_bonus}}.
+## Empty without a league. Same rng state + same gym types = same league.
+func draw_league(rng: RandomNumberGenerator, gym_type_ids: Array[String] = []) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if not has_league():
+		return result
+	var free: Array[String] = []
+	var reused: Array[String] = []
+	for t: String in get_league_type_pool():
+		if gym_type_ids.has(t):
+			reused.append(t)
+		else:
+			free.append(t)
+	_shuffle(free, rng)
+	_shuffle(reused, rng)
+	var picked: Array[String] = free.duplicate()
+	picked.append_array(reused)  # fallback: gym types only once the free ones run out
+	var count: int = get_league_member_count()
+	var total: int = count + 2
+	var members: Dictionary = _league_cfg["members_by_type"]
+	var mods: Array = _league_cfg["member_modifiers"]
+	for i: int in count:
+		var type_id: String = picked[i]
+		var m: Dictionary = members[type_id]
+		result.append({"stage": i, "index": i + 1, "total": total, "kind": "member", "name": String(m["name"]),
+				"title": String(m["title"]), "type_id": type_id, "type_name": get_type_name(type_id), "type_ids": [type_id],
+				"encounter": String(m["encounter"]), "modifiers": _modifiers_of(mods[i])})
+	var c: Dictionary = _league_cfg["champion"]
+	result.append({"stage": count, "index": count + 1, "total": total, "kind": "champion", "name": String(c["name"]),
+			"title": String(c["title"]), "type_id": String(c["type"]), "type_name": get_type_name(String(c["type"])),
+			"type_ids": [String(c["type"])], "encounter": String(c["encounter"]), "modifiers": _modifiers_of(c["modifiers"])})
+	var b: Dictionary = _league_cfg["final_boss"]
+	var boss_types: Array[String] = get_pokemon_info(get_encounter_enemy_ids(String(b["encounter"]))[0])["types"]
+	result.append({"stage": count + 1, "index": count + 2, "total": total, "kind": "final_boss", "name": String(b["name"]),
+			"title": String(b["title"]), "type_id": boss_types[0], "type_name": get_type_name(boss_types[0]),
+			"type_ids": boss_types.duplicate(), "encounter": String(b["encounter"]), "modifiers": _modifiers_of(b["modifiers"])})
+	return result
+
+
+## Effective strength of an encounter under modifiers: {hp: sum of max_hp x hp_multiplier (rounded up as in battle),
+## max_attack: strongest action value + strength_bonus}. Used by the league validation (boss > Maître).
+func get_encounter_power(encounter_id: String, modifiers: Dictionary) -> Dictionary:
+	var hp: int = 0
+	var best: int = 0
+	for eid: String in get_encounter_enemy_ids(encounter_id):
+		var def: Dictionary = _enemies[eid]
+		hp += maxi(1, ceili(snappedf(int(def["max_hp"]) * float(modifiers["hp_multiplier"]), 0.0001)))
+		for a: Dictionary in def["actions"]:
+			if String(a.get("type", "")) == EnemyIntent.TYPE_ATTACK:
+				best = maxi(best, int(a["value"]) + int(modifiers["strength_bonus"]))
+	return {"hp": hp, "max_attack": best}
+
+
+func _shuffle(list: Array[String], rng: RandomNumberGenerator) -> void:
+	for i: int in range(list.size() - 1, 0, -1):  # Fisher-Yates
+		var j: int = rng.randi_range(0, i)
+		var tmp: String = list[i]
+		list[i] = list[j]
+		list[j] = tmp
+
+
+func _valid_modifiers(m_v: Variant) -> bool:
+	if not (m_v is Dictionary):
+		return false
+	var m: Dictionary = m_v
+	return _is_number(m.get("hp_multiplier", null)) and m["hp_multiplier"] > 0 and _is_number(m.get("strength_bonus", null)) \
+			and m["strength_bonus"] >= 0 and m["strength_bonus"] == floorf(m["strength_bonus"])
+
+
+## True if `a` is at least `b` on both fields and strictly above on one (`strict`) / or just at least (`not strict`).
+func _mods_above(a: Dictionary, b: Dictionary, strict: bool) -> bool:
+	var ge: bool = float(a["hp_multiplier"]) >= float(b["hp_multiplier"]) and int(a["strength_bonus"]) >= int(b["strength_bonus"])
+	if not strict:
+		return ge
+	return ge and (float(a["hp_multiplier"]) > float(b["hp_multiplier"]) or int(a["strength_bonus"]) > int(b["strength_bonus"]))
+
+
+## Checks that `encounter_id` exists and (when `type_id` is set) every Pokémon of it carries `type_id`.
+func _check_league_team(label: String, encounter_id: Variant, type_id: String) -> bool:
+	if not (encounter_id is String) or not _encounters.has(encounter_id):
+		push_error("GameData: %s references unknown encounter '%s'" % [label, str(encounter_id)])
+		return false
+	var ok: bool = true
+	if not type_id.is_empty():
+		for eid: String in get_encounter_enemy_ids(encounter_id):
+			if not (get_pokemon_info(eid)["types"] as Array).has(type_id):
+				push_error("GameData: %s: '%s' does not have the type '%s'" % [label, eid, type_id])
+				ok = false
+	return ok
+
+
+## Validates league.json against the loaded pokemon / zones data. Reports every problem, never crashes.
+func _load_league(root: Dictionary) -> bool:
+	var ok: bool = true
+	if not _is_positive_int(root.get("member_count", null)):
+		push_error("GameData: league file needs a positive integer 'member_count'")
+		return false
+	var count: int = int(root["member_count"])
+	var pool_v: Variant = root.get("member_type_pool", null)
+	var members_v: Variant = root.get("members_by_type", null)
+	if not (pool_v is Array) or not (members_v is Dictionary):
+		push_error("GameData: league file needs a 'member_type_pool' array and a 'members_by_type' object")
+		return false
+	var seen: Dictionary = {}
+	for t_v: Variant in (pool_v as Array):
+		if not (t_v is String) or not _type_chart.is_known_type(t_v) or seen.has(t_v):
+			push_error("GameData: member_type_pool has an unknown or duplicate type '%s'" % str(t_v))
+			ok = false
+			continue
+		seen[t_v] = true
+		var m_v: Variant = (members_v as Dictionary).get(t_v, null)
+		var label: String = "league member '%s'" % t_v
+		if not (m_v is Dictionary):
+			push_error("GameData: %s is missing from members_by_type" % label)
+			ok = false
+			continue
+		var m: Dictionary = m_v
+		if not (m.get("name", null) is String) or String(m["name"]).is_empty() or not (m.get("title", null) is String):
+			push_error("GameData: %s needs a non-empty 'name' and a 'title'" % label)
+			ok = false
+		ok = _check_league_team(label, m.get("encounter", null), String(t_v)) and ok
+	if seen.size() < count:
+		push_error("GameData: member_type_pool has %d valid types, member_count is %d" % [seen.size(), count])
+		ok = false
+	var mods_v: Variant = root.get("member_modifiers", null)
+	var last_mods: Dictionary = {}
+	if not (mods_v is Array) or (mods_v as Array).size() != count:
+		push_error("GameData: league 'member_modifiers' must be an array of %d modifiers" % count)
+		ok = false
+	else:
+		var tiers: Array = _zones_cfg.get("tiers", [])
+		var prev: Dictionary = (tiers[tiers.size() - 1] as Dictionary)["gym_modifiers"] if not tiers.is_empty() else {}
+		for i: int in count:
+			var m_v: Variant = (mods_v as Array)[i]
+			if not _valid_modifiers(m_v):
+				push_error("GameData: member_modifiers[%d] needs {hp_multiplier > 0, strength_bonus integer >= 0}" % i)
+				ok = false
+				prev = {}
+				continue
+			if not prev.is_empty() and not _mods_above(m_v, prev, i == 0):
+				push_error("GameData: member_modifiers[%d] must be above the last gym (first member) and never decrease" % i)
+				ok = false
+			prev = m_v
+			last_mods = m_v
+	var champ_v: Variant = root.get("champion", null)
+	var champ_power: Dictionary = {}
+	if not (champ_v is Dictionary):
+		push_error("GameData: league file needs a 'champion' object")
+		ok = false
+	else:
+		var c: Dictionary = champ_v
+		var ctype: String = String(c.get("type", "")) if c.get("type", null) is String else ""
+		if not (c.get("name", null) is String) or String(c["name"]).is_empty() or not (c.get("title", null) is String) \
+				or not _type_chart.is_known_type(ctype):
+			push_error("GameData: league champion needs a 'name', a 'title' and a known 'type'")
+			ok = false
+		elif not _check_league_team("league champion", c.get("encounter", null), ctype):
+			ok = false
+		elif not _valid_modifiers(c.get("modifiers", null)):
+			push_error("GameData: league champion needs valid 'modifiers'")
+			ok = false
+		else:
+			if not last_mods.is_empty() and not _mods_above(c["modifiers"], last_mods, true):
+				push_error("GameData: the league champion must be harder than the last member (modifiers)")
+				ok = false
+			champ_power = get_encounter_power(String(c["encounter"]), c["modifiers"])
+	var boss_v: Variant = root.get("final_boss", null)
+	if not (boss_v is Dictionary):
+		push_error("GameData: league file needs a 'final_boss' object")
+		ok = false
+	else:
+		var b: Dictionary = boss_v
+		if not (b.get("name", null) is String) or String(b["name"]).is_empty() or not (b.get("title", null) is String):
+			push_error("GameData: final_boss needs a 'name' and a 'title'")
+			ok = false
+		elif not _check_league_team("final_boss", b.get("encounter", null), ""):
+			ok = false
+		elif get_encounter_enemy_ids(String(b["encounter"])).size() != 1:
+			push_error("GameData: final_boss encounter must hold exactly one Pokémon")
+			ok = false
+		elif not is_boss_pokemon(get_encounter_enemy_ids(String(b["encounter"]))[0]):
+			push_error("GameData: the final_boss Pokémon must be flagged 'boss': true in pokemon.json")
+			ok = false
+		elif not _valid_modifiers(b.get("modifiers", null)):
+			push_error("GameData: final_boss needs valid 'modifiers'")
+			ok = false
+		elif not champ_power.is_empty():
+			var bp: Dictionary = get_encounter_power(String(b["encounter"]), b["modifiers"])
+			if int(bp["hp"]) <= int(champ_power["hp"]) or int(bp["max_attack"]) <= int(champ_power["max_attack"]):
+				push_error("GameData: final_boss (%s) must be stronger than the champion's team (%s): HP and strongest attack" % [str(bp), str(champ_power)])
+				ok = false
+	for pid: String in _starter_candidates:
+		if is_boss_pokemon(pid):
+			push_error("GameData: boss Pokémon '%s' cannot be a starter candidate" % pid)
+			ok = false
+	var heal: Variant = root.get("heal_percent_between_fights", null)
+	if not (_is_number(heal) and heal >= 0 and heal <= 100):
+		push_error("GameData: league 'heal_percent_between_fights' must be a number between 0 and 100")
+		ok = false
+	var w_v: Variant = root.get("reward_rarity_weights", null)
+	if not (w_v is Dictionary) or not _check_rarity_weights("league reward", w_v):
+		push_error("GameData: league file needs valid 'reward_rarity_weights'")
+		ok = false
+	if ok:
+		_league_cfg = root
 	return ok
 
 

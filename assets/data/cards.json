@@ -50,6 +50,19 @@
 		"hydrocanon": {"name": "Hydrocanon", "cost": 3, "kind": "attack", "pokemon": "poliwag", "rarity": "rare", "type": "water", "damage": 22, "block": 0, "description": "Inflige 22 dégâts."},
 		"seisme": {"name": "Séisme", "cost": 3, "kind": "attack", "pokemon": "geodude", "rarity": "rare", "type": "ground", "damage": 20, "block": 0, "description": "Inflige 20 dégâts."},
 		"bombe_beurk": {"name": "Bombe Beurk", "cost": 3, "kind": "attack", "pokemon": "zubat", "rarity": "rare", "type": "poison", "damage": 18, "block": 0, "description": "Inflige 18 dégâts."},
-		"forteresse": {"name": "Forteresse", "cost": 2, "kind": "skill", "rarity": "rare", "damage": 0, "block": 14, "description": "Gagne 14 points de protection."}
+		"forteresse": {"name": "Forteresse", "cost": 2, "kind": "skill", "rarity": "rare", "damage": 0, "block": 14, "description": "Gagne 14 points de protection."},
+		"lechouille": {"name": "Léchouille", "cost": 1, "kind": "attack", "pokemon": "banette", "rarity": "common", "type": "ghost", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"ball_ombre": {"name": "Ball'Ombre", "cost": 2, "kind": "attack", "pokemon": "gengar", "rarity": "uncommon", "type": "ghost", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"eclats_glace": {"name": "Éclats Glace", "cost": 1, "kind": "attack", "pokemon": "glaceon", "rarity": "common", "type": "ice", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"laser_glace": {"name": "Laser Glace", "cost": 2, "kind": "attack", "pokemon": "lapras", "rarity": "uncommon", "type": "ice", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"poing_karate": {"name": "Poing-Karaté", "cost": 1, "kind": "attack", "pokemon": "hitmonchan", "rarity": "common", "type": "fighting", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"casse_brique": {"name": "Casse-Brique", "cost": 2, "kind": "attack", "pokemon": "machamp", "rarity": "uncommon", "type": "fighting", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"choc_mental": {"name": "Choc Mental", "cost": 1, "kind": "attack", "pokemon": "espeon", "rarity": "common", "type": "psychic", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"psyko": {"name": "Psyko", "cost": 2, "kind": "attack", "pokemon": "alakazam", "rarity": "uncommon", "type": "psychic", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"griffe_acier": {"name": "Griffe Acier", "cost": 1, "kind": "attack", "pokemon": "scizor", "rarity": "common", "type": "steel", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"tete_de_fer": {"name": "Tête de Fer", "cost": 2, "kind": "attack", "pokemon": "aegislash", "rarity": "uncommon", "type": "steel", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"draco_souffle": {"name": "Draco-Souffle", "cost": 1, "kind": "attack", "pokemon": "dragonair", "rarity": "common", "type": "dragon", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"colere": {"name": "Colère", "cost": 2, "kind": "attack", "pokemon": "dragonite", "rarity": "uncommon", "type": "dragon", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"canon_dynamax": {"name": "Canon Dynamax", "cost": 3, "kind": "attack", "pokemon": "eternatus", "rarity": "rare", "type": "dragon", "damage": 22, "block": 0, "description": "Inflige 22 dégâts."}
 	}
 }

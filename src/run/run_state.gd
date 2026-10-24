@@ -6,6 +6,7 @@ extends RefCounted
 ## victory / defeat summary (get_summary), is_defeated().
 ## Story 012 (story-012-structure-8-arenes): the run is `zones` (drawn at the start, zone_index = the current one);
 ## each zone has its own act map; beating a gym awards a badge (permanent bonuses, data: zones.json badge_rewards).
+## Story 013 (story-013-conseil-4-ethernatos): after the last badge, the league (4 members, Maître, final boss), see set_league.
 
 var player_id: String = ""
 var display_name: String = ""
@@ -53,6 +54,14 @@ var bonus_energy: int = 0
 var _base_map_seed: int = 0
 ## Rooms entered in the zones already left (summary: floors climbed across zones).
 var _floors_done: int = 0
+## Story 013: the league fights of this run (GameData.draw_league: members, Maître, final boss), drawn at the start.
+var league: Array[Dictionary] = []
+## Story 013: index of the current league fight (0..league.size()-1); -1 = not in the league yet.
+var league_stage: int = -1
+## Story 013: league fights won so far (members + Maître + final boss).
+var league_fights_won: int = 0
+## Story 013: true once the final boss (Éthernatos) is beaten: the real end of the run.
+var final_boss_defeated: bool = false
 ## Added to the base map seed per zone index to derive a zone's map seed.
 const ZONE_SEED_STEP: int = 1000003
 
@@ -287,6 +296,57 @@ func award_badge(data: GameData) -> Dictionary:
 	return badge
 
 
+# --- Conseil 4, Maître, boss final (story 013) -------------------------------------------------------
+
+## Sets the run's league fights (GameData.draw_league, drawn at the start of the run); the league is not started.
+func set_league(stages: Array[Dictionary]) -> void:
+	league = stages
+	league_stage = -1
+	league_fights_won = 0
+	final_boss_defeated = false
+
+
+## Enters the league (after the last badge): stage 0 = the first member. False (no change) without league data.
+func start_league() -> bool:
+	if league.is_empty():
+		return false
+	league_stage = 0
+	return true
+
+
+## True between start_league() and the end of the run.
+func is_in_league() -> bool:
+	return league_stage >= 0 and league_stage < league.size()
+
+
+## The league fight of the current stage (copy; {} outside the league): see GameData.draw_league.
+func current_league_fight() -> Dictionary:
+	return (league[league_stage] as Dictionary).duplicate(true) if is_in_league() else {}
+
+
+## True when the current stage is the final boss.
+func is_league_final_stage() -> bool:
+	return is_in_league() and league_stage == league.size() - 1
+
+
+## The current league fight is won: counts it (once per stage); on the final boss sets final_boss_defeated.
+func win_league_fight() -> void:
+	if not is_in_league() or league_fights_won > league_stage:
+		return
+	league_fights_won = league_stage + 1
+	if is_league_final_stage():
+		final_boss_defeated = true
+
+
+## Moves to the next league fight and heals `heal_pct` % of max HP (GameData.get_league_heal_percent).
+## Returns the HP restored; -1 (no change) if the current fight is not won yet or this was the last stage.
+func advance_league(heal_pct: float) -> int:
+	if not is_in_league() or league_fights_won <= league_stage or is_league_final_stage():
+		return -1
+	league_stage += 1
+	return heal_percent(heal_pct)
+
+
 ## Story 007: the Champion is beaten. Applies the official evolution of the chosen starter (GameData.get_evolution,
 ## pokemon.json): new name / types / sprite, max HP AND current HP + max_hp_bonus, the field Pokémon becomes the
 ## evolved form, and the deck cards carried by the old form are now carried by the evolved one (so playing them
@@ -327,7 +387,10 @@ func evolve_starter(data: GameData) -> Dictionary:
 ## Story 007: everything the victory / defeat screen shows, read from the run:
 ## {pokemon_id, name, sprite, types, hp, max_hp, floors (across all zones), total_floors (all zones), enemies_defeated,
 ##  battles_won, money, item_names: Array[String], deck_size, evolved, zone (1-based current zone), zone_count,
-##  badges (count), badge_names: Array[String]}.
+##  badges (count), badge_names: Array[String],
+##  story 013: league_started (bool), league_stage (-1..), league_fights_won, league_total (fights incl. Maître + boss),
+##  league_members_total, league_beaten_names: Array[String] (names of the league fights won, in order),
+##  champion_defeated (Maître beaten), eternatus_defeated (final boss beaten = "Éthernatos vaincu"), final_boss_name}.
 func get_summary() -> Dictionary:
 	var item_names: Array[String] = []
 	for it: ItemData in items:
@@ -335,11 +398,19 @@ func get_summary() -> Dictionary:
 	var badge_names: Array[String] = []
 	for b: Dictionary in badges:
 		badge_names.append(String(b["name"]))
+	var league_names: Array[String] = []
+	for i: int in mini(league_fights_won, league.size()):
+		league_names.append(String((league[i] as Dictionary)["name"]))
 	return {"zone": zone_index + 1, "zone_count": maxi(zones.size(), 1), "badges": badges.size(), "badge_names": badge_names,
 			"pokemon_id": starter_pokemon_id, "name": display_name, "sprite": sprite_path, "types": type_ids.duplicate(),
 			"hp": hp, "max_hp": max_hp, "floors": floors_climbed(), "total_floors": total_floors(),
 			"enemies_defeated": enemies_defeated, "battles_won": battles_won, "money": money,
-			"item_names": item_names, "deck_size": deck.size(), "evolved": evolved}
+			"item_names": item_names, "deck_size": deck.size(), "evolved": evolved,
+			"league_started": league_stage >= 0, "league_stage": league_stage, "league_fights_won": league_fights_won,
+			"league_total": league.size(), "league_members_total": maxi(league.size() - 2, 0),
+			"league_beaten_names": league_names, "champion_defeated": league.size() >= 2 and league_fights_won >= league.size() - 1,
+			"eternatus_defeated": final_boss_defeated,
+			"final_boss_name": String((league[league.size() - 1] as Dictionary)["name"]) if not league.is_empty() else ""}
 
 
 ## CardData.deck_key() ("card@pokemon") -> copies in the deck.
