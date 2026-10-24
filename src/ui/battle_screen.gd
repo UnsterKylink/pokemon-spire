@@ -88,6 +88,14 @@ class EnemyView extends RefCounted:
 	var float_text: FloatText
 
 
+## Story 013: league trainer header colours.
+const COLOR_HEADER_BG: Color = Color(0.1, 0.11, 0.16, 0.92)
+const COLOR_BOSS_HEADER: Color = Color(0.85, 0.2, 0.35)
+const COLOR_BOSS_HEADER_BG: Color = Color(0.2, 0.05, 0.14, 0.95)
+
+var _trainer_header: PanelContainer
+var _trainer_style: StyleBoxFlat
+var _trainer_label: Label
 var _battle: Battle
 var _selected_index: int = -1
 var _deck_size: int = 0
@@ -205,6 +213,21 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.start()
 	_refresh_active_pokemon(player)
 	_refresh()
+
+
+## Story 013: shows the opponent trainer above the arena ("Agatha — Conseil 4"), framed in `accent` (type colour);
+## `boss` uses the final-boss palette. An empty text hides it. Display only (Main calls it for league fights).
+func set_trainer_header(text: String, accent: Color, boss: bool = false) -> void:
+	_trainer_label.text = text
+	_trainer_style.border_color = COLOR_BOSS_HEADER if boss else accent
+	_trainer_style.bg_color = COLOR_BOSS_HEADER_BG if boss else COLOR_HEADER_BG
+	_trainer_label.add_theme_color_override("font_color", COLOR_BOSS_HEADER.lightened(0.35) if boss else accent.lightened(0.45))
+	_trainer_header.visible = not text.is_empty()
+
+
+## Story 013: the trainer header text ("" when hidden).
+func get_trainer_header_text() -> String:
+	return _trainer_label.text if _trainer_header.visible else ""
 
 
 ## Presses "Continuer" on the defeat overlay (QA harness / button). Ignored unless the battle is lost.
@@ -381,6 +404,29 @@ func _build_ui() -> void:
 	_hand_box.custom_minimum_size = Vector2(0, CARD_SIZE.y + 10)
 	_hand_box.add_theme_constant_override("separation", 12)
 	root.add_child(_hand_box)
+
+	# Story 013: league trainer header, centred at the top over the arena (hidden outside the league).
+	_trainer_header = PanelContainer.new()
+	_trainer_header.name = "TrainerHeader"
+	_trainer_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_trainer_header.anchor_left = 0.5
+	_trainer_header.anchor_right = 0.5
+	_trainer_header.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_trainer_header.offset_top = 6
+	_trainer_style = StyleBoxFlat.new()
+	_trainer_style.bg_color = COLOR_HEADER_BG
+	_trainer_style.set_border_width_all(2)
+	_trainer_style.set_corner_radius_all(10)
+	_trainer_style.content_margin_left = 16
+	_trainer_style.content_margin_right = 16
+	_trainer_style.content_margin_top = 1
+	_trainer_style.content_margin_bottom = 1
+	_trainer_header.add_theme_stylebox_override("panel", _trainer_style)
+	_trainer_header.visible = false
+	add_child(_trainer_header)
+	_trainer_label = _make_label(18)
+	_trainer_label.name = "TrainerLabel"
+	_trainer_header.add_child(_trainer_label)
 
 	# End-of-battle overlay: dim the arena so the message stays readable.
 	_end_dim = ColorRect.new()

@@ -66,7 +66,7 @@ var _zone_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _league_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 ## Story 013: HP healed between the last two league fights (-1 = intro, no heal yet).
 var _last_league_heal: int = -1
-## Story 013: league intro / intermission screen (placeholder screen until the UI agent provides one).
+## Story 013: league intro / intermission / final-boss intro screen (LeagueScreen).
 var _league_screen: Control
 ## The badge just awarded ({} before the first gym win): see RunState.award_badge.
 var _last_badge: Dictionary = {}
@@ -811,9 +811,12 @@ func league_continue() -> void:
 	var enemies: Array[Combatant] = _data.create_enemies(String(fight["encounter"]), float(mods["hp_multiplier"]),
 			int(mods["strength_bonus"]))
 	_launch_battle(String(fight["encounter"]), enemies, ROOM_LEAGUE)
+	if _battle_screen != null:
+		_battle_screen.set_trainer_header("%s — %s" % [String(fight["name"]), String(fight["title"])],
+				_data.get_type_color(String(fight["type_id"])), String(fight["kind"]) == "final_boss")
 
 
-## QA: the live league screen (placeholder until the UI's own league screen replaces it; null elsewhere).
+## QA: the live league screen (LeagueScreen; null elsewhere).
 func get_league_screen() -> Control:
 	return _league_screen
 
@@ -1016,20 +1019,15 @@ func _on_evolution_card_chosen(index: int) -> void:
 	_evolution_screen.show_result("%s rejoint ton deck !" % card.display_name)
 
 
-## Story 013: league intro (before the first fight) / intermission (after a heal). PLACEHOLDER screen: the UI agent may
-## replace it by a dedicated screen — keep _league_screen / SCREEN_LEAGUE and call league_continue() from its button.
+## Story 013: league intro (before the first fight) / intermission (after a heal) / final-boss intro: LeagueScreen
+## (get_league_screen()); its "Affronter <Nom>" button calls league_continue().
 func _show_league_screen() -> void:
 	_clear_screens()
-	var fight: Dictionary = get_league_member()
-	var screen: PlaceholderRoomScreen = ROOM_SCENE.instantiate() as PlaceholderRoomScreen
+	var screen := LeagueScreen.new()
 	_league_screen = screen
 	screen.finished.connect(league_continue)
 	_set_screen(screen, SCREEN_LEAGUE)
-	var body: String = "Prochain combat (%d/%d) : %s — %s (%s)" % [int(fight["index"]), int(fight["total"]),
-			String(fight["name"]), String(fight["title"]), String(fight["type_name"])]
-	if _last_league_heal >= 0:
-		body = "Tu récupères %d PV.\n" % _last_league_heal + body
-	screen.setup("Route Victoire" if _run.league_fights_won == 0 else "Conseil 4", body, "Combattre", fight["color"])
+	screen.setup(_data, _run, _last_league_heal)
 
 
 func _show_victory() -> void:
