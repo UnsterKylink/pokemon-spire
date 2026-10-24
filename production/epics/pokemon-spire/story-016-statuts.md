@@ -1,7 +1,7 @@
 # Story 016: Statuts : brûlure, poison, paralysie, sommeil, gel
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Estimate**: [fill before starting]
@@ -28,11 +28,11 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 3), scoped to this story:*
 
-- [ ] 5 statuts définis en données, avec effets, durées et affichage : brûlure (dégâts par tour, attaques affaiblies), poison (dégâts croissants), paralysie (chance de rater), sommeil (passe des tours), gel (bloqué jusqu'à dégel).
-- [ ] Des cartes du joueur et des actions ennemies infligent des statuts ; les types immunisés comme dans les jeux (ex. Feu ne brûle pas, Électrik pas paralysé, Glace pas gelé, Poison/Acier pas empoisonnés).
-- [ ] Les statuts s'appliquent aux ennemis et au Pokémon actif du joueur ; leur icône et leur durée sont visibles en combat.
-- [ ] Des potions ou objets soignent les statuts (au moins un de chaque, en données).
-- [ ] L'intention affichée d'un ennemi tient compte de son statut (ex. endormi → « dort »).
+- [x] 5 statuts définis en données, avec effets, durées et affichage : brûlure (dégâts par tour, attaques affaiblies), poison (dégâts croissants), paralysie (chance de rater), sommeil (passe des tours), gel (bloqué jusqu'à dégel).
+- [x] Des cartes du joueur et des actions ennemies infligent des statuts ; les types immunisés comme dans les jeux (ex. Feu ne brûle pas, Électrik pas paralysé, Glace pas gelé, Poison/Acier pas empoisonnés).
+- [x] Les statuts s'appliquent aux ennemis et au Pokémon actif du joueur ; leur icône et leur durée sont visibles en combat.
+- [x] Des potions ou objets soignent les statuts (au moins un de chaque, en données).
+- [x] L'intention affichée d'un ennemi tient compte de son statut (ex. endormi → « dort »).
 
 ---
 
@@ -66,7 +66,7 @@
 **Required evidence**:
 - Logic : `tests/unit/run/statuts_test.gd` — waived at `qa.level: minimal`, plus a retained screenshot in `production/qa/evidence/` because the story changes what the player sees.
 
-**Status**: [ ] Not yet created
+**Status**: [x] Retained screenshots in `production/qa/evidence/story-016-statuts/`
 
 ---
 
@@ -74,3 +74,14 @@
 
 - Depends on: Story 015
 - Unlocks: Story 017
+
+---
+
+## Completion Notes
+**Completed**: 2026-10-24
+**Criteria**: 5/5 passing (confirmed by the user in play; 10 screenshots retained)
+**Deviations**: Advisory only — status chips use data short codes (BRU, DOR; change `short` in statuses.json); no floating text when a status simply expires or is cured; cases not captured because they depend on RNG (player paralysis fizzle, enemy paralysis fail, "Dégelé !") and hover tooltips; QA hooks ship in the build
+**Design decisions (with the user)**: Slay-the-Spire-style stacking statuses; type immunities like the games; cards and enemies inflict statuses by type; statuses apply to the whole team (persist on switch); cures = potions, berries; after the first play-test the player asked for anti-lock rules: asleep/frozen team loses 2 energy (not the whole turn), 2-turn "Répit" immunity to sleep+freeze afterwards, paralysis not extendable while active
+**Fixes after play-test**: battle layout tightened so the hand (cards 170x200) is fully visible at 1280x720 (cards end at y=712); project.godot stretch aspect set to `keep` (explicit)
+**Test Evidence**: Integration — tests waived at qa.level minimal; screenshots at `production/qa/evidence/story-016-statuts/`
+**Code Review**: Skipped — Solo mode
