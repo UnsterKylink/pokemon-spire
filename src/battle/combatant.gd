@@ -30,6 +30,9 @@ var sequence_index: int = 0
 ## Active status ailments (story 016): status id -> {"value": int, "turns": int}. Insertion order = application order.
 ## Managed by Battle (apply/tick/cure); the UI reads it via the helpers below.
 var statuses: Dictionary = {}
+## Player only (story 016 anti-lock rule): turns of aftermath immunity left (StatusBook.aftermath_statuses), 0 = none.
+## Managed by Battle; shown as a chip by StatusChipRow.
+var aftermath_turns: int = 0
 
 
 ## Creates a combatant from a JSON definition. Returns null if invalid.
@@ -133,10 +136,11 @@ func status_ids() -> Array[String]:
 	return out
 
 
-## Silently removes every status (end of battle).
+## Silently removes every status and the aftermath immunity (end of battle).
 func clear_statuses() -> void:
-	if not statuses.is_empty():
+	if not statuses.is_empty() or aftermath_turns > 0:
 		statuses.clear()
+		aftermath_turns = 0
 		changed.emit()
 
 

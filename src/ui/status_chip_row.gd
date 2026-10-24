@@ -2,6 +2,7 @@ class_name StatusChipRow
 extends HBoxContainer
 ## Row of status "chips" (story 016-statuts): one coloured pill per active status of a Combatant, colour / short
 ## label / name / description from statuses.json, e.g. "PSN 4", "BRU 3 (2 t.)", "PAR (2 t.)", "DOR", "GEL".
+## Also the player's aftermath immunity ("RÉPIT (2 t.)", StatusBook.aftermath_display) after a sleep / freeze.
 ## Tooltip = name + description. Display only: reads the Combatant, redraws on its `changed` signal.
 
 const FONT_SIZE: int = 14
@@ -71,6 +72,8 @@ func refresh() -> void:
 		var def: StatusData = _book.get_def(sid)
 		if def != null:
 			add_child(_make_chip(def, _combatant.get_status_value(sid), _combatant.get_status_turns(sid)))
+	if _combatant.aftermath_turns > 0 and _book.aftermath_display != null:
+		add_child(_make_chip(_book.aftermath_display, 0, _combatant.aftermath_turns))
 	if get_child_count() == 0:
 		var ghost := PanelContainer.new()
 		ghost.name = PLACEHOLDER

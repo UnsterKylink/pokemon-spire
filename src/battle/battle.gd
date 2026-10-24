@@ -2,7 +2,7 @@ class_name Battle
 extends RefCounted
 ## Pure combat logic (no nodes/scenes): 1 player Pokémon vs 1..3 enemies with data-driven intents.
 ## Implements: design/game-brief.md MVP features 1-2, story-001-combat-de-base,
-## story-002-intentions-et-multi-ennemis, story-003-types.
+## story-002-intentions-et-multi-ennemis, story-003-types, story-016-statuts (incl. the anti-lock rules).
 
 enum State { PLAYER_TURN, WON, LOST }
 
@@ -28,9 +28,12 @@ signal status_applied(target: Combatant, status_id: String, value: int)
 signal status_ticked(target: Combatant, status_id: String, amount: int)
 ## An application was refused (type / held-item immunity) OR a played card of the paralysed player failed (the card is spent).
 signal status_blocked(target: Combatant, status_id: String)
-## `target` loses its turn because of `status_id`: an enemy does not act (no enemy_acted), the player starts the turn with 0 energy,
+## `target` loses its turn because of `status_id`: an enemy does not act (no enemy_acted); the player loses
+## `energy_lost` energy at the start of its turn (StatusData.player_energy_loss; cards are still drawn);
 ## an enemy fails its action through paralysis (chance rolled with the injected RNG).
 signal turn_skipped(target: Combatant, status_id: String)
+## A status that does not refresh (refresh_on_reapply false, e.g. paralysis) was re-applied while active: nothing changed.
+signal status_unchanged(target: Combatant, status_id: String)
 ## A status disappeared (expired, decayed to 0, cured, woke on damage, thawed). Not emitted by the silent end-of-battle clear.
 signal status_removed(target: Combatant, status_id: String)
 ## Emitted after a potion of `potions` was drunk (already removed from `potions`). Story 006.
@@ -53,6 +56,8 @@ var items: Array[ItemData] = []
 var potions: Array[PotionData] = []
 ## Extra damage on every attack card until the end of this turn (potion "Attaque +").
 var turn_damage_bonus: int = 0
+## Energy the player lost at the start of the CURRENT turn because of a status (sleep / freeze); 0 on a normal turn.
+var energy_lost: int = 0
 var _attacks_played: int = 0
 
 var _rng: RandomNumberGenerator
@@ -200,6 +205,7 @@ func end_turn() -> bool:
 	hand.clear()
 	_fire_items(ItemData.TRIGGER_TURN_END)
 	turn_damage_bonus = 0
+	var aftermath_before: int = player.aftermath_turns
 	_tick_statuses(player)  # the player's statuses tick at the end of its turn, before the enemies act
 	if not player.is_alive():
 		_lose()
@@ -225,6 +231,11 @@ func end_turn() -> bool:
 	if first_living_enemy() < 0:
 		_win()
 		return true
+	# Aftermath immunity counts the player's turns: -1 once the enemies have acted, unless it only began during this
+	# enemy phase (woken by a hit): then the coming turn is its first one.
+	if aftermath_before > 0 and player.aftermath_turns > 0:
+		player.aftermath_turns -= 1
+		player.changed.emit()
 	for e: Combatant in enemies:
 		_roll_intent(e)
 	_start_player_turn()
@@ -358,10 +369,14 @@ func _start_player_turn(first: bool = false) -> void:
 	if not first:
 		player.reset_block()
 	energy = max_energy
+	energy_lost = 0
 	turn_damage_bonus = 0
-	var lost_turn: String = _consume_skip_turn(player)  # asleep / frozen: the whole turn is lost (0 energy; potions still work)
+	# Asleep / frozen team: it loses player_energy_loss energy (whole turn if absent), still draws and plays with the rest.
+	var lost_turn: String = _consume_skip_turn(player)
 	if not lost_turn.is_empty():
-		energy = 0
+		var before: int = energy
+		energy = maxi(0, energy - _status_book.get_def(lost_turn).energy_loss_for(max_energy))
+		energy_lost = before - energy
 		turn_skipped.emit(player, lost_turn)
 	_fire_items(ItemData.TRIGGER_TURN_START)
 	_draw_cards(hand_size)
@@ -397,8 +412,9 @@ func _shuffle(cards: Array[CardData]) -> void:
 
 ## Applies `value` of status `status_id` to `target` (a living combatant of this battle). Returns false when refused:
 ## unknown status / dead target, or immune (status_blocked emitted). Immunity: any of the target's types in the
-## status's immune_types (the player uses the ACTIVE Pokémon's types), or a held "status_immunity" item.
-## Re-applying stacks the value (stackable statuses) and refreshes the duration.
+## status's immune_types (the player uses the ACTIVE Pokémon's types), a held "status_immunity" item, or the player's
+## aftermath immunity. Re-applying stacks the value (stackable statuses) and refreshes the duration; a status with
+## refresh_on_reapply false is left untouched while active (returns false, status_unchanged emitted).
 func apply_status(target: Combatant, status_id: String, value: int) -> bool:
 	var def: StatusData = _status_book.get_def(status_id)
 	if def == null:
@@ -408,6 +424,9 @@ func apply_status(target: Combatant, status_id: String, value: int) -> bool:
 		return false
 	if is_immune(target, status_id):
 		status_blocked.emit(target, status_id)
+		return false
+	if target.statuses.has(status_id) and not def.refresh_on_reapply:
+		status_unchanged.emit(target, status_id)
 		return false
 	if target.statuses.has(status_id):
 		var entry: Dictionary = target.statuses[status_id]
@@ -422,7 +441,7 @@ func apply_status(target: Combatant, status_id: String, value: int) -> bool:
 	return true
 
 
-## True if `target` can never receive the status (type immunity, or held item immunity for the player).
+## True if `target` cannot receive the status now (type immunity; for the player also held item immunity and aftermath immunity).
 func is_immune(target: Combatant, status_id: String) -> bool:
 	var def: StatusData = _status_book.get_def(status_id)
 	if def == null:
@@ -430,6 +449,8 @@ func is_immune(target: Combatant, status_id: String) -> bool:
 	for t: String in target.type_ids:
 		if t in def.immune_types:
 			return true
+	if target == player and player.aftermath_turns > 0 and status_id in _status_book.aftermath_statuses:
+		return true
 	return target == player and status_id in ItemEffects.status_immunities(items)
 
 
@@ -445,8 +466,11 @@ func cure_status(target: Combatant, status_id: String) -> int:
 	return removed
 
 
+## Every end of an aftermath status on the player (expired, woken, thawed, cured) starts the aftermath immunity.
 func _remove_status(target: Combatant, status_id: String) -> void:
 	target.statuses.erase(status_id)
+	if target == player and state == State.PLAYER_TURN and status_id in _status_book.aftermath_statuses:
+		player.aftermath_turns = _status_book.aftermath_turns
 	target.changed.emit()
 	status_removed.emit(target, status_id)
 

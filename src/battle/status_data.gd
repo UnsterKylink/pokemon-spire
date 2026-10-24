@@ -13,14 +13,20 @@ var description: String = ""
 var tick_damage: bool = false
 ## Value lost after each tick (status removed at <= 0); 0 = value never decays.
 var value_decay: int = 0
-## Turns the status lasts (-1 per end-of-turn tick, refreshed when re-applied); 0 = not turn-limited.
+## Turns the status lasts (-1 per end-of-turn tick, refreshed when re-applied unless refresh_on_reapply is false); 0 = not turn-limited.
 var duration: int = 0
+## True (default): re-applying an active status refreshes its turns (and adds the value if stackable).
+## False: re-applying it while it is active changes nothing (paralysis cannot be extended).
+var refresh_on_reapply: bool = true
 ## True: re-applying adds the values; false: the value stays 1.
 var stackable: bool = false
 ## The carrier's attacks deal this much less damage (before the type multiplier).
 var attack_penalty: int = 0
-## Whole turns lost (enemy skips its action / player starts the turn with 0 energy); 0 = none.
+## Turns lost (an enemy skips its whole action; the player loses player_energy_loss energy); 0 = none.
 var skip_turns: int = 0
+## Energy the PLAYER loses at the start of a turn lost to this status (cards are still drawn);
+## -1 (absent in data) = the whole turn (0 energy). Only meaningful with skip_turns > 0.
+var player_energy_loss: int = -1
 ## 0..1 chance that each action (enemy) / played card (player) fails.
 var skip_chance: float = 0.0
 var wake_on_damage: bool = false
@@ -47,13 +53,14 @@ static func from_dict(status_id: String, d: Dictionary, known_types: Array[Strin
 		return null
 	s.color = Color.html(String(d["color"]))
 	s.description = String(d["description"])
-	for key: String in ["tick_damage", "stackable", "wake_on_damage"]:
+	for key: String in ["tick_damage", "stackable", "wake_on_damage", "refresh_on_reapply"]:
 		if d.has(key) and not (d[key] is bool):
 			push_error("StatusData: status '%s': '%s' must be a boolean" % [status_id, key])
 			return null
 	s.tick_damage = bool(d.get("tick_damage", false))
 	s.stackable = bool(d.get("stackable", false))
 	s.wake_on_damage = bool(d.get("wake_on_damage", false))
+	s.refresh_on_reapply = bool(d.get("refresh_on_reapply", true))
 	for key: String in ["value_decay", "duration", "attack_penalty", "skip_turns"]:
 		var v: Variant = d.get(key, 0)
 		if not ((v is int or v is float) and v >= 0 and v == floorf(v)):
@@ -63,6 +70,15 @@ static func from_dict(status_id: String, d: Dictionary, known_types: Array[Strin
 	s.duration = int(d.get("duration", 0))
 	s.attack_penalty = int(d.get("attack_penalty", 0))
 	s.skip_turns = int(d.get("skip_turns", 0))
+	if d.has("player_energy_loss"):
+		var loss: Variant = d["player_energy_loss"]
+		if not ((loss is int or loss is float) and loss >= 0 and loss == floorf(loss)):
+			push_error("StatusData: status '%s': 'player_energy_loss' must be an integer >= 0" % status_id)
+			return null
+		if s.skip_turns <= 0:
+			push_error("StatusData: status '%s': 'player_energy_loss' needs skip_turns" % status_id)
+			return null
+		s.player_energy_loss = int(loss)
 	var chance: Variant = d.get("skip_chance", 0.0)
 	if not ((chance is int or chance is float) and chance >= 0.0 and chance <= 1.0):
 		push_error("StatusData: status '%s': 'skip_chance' must be within 0..1" % status_id)
@@ -94,6 +110,11 @@ static func from_dict(status_id: String, d: Dictionary, known_types: Array[Strin
 		push_error("StatusData: status '%s': skip_chance needs a duration" % status_id)
 		return null
 	return s
+
+
+## Energy the player loses on a turn lost to this status, out of `max_energy` (whole turn when player_energy_loss is -1).
+func energy_loss_for(max_energy: int) -> int:
+	return max_energy if player_energy_loss < 0 else mini(player_energy_loss, max_energy)
 
 
 ## Initial `turns` of a fresh instance: the duration, or skip_turns for turn-skipping statuses.
