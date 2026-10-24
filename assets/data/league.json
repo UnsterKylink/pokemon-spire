@@ -11,8 +11,8 @@
 		"steel": {"name": "Thyméo", "title": "Conseil 4", "encounter": "league_steel"}
 	},
 	"member_modifiers": [
-		{"hp_multiplier": 1.4, "strength_bonus": 2},
-		{"hp_multiplier": 1.45, "strength_bonus": 2},
+		{"hp_multiplier": 1.4, "strength_bonus": 3},
+		{"hp_multiplier": 1.45, "strength_bonus": 3},
 		{"hp_multiplier": 1.5, "strength_bonus": 3},
 		{"hp_multiplier": 1.6, "strength_bonus": 3}
 	],
