@@ -1,6 +1,6 @@
 # Rapport d'équilibrage — baseline
 
-Parties simulées : **600** (commit 8ec0288). 
+Parties simulées : **600** (commit 8ec0288). Données d'origine, AVANT les deux changements hors-réglage de la story 019 (type d'attaque des doubles types, cartes peu communes ajoutées) ; seed 1, parties 0..599.
 
 ## Résultat
 
@@ -11,39 +11,39 @@ Parties simulées : **600** (commit 8ec0288).
 
 | Étape | Parties arrêtées | % des parties | % de celles qui l'atteignent |
 |---|---:|---:|---:|
-| zone1_wild | 31 | 5.2 % | - |
-| zone1_elite | 75 | 12.5 % | - |
-| zone1_boss | 250 | 41.7 % | 41.7 % |
-| zone2_wild | 6 | 1.0 % | - |
-| zone2_elite | 14 | 2.3 % | - |
-| zone2_boss | 115 | 19.2 % | 32.9 % |
-| zone3_wild | 22 | 3.7 % | - |
-| zone3_elite | 10 | 1.7 % | - |
-| zone3_boss | 48 | 8.0 % | 20.4 % |
-| zone4_wild | 8 | 1.3 % | - |
-| zone4_elite | 5 | 0.8 % | - |
-| zone4_boss | 15 | 2.5 % | 8.0 % |
-| zone5_wild | 0 | 0.0 % | - |
-| zone5_elite | 0 | 0.0 % | - |
-| zone5_boss | 1 | 0.2 % | 0.6 % |
+| zone1_wild | 31 | 5.2 % | 5.2 % |
+| zone1_elite | 75 | 12.5 % | 13.2 % |
+| zone1_boss | 250 | 41.7 % | 50.6 % |
+| zone2_wild | 6 | 1.0 % | 2.5 % |
+| zone2_elite | 14 | 2.3 % | 5.9 % |
+| zone2_boss | 115 | 19.2 % | 51.3 % |
+| zone3_wild | 22 | 3.7 % | 20.2 % |
+| zone3_elite | 10 | 1.7 % | 11.5 % |
+| zone3_boss | 48 | 8.0 % | 62.3 % |
+| zone4_wild | 8 | 1.3 % | 27.6 % |
+| zone4_elite | 5 | 0.8 % | 23.8 % |
+| zone4_boss | 15 | 2.5 % | 93.8 % |
+| zone5_wild | 0 | 0.0 % | 0.0 % |
+| zone5_elite | 0 | 0.0 % | 0.0 % |
+| zone5_boss | 1 | 0.2 % | 100.0 % |
 | zone6_wild | 0 | 0.0 % | - |
 | zone6_elite | 0 | 0.0 % | - |
-| zone6_boss | 0 | 0.0 % | 0.0 % |
+| zone6_boss | 0 | 0.0 % | - |
 | zone7_wild | 0 | 0.0 % | - |
 | zone7_elite | 0 | 0.0 % | - |
-| zone7_boss | 0 | 0.0 % | 0.0 % |
+| zone7_boss | 0 | 0.0 % | - |
 | zone8_wild | 0 | 0.0 % | - |
 | zone8_elite | 0 | 0.0 % | - |
-| zone8_boss | 0 | 0.0 % | 0.0 % |
-| league_member_1 | 0 | 0.0 % | 0.0 % |
-| league_member_2 | 0 | 0.0 % | 0.0 % |
-| league_member_3 | 0 | 0.0 % | 0.0 % |
-| league_member_4 | 0 | 0.0 % | 0.0 % |
-| league_champion | 0 | 0.0 % | 0.0 % |
-| league_eternatus | 0 | 0.0 % | 0.0 % |
+| zone8_boss | 0 | 0.0 % | - |
+| league_member_1 | 0 | 0.0 % | - |
+| league_member_2 | 0 | 0.0 % | - |
+| league_member_3 | 0 | 0.0 % | - |
+| league_member_4 | 0 | 0.0 % | - |
+| league_champion | 0 | 0.0 % | - |
+| league_eternatus | 0 | 0.0 % | - |
 | **Victoire** | 0 | 0.0 % | - |
 
-Zones : `wild`/`elite` = salles de combat de la carte, `boss` = arène. (La colonne « % de celles qui l'atteignent » ne compte que les étapes séquentielles : un mort en `wild`/`elite` est retiré au passage de l'arène suivante.)
+Zones : `wild`/`elite` = salles de combat de la carte, `boss` = arène. « % de celles qui l'atteignent » = défaites à cette étape / parties encore en vie en y arrivant (étapes dans l'ordre de la partie).
 
 ### Entonnoir (badges obtenus)
 

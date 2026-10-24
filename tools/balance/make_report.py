@@ -97,6 +97,8 @@ def render(s, tag, note):
         dirty = subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "assets/data"], capture_output=True, text=True).stdout.strip()
     except Exception:
         head, dirty = "?", ""
+    if os.environ.get("REPORT_COMMIT"):
+        head, dirty = os.environ["REPORT_COMMIT"], ""
     L.append(f"Parties simulées : **{n}** (commit {head}{', données modifiées non commitées' if dirty else ''}). {note}\n")
     L.append("## Résultat\n")
     L.append(f"- Victoires complètes (8 badges + Conseil 4 + Maître + Éthernatos) : **{s['wins']} / {n} = {100*s['win_rate']:.1f} %** "
@@ -110,15 +112,11 @@ def render(s, tag, note):
         if st == "victory":
             L.append(f"| **Victoire** | {c} | {pct(c, n)} | - |")
             continue
-        L.append(f"| {st} | {c} | {pct(c, n)} | {pct(c, reached) if st.endswith('_boss') or st.startswith('league') else '-'} |")
-        # the 'reaching' column is only meaningful for the sequential stages (gym, league)
-        if st.endswith("_boss") or st.startswith("league"):
-            reached -= c
-        else:
-            pass
+        L.append(f"| {st} | {c} | {pct(c, n)} | {pct(c, reached)} |")
+        reached -= c
     L.append("")
     L.append("Zones : `wild`/`elite` = salles de combat de la carte, `boss` = arène. "
-             "(La colonne « % de celles qui l'atteignent » ne compte que les étapes séquentielles : un mort en `wild`/`elite` est retiré au passage de l'arène suivante.)\n")
+             "« % de celles qui l'atteignent » = défaites à cette étape / parties encore en vie en y arrivant (étapes dans l'ordre de la partie).\n")
     L.append("### Entonnoir (badges obtenus)\n")
     L.append("| Badges | Parties |\n|---:|---:|")
     for k in range(9):
