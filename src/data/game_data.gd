@@ -19,6 +19,13 @@ const DEFAULT_SHOP_PATH: String = "res://assets/data/shop.json"
 const DEFAULT_ZONES_PATH: String = "res://assets/data/zones.json"
 ## Story 013: Conseil 4, Maître, final boss.
 const DEFAULT_LEAGUE_PATH: String = "res://assets/data/league.json"
+## Story 013b: large roster (720 Pokémon, all generations) merged into the enemies; "" = no roster.
+const DEFAULT_ROSTER_PATH: String = "res://assets/data/roster.json"
+## Prefix of an encounter id GENERATED from the roster: "roster:<id>,<id>,..." (wild / elite fights, auto gym teams).
+## create_enemies / get_encounter_enemy_ids decode it; it is never stored in pokemon.json.
+const ROSTER_ENCOUNTER_PREFIX: String = "roster:"
+## Highest roster power tier (roster.json schema: tier 1..3).
+const ROSTER_MAX_TIER: int = 3
 ## Room types whose fights are biased toward the zone type and scaled by the zone "modifiers" (the gym uses "gym_modifiers").
 const ZONE_TYPED_ROOMS: Array[String] = ["wild", "elite"]
 ## The room type that holds the zone's gym fight.
@@ -55,15 +62,20 @@ var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (f
 var _evolution_hp_bonus_default: int = 0
 var _zones_cfg: Dictionary = {}  # validated zones.json (story 012)
 var _league_cfg: Dictionary = {}  # validated league.json (story 013)
+var _roster_ids: Dictionary = {}  # roster id -> its entry (story 013b; the entry is ALSO in _enemies)
+var _roster_wild: Dictionary = {}  # type id ("" = any type) -> {tier int -> Array[String] wild_ok roster ids, file order}
+var _roster_candidates: Array[String] = []  # roster ids with roles.candidate_start (story 013b starter draw)
+var _starter_roster_share: float = 0.0  # pokemon.json starter_choice.roster_share
 
 
-## Loads all eleven files (act and events story 005; items, potions, shop story 006; zones story 012; league story 013). Returns false (after push_error) if anything is missing or invalid.
+## Loads all twelve files (act and events story 005; items, potions, shop story 006; zones story 012; league story 013;
+## roster story 013b, skipped when `roster_path` is ""). Returns false (after push_error) if anything is missing or invalid.
 func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DEFAULT_POKEMON_PATH,
 		types_path: String = DEFAULT_TYPES_PATH, rewards_path: String = DEFAULT_REWARDS_PATH,
 		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH,
 		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
 		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
-		league_path: String = DEFAULT_LEAGUE_PATH) -> bool:
+		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_cards.clear()
 	_players.clear()
@@ -89,6 +101,10 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_evolution_hp_bonus_default = 0
 	_zones_cfg = {}
 	_league_cfg = {}
+	_roster_ids = {}
+	_roster_wild = {}
+	_roster_candidates.clear()
+	_starter_roster_share = 0.0
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -100,6 +116,11 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	var shop_root: Dictionary = _read_json(shop_path)
 	var zones_root: Dictionary = _read_json(zones_path)
 	var league_root: Dictionary = _read_json(league_path)
+	var roster_root: Dictionary = {"pokemon": {}}
+	if not roster_path.is_empty():
+		roster_root = _read_json(roster_path)
+		if roster_root.is_empty():
+			return false
 	if types_root.is_empty() or cards_root.is_empty() or pokemon_root.is_empty() or rewards_root.is_empty() \
 			or act_root.is_empty() or events_root.is_empty() or items_root.is_empty() or potions_root.is_empty() \
 			or shop_root.is_empty() or zones_root.is_empty() or league_root.is_empty():
@@ -116,11 +137,13 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_cards(cards_root) and ok
 	ok = _load_players(pokemon_root) and ok
 	ok = _load_enemies(pokemon_root) and ok
+	ok = _load_roster(roster_root) and ok  # before the card owners / starters / evolutions that may name roster ids
 	ok = _load_encounters(pokemon_root) and ok
 	ok = _check_pokemon_refs(pokemon_root) and ok
 	ok = _load_rewards(rewards_root) and ok
 	ok = _load_starters(pokemon_root) and ok
 	ok = _load_evolutions(pokemon_root) and ok
+	ok = _load_roster_evolutions(pokemon_root) and ok
 	ok = _load_events(events_root) and ok
 	ok = _load_act(act_root) and ok
 	ok = _load_items(items_root) and ok
@@ -218,12 +241,14 @@ func create_enemy(enemy_id: String) -> Combatant:
 ## Builds fresh enemy Combatants (left to right) for an encounter. Empty if the id is unknown.
 ## Room modifiers (story 005): max HP x `hp_multiplier` (rounded up, HP full) and `strength_bonus`
 ## added to Combatant.strength, so battle intents already show the boosted attack values.
+## Story 013b: a generated "roster:<id>,..." encounter (pick_encounter / draw_zones) builds its roster Pokémon exactly
+## like pokemon.json enemies (same Combatant.from_dict, same modifiers).
 func create_enemies(encounter_id: String, hp_multiplier: float = 1.0, strength_bonus: int = 0) -> Array[Combatant]:
 	var result: Array[Combatant] = []
-	if not _encounters.has(encounter_id):
+	var ids: Array[String] = get_encounter_enemy_ids(encounter_id)
+	if ids.is_empty():
 		push_error("GameData: unknown encounter id '%s'" % encounter_id)
 		return result
-	var ids: Array = _encounters[encounter_id]
 	for enemy_id: String in ids:
 		var enemy: Combatant = create_enemy(enemy_id)
 		if enemy == null:
@@ -704,11 +729,25 @@ func is_boss_pokemon(pokemon_id: String) -> bool:
 	return bool((_enemies.get(pokemon_id, {}) as Dictionary).get("boss", false))
 
 
-## Enemy ids of an encounter (copy; empty if unknown).
+## Enemy ids of an encounter (copy; empty if unknown). Story 013b: also decodes a generated "roster:<id>,..." id
+## (empty if any id is unknown or the count is outside Battle.MIN_ENEMIES..MAX_ENEMIES).
 func get_encounter_enemy_ids(encounter_id: String) -> Array[String]:
 	var result: Array[String] = []
+	if encounter_id.begins_with(ROSTER_ENCOUNTER_PREFIX):
+		for eid: String in encounter_id.substr(ROSTER_ENCOUNTER_PREFIX.length()).split(",", false):
+			if not _enemies.has(eid):
+				return [] as Array[String]
+			result.append(eid)
+		if result.size() < Battle.MIN_ENEMIES or result.size() > Battle.MAX_ENEMIES:
+			result.clear()
+		return result
 	result.assign(_encounters.get(encounter_id, []))
 	return result
+
+
+## True for a generated roster encounter id ("roster:<id>,...").
+func is_roster_encounter(encounter_id: String) -> bool:
+	return encounter_id.begins_with(ROSTER_ENCOUNTER_PREFIX)
 
 
 ## Draws the league fights of a run with the injected (seeded) rng. `gym_type_ids` = the run's 8 gym types (excluded

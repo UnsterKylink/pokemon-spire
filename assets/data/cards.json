@@ -1,5 +1,5 @@
 {
-	"_doc": "id -> {name, cost, kind attack|skill, rarity starter|common|uncommon|rare, damage, block, description, type (id de types.json; obligatoire pour les attaques, absent pour les competences)}. pokemon (id de pokemon.json, obligatoire pour les attaques, interdit pour les competences) = Pokemon porteur de la carte. 'starter' = cartes du deck de depart (jamais proposees en recompense sauf si listees dans rewards.json).",
+	"_doc": "id -> {name, cost, kind attack|skill, rarity starter|common|uncommon|rare, damage, block, description, type (id de types.json; obligatoire pour les attaques, absent pour les competences)}. pokemon (id de pokemon.json OU de roster.json, story 013b ; obligatoire pour les attaques, interdit pour les competences) = Pokemon porteur de la carte. 'starter' = cartes du deck de depart (jamais proposees en recompense sauf si listees dans rewards.json).",
 	"cards": {
 		"griffe": {"name": "Griffe", "cost": 1, "kind": "attack", "pokemon": "salameche", "rarity": "starter", "type": "normal", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
 		"flammette": {"name": "Flammette", "cost": 1, "kind": "attack", "pokemon": "salameche", "rarity": "starter", "type": "fire", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
@@ -64,10 +64,10 @@
 		"draco_souffle": {"name": "Draco-Souffle", "cost": 1, "kind": "attack", "pokemon": "dragonair", "rarity": "common", "type": "dragon", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
 		"colere": {"name": "Colère", "cost": 2, "kind": "attack", "pokemon": "dragonite", "rarity": "uncommon", "type": "dragon", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
 		"canon_dynamax": {"name": "Canon Dynamax", "cost": 3, "kind": "attack", "pokemon": "eternatus", "rarity": "rare", "type": "dragon", "damage": 22, "block": 0, "description": "Inflige 22 dégâts."},
-		"vent_feerique": {"name": "Vent Féérique", "cost": 1, "kind": "attack", "pokemon": "pikachu", "rarity": "common", "type": "fairy", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
-		"eclat_magique": {"name": "Éclat Magique", "cost": 1, "kind": "attack", "pokemon": "pikachu", "rarity": "common", "type": "fairy", "damage": 7, "block": 0, "description": "Inflige 7 dégâts."},
-		"calinerie": {"name": "Câlinerie", "cost": 2, "kind": "attack", "pokemon": "pikachu", "rarity": "uncommon", "type": "fairy", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
-		"pouvoir_lunaire": {"name": "Pouvoir Lunaire", "cost": 3, "kind": "attack", "pokemon": "pikachu", "rarity": "rare", "type": "fairy", "damage": 20, "block": 0, "description": "Inflige 20 dégâts."},
+		"vent_feerique": {"name": "Vent Féérique", "cost": 1, "kind": "attack", "pokemon": "clefairy", "rarity": "common", "type": "fairy", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"eclat_magique": {"name": "Éclat Magique", "cost": 1, "kind": "attack", "pokemon": "clefairy", "rarity": "common", "type": "fairy", "damage": 7, "block": 0, "description": "Inflige 7 dégâts."},
+		"calinerie": {"name": "Câlinerie", "cost": 2, "kind": "attack", "pokemon": "clefairy", "rarity": "uncommon", "type": "fairy", "damage": 13, "block": 0, "description": "Inflige 13 dégâts."},
+		"pouvoir_lunaire": {"name": "Pouvoir Lunaire", "cost": 3, "kind": "attack", "pokemon": "clefairy", "rarity": "rare", "type": "fairy", "damage": 20, "block": 0, "description": "Inflige 20 dégâts."},
 		"poudreuse": {"name": "Poudreuse", "cost": 0, "kind": "attack", "pokemon": "glaceon", "rarity": "common", "type": "ice", "damage": 4, "block": 0, "description": "Inflige 4 dégâts."},
 		"blizzard": {"name": "Blizzard", "cost": 3, "kind": "attack", "pokemon": "lapras", "rarity": "rare", "type": "ice", "damage": 20, "block": 0, "description": "Inflige 20 dégâts."},
 		"balayage": {"name": "Balayage", "cost": 1, "kind": "attack", "pokemon": "hitmonlee", "rarity": "common", "type": "fighting", "damage": 7, "block": 0, "description": "Inflige 7 dégâts."},
@@ -88,6 +88,22 @@
 		"coup_d_boule": {"name": "Coup d'Boule", "cost": 1, "kind": "attack", "pokemon": "rattata", "rarity": "common", "type": "normal", "damage": 7, "block": 0, "description": "Inflige 7 dégâts."},
 		"ultralaser": {"name": "Ultralaser", "cost": 3, "kind": "attack", "pokemon": "snorlax", "rarity": "rare", "type": "normal", "damage": 22, "block": 0, "description": "Inflige 22 dégâts."},
 		"poing_eclair": {"name": "Poing-Éclair", "cost": 2, "kind": "attack", "pokemon": "electabuzz", "rarity": "uncommon", "type": "electric", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
-		"surf": {"name": "Surf", "cost": 2, "kind": "attack", "pokemon": "vaporeon", "rarity": "uncommon", "type": "water", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."}
+		"surf": {"name": "Surf", "cost": 2, "kind": "attack", "pokemon": "vaporeon", "rarity": "uncommon", "type": "water", "damage": 12, "block": 0, "description": "Inflige 12 dégâts."},
+		"vent_glace": {"name": "Vent Glace", "cost": 1, "kind": "attack", "pokemon": "snorunt", "rarity": "starter", "type": "ice", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"crocs_givre": {"name": "Crocs Givre", "cost": 2, "kind": "attack", "pokemon": "snorunt", "rarity": "starter", "type": "ice", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"mach_punch": {"name": "Mach Punch", "cost": 1, "kind": "attack", "pokemon": "machop", "rarity": "starter", "type": "fighting", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"frappe_atlas": {"name": "Frappe Atlas", "cost": 2, "kind": "attack", "pokemon": "machop", "rarity": "starter", "type": "fighting", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"pietisol": {"name": "Piétisol", "cost": 1, "kind": "attack", "pokemon": "diglett", "rarity": "starter", "type": "ground", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"tir_de_boue": {"name": "Tir de Boue", "cost": 2, "kind": "attack", "pokemon": "diglett", "rarity": "starter", "type": "ground", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"rafale_psy": {"name": "Rafale Psy", "cost": 1, "kind": "attack", "pokemon": "abra", "rarity": "starter", "type": "psychic", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"psykoud_boul": {"name": "Psykoud'Boul", "cost": 2, "kind": "attack", "pokemon": "abra", "rarity": "starter", "type": "psychic", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"etonnement": {"name": "Étonnement", "cost": 1, "kind": "attack", "pokemon": "duskull", "rarity": "starter", "type": "ghost", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"poing_ombre": {"name": "Poing Ombre", "cost": 2, "kind": "attack", "pokemon": "duskull", "rarity": "starter", "type": "ghost", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"draco_queue": {"name": "Draco-Queue", "cost": 1, "kind": "attack", "pokemon": "dratini", "rarity": "starter", "type": "dragon", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"dracochoc": {"name": "Dracochoc", "cost": 2, "kind": "attack", "pokemon": "dratini", "rarity": "starter", "type": "dragon", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"pisto_poing": {"name": "Pisto-Poing", "cost": 1, "kind": "attack", "pokemon": "aron", "rarity": "starter", "type": "steel", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"aile_d_acier": {"name": "Aile d'Acier", "cost": 2, "kind": "attack", "pokemon": "aron", "rarity": "starter", "type": "steel", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."},
+		"voix_enjoleuse": {"name": "Voix Enjôleuse", "cost": 1, "kind": "attack", "pokemon": "clefairy", "rarity": "starter", "type": "fairy", "damage": 6, "block": 0, "description": "Inflige 6 dégâts."},
+		"vampibaiser": {"name": "Vampibaiser", "cost": 2, "kind": "attack", "pokemon": "clefairy", "rarity": "starter", "type": "fairy", "damage": 9, "block": 0, "description": "Inflige 9 dégâts."}
 	}
 }

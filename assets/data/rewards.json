@@ -36,7 +36,32 @@
 			"seisme",
 			"bombe_beurk",
 			"forteresse",
-			"morsure"
+			"morsure",
+			"vent_feerique",
+			"eclat_magique",
+			"calinerie",
+			"pouvoir_lunaire",
+			"poudreuse",
+			"blizzard",
+			"balayage",
+			"close_combat",
+			"tempete_verte",
+			"cradovague",
+			"coud_boue",
+			"rapace",
+			"psycho_boost",
+			"ombre_portee",
+			"hantise",
+			"tranche_nuit",
+			"vibrobscur",
+			"luminocanon",
+			"lame_de_roc",
+			"plaie_croix",
+			"bourdon",
+			"coup_d_boule",
+			"poing_eclair",
+			"surf",
+			"ultralaser"
 		]
 	}
 }
