@@ -25,8 +25,17 @@ var enemies_defeated: int = 0
 var base_pokemon_id: String = ""
 ## True once evolve_starter() has run (evolution OR the "il se renforce" bonus): it applies once per run.
 var evolution_applied: bool = false
-## True if evolve_starter() changed the form (false for a Pokémon without an evolution entry).
+## True if evolve_starter() changed the form at least once (false for a Pokémon without an evolution entry).
 var evolved: bool = false
+## Story 014: how many times the starter's form changed (0 = still the chosen form, 1 = stage 2, 2 = stage 3).
+var evolution_stage: int = 0
+## Story 014: the summary (evolve_starter format) of each starter evolution step applied, in order.
+var evolution_history: Array[Dictionary] = []
+## Story 014: team Pokémon (carriers of deck cards, not the starter) progress: carrier id ->
+## {"battles": won battles since it entered the deck, "stage": evolutions already done}. See record_battle_result.
+var team_progress: Dictionary = {}
+## Story 014: badge numbers for which evolve_starter(data, badge) already ran (0 = the badge-less call).
+var _evolved_badges: Array[int] = []
 ## Pokédollars (story 006).
 var money: int = 0
 ## Held items owned, in pickup order (permanent, no duplicates).
@@ -188,6 +197,7 @@ func record_battle_result(player: Combatant, defeated_ids: Array[String] = []) -
 	if hp > 0:
 		battles_won += 1
 		enemies_defeated += defeated_ids.size()
+		track_team_win()
 
 
 ## True when the run is lost: HP reached 0 (story 007 defeat screen).
@@ -347,20 +357,25 @@ func advance_league(heal_pct: float) -> int:
 	return heal_percent(heal_pct)
 
 
-## Story 007: the Champion is beaten. Applies the official evolution of the chosen starter (GameData.get_evolution,
-## pokemon.json): new name / types / sprite, max HP AND current HP + max_hp_bonus, the field Pokémon becomes the
-## evolved form, and the deck cards carried by the old form are now carried by the evolved one (so playing them
-## never brings the old form back). Without an evolution entry the form stays and the bonus is
-## GameData.get_evolution_hp_bonus_default() ("n'évolue pas — il se renforce").
-## Applies once per run; a second call changes nothing and returns {}.
-## Returns {from_id, from_name, from_sprite, from_types, to_id, to_name, to_sprite, to_types, hp_bonus: int, evolved: bool}.
-func evolve_starter(data: GameData) -> Dictionary:
-	if evolution_applied or data == null:
+## Story 007 / 014: one evolution step of the chosen starter (Main calls it after the badges of zones.json
+## evolution_after_badges: `badge_number` identifies the step, a second call for the same number changes nothing and
+## returns {}). The rule is the same for every Pokémon: GameData.get_evolution(<current form>) (pokemon.json
+## evolutions / roster evolves_to; stage-2 forms have their own entry): new name / types / sprite, max HP AND current
+## HP + max_hp_bonus, the field Pokémon becomes the new form, and the deck cards carried by the old form are now
+## carried by the new one. Without a next form the form stays: GameData.get_evolution_hp_bonus_default() max HP AND one
+## of the Pokémon's cards is upgraded "+" (the most expensive upgradable one; upgrade_card logic) -- "n'évolue pas — il
+## se renforce".
+## Returns {from_id, from_name, from_sprite, from_types, to_id, to_name, to_sprite, to_types, hp_bonus: int,
+## evolved: bool, stage: int (evolution_stage after the step), badge: int, upgraded_card: String (display name, "" if none)}.
+func evolve_starter(data: GameData, badge_number: int = 0) -> Dictionary:
+	if data == null or _evolved_badges.has(badge_number):
 		return {}
+	_evolved_badges.append(badge_number)
 	var summary: Dictionary = {"from_id": starter_pokemon_id, "from_name": display_name, "from_sprite": sprite_path,
-			"from_types": type_ids.duplicate()}
-	var evo: Dictionary = data.get_evolution(base_pokemon_id)
+			"from_types": type_ids.duplicate(), "badge": badge_number, "upgraded_card": ""}
+	var evo: Dictionary = data.get_evolution(starter_pokemon_id)
 	var bonus: int = data.get_evolution_hp_bonus_default()
+	var step_evolved: bool = false
 	if not evo.is_empty():
 		bonus = int(evo["max_hp_bonus"])
 		var new_id: String = String(evo["id"])
@@ -368,11 +383,16 @@ func evolve_starter(data: GameData) -> Dictionary:
 		type_ids.assign(evo["types"])
 		sprite_path = String(evo["sprite"])
 		_pokemon_infos[new_id] = data.get_pokemon_info(new_id)
-		for i: int in deck.size():
-			if deck[i].pokemon_id == starter_pokemon_id:
-				deck[i] = deck[i].with_pokemon(new_id)
+		_recarry(starter_pokemon_id, new_id)
 		starter_pokemon_id = new_id
 		evolved = true
+		evolution_stage += 1
+		step_evolved = true
+	else:
+		var idx: int = _best_upgradable_index(starter_pokemon_id)
+		if idx >= 0:
+			upgrade_card(idx)
+			summary["upgraded_card"] = deck[idx].display_name
 	gain_max_hp(bonus)
 	evolution_applied = true
 	summary["to_id"] = starter_pokemon_id
@@ -380,8 +400,109 @@ func evolve_starter(data: GameData) -> Dictionary:
 	summary["to_sprite"] = sprite_path
 	summary["to_types"] = type_ids.duplicate()
 	summary["hp_bonus"] = bonus
-	summary["evolved"] = evolved
+	summary["evolved"] = step_evolved
+	summary["stage"] = evolution_stage
+	evolution_history.append(summary.duplicate(true))
 	return summary
+
+
+## Story 014: true if evolve_starter(data, badge_number) already ran for that number.
+func starter_evolved_at(badge_number: int) -> bool:
+	return _evolved_badges.has(badge_number)
+
+
+## Story 014: the deck cards carried by `from_id` become carried by `to_id` (one rule for any Pokémon id).
+func _recarry(from_id: String, to_id: String) -> void:
+	for i: int in deck.size():
+		if deck[i].pokemon_id == from_id:
+			deck[i] = deck[i].with_pokemon(to_id)
+
+
+## Story 014: deck index of the most expensive card of `pokemon_id` that can still be upgraded (first on ties), -1 if none.
+func _best_upgradable_index(pokemon_id: String) -> int:
+	var best: int = -1
+	for i: int in deck.size():
+		if deck[i].pokemon_id == pokemon_id and can_upgrade_card(i) and (best < 0 or deck[i].cost > deck[best].cost):
+			best = i
+	return best
+
+
+## Story 014: ids of the team Pokémon = carriers of deck cards other than the field starter, in deck order.
+func team_carriers() -> Array[String]:
+	var result: Array[String] = []
+	for c: CardData in deck:
+		if not c.pokemon_id.is_empty() and c.pokemon_id != starter_pokemon_id and not result.has(c.pokemon_id):
+			result.append(c.pokemon_id)
+	return result
+
+
+## Story 014: a battle was won (record_battle_result calls this; public for QA) -- every team Pokémon in the deck gets +1 battle (one that just entered the deck
+## starts counting now; one that left the deck forgets its progress).
+func track_team_win() -> void:
+	var carriers: Array[String] = team_carriers()
+	for key: String in team_progress.keys():
+		if not carriers.has(key):
+			team_progress.erase(key)
+	for c: String in carriers:
+		if not team_progress.has(c):
+			team_progress[c] = {"battles": 0, "stage": 0}
+		team_progress[c]["battles"] = int(team_progress[c]["battles"]) + 1
+
+
+## Story 014: team Pokémon that can evolve now (battles >= team_evolution.battles_per_stage[stage] and a next form
+## exists), in deck order. Pure observation.
+func pending_team_evolutions(data: GameData) -> Array[String]:
+	var result: Array[String] = []
+	if data == null:
+		return result
+	var steps: Array[int] = data.get_team_evolution_battles()
+	for c: String in team_carriers():
+		var prog: Dictionary = team_progress.get(c, {})
+		var stage: int = int(prog.get("stage", 0))
+		if stage < steps.size() and int(prog.get("battles", 0)) >= steps[stage] and not data.get_evolution(c).is_empty():
+			result.append(c)
+	return result
+
+
+## Story 014: evolves every team Pokémon that is due (see pending_team_evolutions; several steps in a row if the
+## thresholds are all passed). Same rule for any id: max HP + team_evolution.bonus_hp per step, the deck cards of the old
+## form are carried by the new one, no card choice. Returns one row per Pokémon (evolve_starter format: from_*, to_*,
+## hp_bonus = total gained, evolved = true, stage = its stage after), empty if nothing is due.
+func evolve_team(data: GameData) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for start_id: String in pending_team_evolutions(data):
+		var cur: String = start_id
+		var from_info: Dictionary = data.get_pokemon_info(start_id)
+		var row: Dictionary = {"from_id": start_id, "from_name": String(from_info.get("name", "")),
+				"from_sprite": String(from_info.get("sprite_path", "")), "from_types": from_info.get("types", []), "hp_bonus": 0,
+				"evolved": true, "badge": 0, "upgraded_card": ""}
+		var prog: Dictionary = (team_progress[start_id] as Dictionary).duplicate()
+		var steps: Array[int] = data.get_team_evolution_battles()
+		while int(prog["stage"]) < steps.size() and int(prog["battles"]) >= steps[int(prog["stage"])]:
+			var evo: Dictionary = data.get_evolution(cur)
+			if evo.is_empty():
+				break
+			var new_id: String = String(evo["id"])
+			_pokemon_infos[new_id] = data.get_pokemon_info(new_id)
+			_recarry(cur, new_id)
+			cur = new_id
+			prog["stage"] = int(prog["stage"]) + 1
+			row["hp_bonus"] = int(row["hp_bonus"]) + data.get_team_evolution_bonus_hp()
+		team_progress.erase(start_id)
+		var to_info: Dictionary = data.get_pokemon_info(cur)
+		if cur != starter_pokemon_id:
+			if team_progress.has(cur):  # two lines merging into one form keep the best progress
+				prog["battles"] = maxi(int(prog["battles"]), int(team_progress[cur]["battles"]))
+				prog["stage"] = maxi(int(prog["stage"]), int(team_progress[cur]["stage"]))
+			team_progress[cur] = prog
+		row["to_id"] = cur
+		row["to_name"] = String(to_info.get("name", ""))
+		row["to_sprite"] = String(to_info.get("sprite_path", ""))
+		row["to_types"] = to_info.get("types", [])
+		row["stage"] = int(prog["stage"])
+		gain_max_hp(int(row["hp_bonus"]))
+		rows.append(row)
+	return rows
 
 
 ## Story 007: everything the victory / defeat screen shows, read from the run:

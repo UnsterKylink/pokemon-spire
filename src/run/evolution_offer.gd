@@ -8,22 +8,29 @@ extends RefCounted
 ##      It is a real alternative to the big new attacks: cheaper / already upgraded. If it cannot be upgraded
 ##      the plain copy is offered; if it duplicates a teaches card it is not added.
 ## Every card is carried by the evolved form (`with_pokemon(evolved_id)`), so playing it would field that form.
-## A Pokémon without an evolution gets only the upgraded strong card (carried by itself).
+## Story 014: a Pokémon without a next form ("il se renforce") offers nothing: its card is upgraded by RunState.
 
 
 ## Cards offered to `run` (call AFTER RunState.evolve_starter: the carrier is run.starter_pokemon_id).
+## Story 014: `summary` is the evolve_starter() result of the step just applied; only a step that changed the form
+## offers cards (the `teaches` of the form just left, any stage). No evolution (the Pokémon "se renforce"): nothing to
+## choose, its card was already upgraded. Without a summary the last step of run.evolution_history is used.
 ## Empty if the data supplies nothing.
-static func generate(data: GameData, run: RunState) -> Array[CardData]:
+static func generate(data: GameData, run: RunState, summary: Dictionary = {}) -> Array[CardData]:
 	var result: Array[CardData] = []
 	if data == null or run == null:
 		return result
+	if summary.is_empty() and not run.evolution_history.is_empty():
+		summary = run.evolution_history[run.evolution_history.size() - 1]
+	if summary.is_empty() or not bool(summary.get("evolved", false)):
+		return result
 	var carrier: String = run.starter_pokemon_id
 	var used: Dictionary = {}
-	for card: CardData in data.get_evolution_cards(run.base_pokemon_id):
+	for card: CardData in data.get_evolution_cards(String(summary["from_id"])):
 		if not used.has(card.id):
 			used[card.id] = true
 			result.append(card.with_pokemon(carrier))
-	var primary: String = run.type_ids[0] if not run.type_ids.is_empty() else data.get_primary_type(run.base_pokemon_id)
+	var primary: String = run.type_ids[0] if not run.type_ids.is_empty() else data.get_primary_type(carrier)
 	var starter_cards: Dictionary = data.get_starter_cards_for_type(primary)
 	var strong: CardData = starter_cards.get("strong", null)
 	if strong != null and not used.has(strong.id):

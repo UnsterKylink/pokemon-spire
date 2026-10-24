@@ -100,6 +100,8 @@ var _end_screen: RunEndScreen
 var _badge_screen: BadgeScreen
 var _evolution_offers: Array[CardData] = []
 var _evolution_summary: Dictionary = {}
+## Story 014: the rows (RunState.evolve_team) of the team evolution summary on screen, [] otherwise.
+var _team_evolution_rows: Array[Dictionary] = []
 ## The current Poké Mart visit's stock (null outside the Mart): one per visit.
 var _shop: ShopInventory
 ## Permanent money / items / potions bar (story 006), above every run screen except the starter choice.
@@ -162,6 +164,7 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_encounter_id = ""
 	_fight_room_type = ""
 	_evolution_summary = {}
+	_team_evolution_rows = []
 	_hud.visible = false
 	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng, _zone_rng, _league_rng]
 	for i: int in rngs.size():
@@ -262,8 +265,8 @@ func get_last_badge() -> Dictionary:
 func badge_continue() -> void:
 	if _screen_name != SCREEN_BADGE:
 		return
-	if _data.get_evolution_after_badges().has(_run.badges.size()) and not _run.evolution_applied:
-		_show_evolution()
+	if _data.get_evolution_after_badges().has(_run.badges.size()) and not _run.starter_evolved_at(_run.badges.size()):
+		_show_evolution(_run.badges.size())
 	else:
 		_next_zone_or_victory()
 
@@ -613,6 +616,45 @@ func get_evolution_summary() -> Dictionary:
 	return _evolution_summary
 
 
+## QA (story 014): the rows of the team evolution summary on screen ([] otherwise); see RunState.evolve_team.
+func get_team_evolution_rows() -> Array[Dictionary]:
+	return _team_evolution_rows
+
+
+## QA-ONLY CHEAT (story 014): the starter's form goes to `stage` (0..) through the real evolution rule, silently
+## (no screen, one RunState.evolve_starter step per stage, bonuses applied). Returns the stage reached.
+func qa_set_evolution_stage(stage: int) -> int:
+	if _run == null:
+		return 0
+	while _run.evolution_stage < stage:
+		var before: String = _run.starter_pokemon_id
+		if _run.evolve_starter(_data, -(_run.evolution_history.size() + 1)).is_empty() or _run.starter_pokemon_id == before:
+			break
+	_refresh_hud()
+	return _run.evolution_stage
+
+
+## QA-ONLY CHEAT (story 014): counts `n` won battles (battles_won + team progress) without fighting.
+func qa_win_battles(n: int) -> void:
+	if _run == null:
+		return
+	for i: int in n:
+		_run.battles_won += 1
+		_run.track_team_win()
+
+
+## QA-ONLY (story 014): checks the team evolutions as after a won battle; shows the summary screen (then the map) and
+## returns true if some Pokémon was due.
+func qa_check_team_evolution() -> bool:
+	return _run != null and _show_team_evolution(_show_map)
+
+
+## QA-ONLY (story 014): runs the starter evolution of badge number `badge_number` (screen flow, as after the badge).
+func qa_show_starter_evolution(badge_number: int) -> void:
+	if _run != null:
+		_show_evolution(badge_number)
+
+
 ## QA: "Continuer" on the evolution screen (reveal -> card choice; result -> victory).
 func evolution_continue() -> void:
 	if _evolution_screen != null:
@@ -948,6 +990,11 @@ func _on_card_chosen(card: CardData) -> void:
 ## Back to the map; after a gym win (story 012) the badge comes first; after a league fight (story 013) the heal of
 ## league.json heal_percent_between_fights then the league intermission screen (next fight).
 func _after_reward() -> void:
+	if not _show_team_evolution(_after_team_evolution):
+		_after_team_evolution()
+
+
+func _after_team_evolution() -> void:
 	if _fight_room_type == ROOM_LEAGUE:
 		_last_league_heal = _run.advance_league(_data.get_league_heal_percent())
 		_show_league_screen()
@@ -1002,15 +1049,33 @@ func _on_new_run_requested() -> void:
 
 ## Story 007 (story 012: after the badges of zones.json evolution_after_badges): the chosen starter evolves (RunState.evolve_starter, data-driven), then
 ## the evolved form offers its cards (EvolutionOffer). The run's HP / deck change here; the screen only displays.
-func _show_evolution() -> void:
+func _show_evolution(badge_number: int) -> void:
 	_clear_screens()  # before the offers: it resets _evolution_offers
-	_evolution_summary = _run.evolve_starter(_data)
-	_evolution_offers = EvolutionOffer.generate(_data, _run)
+	_evolution_summary = _run.evolve_starter(_data, badge_number)
+	if _evolution_summary.is_empty():
+		_next_zone_or_victory()
+		return
+	_evolution_offers = EvolutionOffer.generate(_data, _run, _evolution_summary)
 	_evolution_screen = EvolutionScreen.new()
 	_evolution_screen.card_chosen.connect(_on_evolution_card_chosen)
 	_evolution_screen.finished.connect(_next_zone_or_victory)
 	_set_screen(_evolution_screen, SCREEN_EVOLUTION)
 	_evolution_screen.setup(_data, _run, _evolution_summary, _evolution_offers)
+
+
+## Story 014: team Pokémon due to evolve (RunState.evolve_team, after a won battle's reward): the compact "Évolutions"
+## summary (EvolutionScreen.setup_team), then `then` runs. Returns false (nothing shown, `then` NOT called) if none is due.
+func _show_team_evolution(then: Callable) -> bool:
+	var rows: Array[Dictionary] = _run.evolve_team(_data)
+	if rows.is_empty():
+		return false
+	_clear_screens()
+	_team_evolution_rows = rows
+	_evolution_screen = EvolutionScreen.new()
+	_evolution_screen.finished.connect(then)
+	_set_screen(_evolution_screen, SCREEN_EVOLUTION)
+	_evolution_screen.setup_team(_data, _run, rows)
+	return true
 
 
 func _on_evolution_card_chosen(index: int) -> void:
@@ -1199,6 +1264,7 @@ func _clear_screens() -> void:
 	_badge_screen = null
 	_league_screen = null
 	_evolution_offers = []
+	_team_evolution_rows = []
 	_shop = null
 	_offers = []
 	_current_event = {}

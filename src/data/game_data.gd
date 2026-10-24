@@ -60,6 +60,8 @@ var _shop_cfg: Dictionary = {}  # validated shop.json
 var _evolutions: Dictionary = {}  # base pokemon id -> validated evolution entry (story 007)
 var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (for get_pokemon_info)
 var _evolution_hp_bonus_default: int = 0
+var _team_evolution_battles: Array[int] = []  # story 014: battles won needed for stage 1->2, 2->3 (team Pokémon)
+var _team_evolution_bonus_hp: int = 0
 var _zones_cfg: Dictionary = {}  # validated zones.json (story 012)
 var _league_cfg: Dictionary = {}  # validated league.json (story 013)
 var _roster_ids: Dictionary = {}  # roster id -> its entry (story 013b; the entry is ALSO in _enemies)
@@ -99,6 +101,8 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_evolutions = {}
 	_evolved_forms = {}
 	_evolution_hp_bonus_default = 0
+	_team_evolution_battles = []
+	_team_evolution_bonus_hp = 0
 	_zones_cfg = {}
 	_league_cfg = {}
 	_roster_ids = {}
@@ -815,6 +819,9 @@ func _load_zones(root: Dictionary) -> bool:
 		for n_v: Variant in (evo_v as Array):
 			if not _is_positive_int(n_v) or int(n_v) > count:
 				push_error("GameData: evolution_after_badges has an invalid badge number '%s'" % str(n_v))
+				ok = false
+			elif (evo_v as Array).count(n_v) > 1:
+				push_error("GameData: evolution_after_badges lists badge %d twice" % int(n_v))
 				ok = false
 	if ok:
 		_zones_cfg = root
@@ -1567,6 +1574,48 @@ func get_evolution_cards(base_id: String) -> Array[CardData]:
 	return result
 
 
+## Story 014: battles won (since it entered the deck) a team Pokémon needs to reach stage 2, then stage 3
+## (pokemon.json team_evolution.battles_per_stage).
+func get_team_evolution_battles() -> Array[int]:
+	return _team_evolution_battles.duplicate()
+
+
+## Story 014: max HP a team Pokémon gains at each evolution (pokemon.json team_evolution.bonus_hp, may be 0).
+func get_team_evolution_bonus_hp() -> int:
+	return _team_evolution_bonus_hp
+
+
+## Story 014: validates `team_evolution` {battles_per_stage: non-empty strictly increasing positive ints, bonus_hp >= 0}.
+## Reports the problems, never crashes (an invalid block leaves team evolution disabled).
+func _load_team_evolution(pokemon_root: Dictionary) -> bool:
+	var cfg_v: Variant = pokemon_root.get("team_evolution", null)
+	if not (cfg_v is Dictionary):
+		push_error("GameData: pokemon file needs a 'team_evolution' object {battles_per_stage, bonus_hp}")
+		return false
+	var cfg: Dictionary = cfg_v
+	var ok: bool = true
+	var battles: Array[int] = []
+	var steps_v: Variant = cfg.get("battles_per_stage", null)
+	if not (steps_v is Array) or (steps_v as Array).is_empty():
+		push_error("GameData: team_evolution.battles_per_stage must be a non-empty array")
+		ok = false
+	else:
+		for n_v: Variant in (steps_v as Array):
+			if not _is_positive_int(n_v) or (not battles.is_empty() and int(n_v) <= battles[battles.size() - 1]):
+				push_error("GameData: team_evolution.battles_per_stage must be strictly increasing positive integers (got '%s')" % str(n_v))
+				ok = false
+				break
+			battles.append(int(n_v))
+	var hp_v: Variant = cfg.get("bonus_hp", null)
+	if not _is_number(hp_v) or hp_v < 0 or hp_v != floorf(hp_v):
+		push_error("GameData: team_evolution.bonus_hp must be an integer >= 0")
+		ok = false
+	if ok:
+		_team_evolution_battles = battles
+		_team_evolution_bonus_hp = int(hp_v)
+	return ok
+
+
 ## Validates `evolutions` + `evolution_hp_bonus_default`: base known, evolved id sane and unique, FR name, known types,
 ## positive max_hp_bonus, existing sprite, teaches = known non-starter attack cards. Reports every problem, never crashes.
 func _load_evolutions(pokemon_root: Dictionary) -> bool:
@@ -1580,13 +1629,32 @@ func _load_evolutions(pokemon_root: Dictionary) -> bool:
 	if not (raw is Dictionary):
 		push_error("GameData: pokemon file needs an 'evolutions' object")
 		return false
-	for base_id: String in (raw as Dictionary).keys():
+	ok = _load_team_evolution(pokemon_root) and ok
+	# Story 014: a base may be an evolved form named by another entry (stage 2 -> 3): entries are accepted in
+	# dependency order (several passes), whatever their order in the file. What never resolves is reported.
+	var pending: Array = (raw as Dictionary).keys()
+	var ordered: Array = []
+	var known: Dictionary = {}
+	var progress: bool = true
+	while progress and not pending.is_empty():
+		progress = false
+		var rest: Array = []
+		for bid: String in pending:
+			if _players.has(bid) or _enemies.has(bid) or known.has(bid):
+				ordered.append(bid)
+				var d_v: Variant = (raw as Dictionary)[bid]
+				if d_v is Dictionary and (d_v as Dictionary).get("id", null) is String:
+					known[String((d_v as Dictionary)["id"])] = true
+				progress = true
+			else:
+				rest.append(bid)
+		pending = rest
+	for bid4: String in pending:
+		push_error("GameData: evolution of '%s': unknown base pokemon" % bid4)
+		ok = false
+	for base_id: String in ordered:
 		var label: String = "evolution of '%s'" % base_id
 		var def_v: Variant = (raw as Dictionary)[base_id]
-		if not _players.has(base_id) and not _enemies.has(base_id):
-			push_error("GameData: %s: unknown base pokemon" % label)
-			ok = false
-			continue
 		if not (def_v is Dictionary):
 			push_error("GameData: %s must be an object" % label)
 			ok = false
