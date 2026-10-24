@@ -67,6 +67,8 @@ const ITEM_FLOAT_Y: float = 0.42
 const POTION_FLOAT_Y: float = 0.7
 ## Story 016: status feedback (own float per target, so it never hides "Super efficace !"), start height in the sprite.
 const STATUS_FLOAT_Y: float = 0.3
+## Status colours are lightened for the floating text (purple poison is too dark on the background).
+const STATUS_FLOAT_LIGHTEN: float = 0.3
 ## Added value of a stackable status ("Brûlure +3") / a non-stackable status applied ("Paralysie !").
 const TEXT_STATUS_ADDED: String = "%s +%d"
 const TEXT_STATUS_APPLIED: String = "%s !"
@@ -96,7 +98,7 @@ class FloatText extends RefCounted:
 	var serial: int = 0
 	## Story 016: messages gathered during one frame (several statuses can change at once), shown together.
 	var pending: PackedStringArray = PackedStringArray()
-	var pending_color: Color = Color.WHITE
+	var pending_colors: Array[Color] = []
 
 
 ## Widgets of one enemy slot (typed refs, no find_child).
@@ -730,8 +732,8 @@ func _on_turn_skipped(target: Combatant, status_id: String) -> void:
 	var text: String = TEXT_STATUS_FAILED % def.display_name
 	if def.skip_turns > 0:
 		text = String(TEXT_SKIPPED.get(status_id, TEXT_STATUS_APPLIED % def.skip_label))
-	# The lost turn is shown before the "Réveillé !" of the same frame (the sleep is consumed first).
-	_queue_status_float(target, text, def.color, true)
+	# The lost turn is shown before the "Réveillé !" / "Dégelé !" of the same frame (the status is consumed first).
+	_queue_status_float(target, text, def.color, TEXT_WOKE if def.wake_on_damage else TEXT_THAWED)
 	if target == _battle.player:
 		_pending_lost_turn = status_id
 
@@ -752,8 +754,9 @@ func _on_turn_started() -> void:
 	_pending_lost_turn = ""
 
 
-## Gathers the status messages of `target` for this frame; they are shown together (one line each) at the end of it.
-func _queue_status_float(target: Combatant, text: String, color: Color, first: bool = false) -> void:
+## Gathers the status messages of `target` for this frame; they are shown together (one line each, own colour) at
+## the end of it. `before` = insert the line before that already-queued text (if present) instead of appending it.
+func _queue_status_float(target: Combatant, text: String, color: Color, before: String = "") -> void:
 	var f: FloatText = _player_status_float
 	if target != _battle.player:
 		var idx: int = _battle.enemies.find(target)
@@ -761,28 +764,46 @@ func _queue_status_float(target: Combatant, text: String, color: Color, first: b
 			return
 		f = _enemy_views[idx].status_float
 	if f.pending.is_empty():
-		f.pending_color = color
 		_flush_status_float.call_deferred(f, target)
-	elif first:
-		f.pending_color = color
-	if first:
-		f.pending.insert(0, text)
-	else:
-		f.pending.append(text)
+	var at: int = f.pending.find(before) if not before.is_empty() else -1
+	if at < 0:
+		at = f.pending.size()
+	f.pending.insert(at, text)
+	f.pending_colors.insert(at, color.lightened(STATUS_FLOAT_LIGHTEN))
 
 
 func _flush_status_float(f: FloatText, target: Combatant) -> void:
 	if f.pending.is_empty() or not is_inside_tree() or _battle == null:
 		return
-	var text: String = "\n".join(f.pending)
+	var lines: PackedStringArray = f.pending.duplicate()
+	var colors: Array[Color] = f.pending_colors.duplicate()
 	f.pending.clear()
+	f.pending_colors.clear()
 	var anchor: Control = _player_sprite
 	if target != _battle.player:
 		var idx: int = _battle.enemies.find(target)
 		if idx < 0 or idx >= _enemy_views.size():
 			return
 		anchor = _enemy_views[idx].sprite
-	_show_float(f, anchor, text, f.pending_color, STATUS_FLOAT_Y)
+	# One coloured line per message: the float label itself only sizes the block (transparent text); child labels,
+	# anchored to 1/n of its height each, draw the lines and inherit its drift / fade.
+	for child: Node in f.label.get_children():
+		f.label.remove_child(child)
+		child.queue_free()
+	var multi: bool = lines.size() > 1
+	f.label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0) if multi else Color.BLACK)
+	if multi:
+		for i: int in lines.size():
+			var line: Label = _make_label(FLOAT_FONT_SIZE)
+			line.text = lines[i]
+			line.add_theme_color_override("font_color", colors[i])
+			line.add_theme_color_override("font_outline_color", Color.BLACK)
+			line.add_theme_constant_override("outline_size", 8)
+			line.anchor_right = 1.0
+			line.anchor_top = float(i) / lines.size()
+			line.anchor_bottom = float(i + 1) / lines.size()
+			f.label.add_child(line)
+	_show_float(f, anchor, "\n".join(lines), Color(0, 0, 0, 0) if multi else colors[0], STATUS_FLOAT_Y)
 
 
 # --- Effectiveness feedback ------------------------------------------------
@@ -849,6 +870,7 @@ func _hide_float(f: FloatText) -> void:
 		return
 	f.serial += 1
 	f.pending.clear()
+	f.pending_colors.clear()
 	if f.tween != null and f.tween.is_valid():
 		f.tween.kill()
 	f.label.visible = false
@@ -874,7 +896,13 @@ func _load_texture(path: String) -> Texture2D:
 	return tex
 
 
-func _intent_color(intent: EnemyIntent) -> Color:
+## Story 016: a lost turn ("Dort", "Gelé") takes the colour of the status that causes it.
+func _intent_color(intent: EnemyIntent, enemy: Combatant = null) -> Color:
+	if not intent.skip_label.is_empty() and enemy != null:
+		for sid: String in enemy.status_ids():
+			var def: StatusData = _data.get_status(sid)
+			if def != null and def.skip_turns > 0:
+				return def.color.lightened(STATUS_FLOAT_LIGHTEN)
 	match intent.type:
 		EnemyIntent.TYPE_ATTACK:
 			return COLOR_INTENT_ATTACK
@@ -927,7 +955,7 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 	v.block_label.text = "Protection %d" % e.block if e.block > 0 else ""
 	if e.is_alive() and e.intent != null and _battle.state == Battle.State.PLAYER_TURN:
 		v.intent_label.text = e.intent.display_text()
-		v.intent_label.add_theme_color_override("font_color", _intent_color(e.intent))
+		v.intent_label.add_theme_color_override("font_color", _intent_color(e.intent, e))
 		_fit_intent_font(v.intent_label)
 	elif e.is_alive():
 		v.intent_label.text = ""

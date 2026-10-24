@@ -20,7 +20,8 @@ extends SceneTree
 ## Story 014 (in-run evolutions: starter stage 1->2 at badge 1 with its card choice, 2->3 at badge 4, a Pokémon
 ## without a next form, the team evolution summary, the deck afterwards; see _evolution_shots; filter `story-014`).
 ## Story 015 (save / resume: resume screen of a zone-3 run, map after the resume, unreadable save, starter without a save,
-## starter after a defeat deleted the save; see _save_shots; filter `story-015`). Uses a scratch save file (SAVE_QA_PATH,
+## starter after a defeat deleted the save; see _save_shots; filter `story-015`). Story 016 (status chips, feedback,
+## immunity, team status / lost turn, cure potion, "Dort"/"Gelé" intents, status cards; see _status_shots; filter `story-016`). Uses a scratch save file (SAVE_QA_PATH,
 ## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
@@ -72,6 +73,14 @@ const LEAGUE_DEFEAT_STAGE: int = 1  # 0-based: the defeat run loses its 2nd leag
 ## Story 015: scratch save slot of the save shots (deleted with its .bak at the end).
 const SAVE_QA_PATH: String = "user://qa_story015_savegame.json"
 const SAVE_SEED: int = 2026
+
+## Story 016: run seed, the 3-enemy fight of the chip shots, its forced hand, the fight of the intent shot.
+const STATUS_SEED: int = 2026
+const STATUS_TRIO: String = "trio_r2"  # Lépidonille / Ponchiot / Arcko: no immunity to poison / burn / paralysis
+const STATUS_HAND: Array[String] = ["toxik", "feu_follet", "cage_eclair", "hypnose", "dard_venin"]
+const STATUS_INTENTS: String = "trio_vol"  # Roucool / Nosferapti / Aspicot (Aspicot opens with "Attaque 4 + Poison 2")
+## Strength given to Aspicot in the intent shot so its status attack reads "Attaque 13 + Poison 2" (long intent).
+const STATUS_LONG_STRENGTH: int = 22  # (4 + 22) x0.5 (Insecte vs Feu) = 13
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -978,7 +987,93 @@ func _save_shots() -> void:
 			DirAccess.remove_absolute(p)
 
 
+## Story 016: chips / status feedback / intents / lost turn / cure / status card shots (filter `story-016`).
+func _status_line(tag: String) -> void:
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var chips: PackedStringArray = PackedStringArray()
+	var floats: PackedStringArray = PackedStringArray()
+	for i: int in b.enemies.size():
+		chips.append("%s=%s" % [b.enemies[i].id, bs.get_enemy_status_chips(i)])
+		floats.append("%s=\"%s\"" % [b.enemies[i].id, bs.get_enemy_status_float_text(i).replace("\n", " | ")])
+	print("016 %s: chips=%s player_chips=%s floats=%s player_float=\"%s\" hp=%s player_hp=%d energy=%d hint=\"%s\" intents=%s" % [
+			tag, chips, bs.get_player_status_chips(), floats, bs.get_player_status_float_text().replace("\n", " | "),
+			_enemy_summary(b), b.player.hp, b.energy, bs.get_hint_text(), _intent_summary(b)])
+
+
+func _status_shots() -> void:
+	_main.start_new_run(STATUS_SEED, "salameche")
+	_main.qa_give_potion("total_soin")
+	_main.qa_give_potion("antidote")
+	# 07 + 01: three enemies, status cards in hand, then poison / burn / paralysis on them.
+	_main.start_encounter(STATUS_TRIO)
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.qa_force_hand(STATUS_HAND)
+	await _shot("07-carte-statut")
+	bs.play_card_direct(0, 0)  # Toxik -> enemy 0
+	bs.play_card_direct(0, 0)  # Feu Follet -> enemy 0
+	bs.play_card_direct(0, 0)  # Cage-Éclair -> enemy 0
+	bs.qa_apply_status(1, "poison", 3)
+	bs.qa_apply_status(1, "burn", 2)
+	bs.qa_apply_status(2, "paralysis", 1)
+	_status_line("01")
+	await _shot("01-statuts-ennemis")
+	await create_timer(FLOAT_WAIT).timeout
+	bs.press_end_turn()
+	_status_line("02")
+	await _shot("02-tick-poison")
+	# 03: a Fire enemy is immune to burn.
+	_main.start_encounter("solo_cyndaquil")
+	bs = _main.get_battle_screen()
+	bs.qa_force_hand(["feu_follet", "toxik"])
+	bs.play_card_direct(1, 0)  # Toxik (sticks)
+	bs.play_card_direct(0, 0)  # Feu Follet: immune
+	_status_line("03")
+	await _shot("03-immunite")
+	# 04: Aspicot's first attack poisons the team.
+	_main.start_encounter("solo_aspicot")
+	bs = _main.get_battle_screen()
+	bs.qa_force_hand(["abri"])
+	bs.press_end_turn()
+	_status_line("04")
+	await _shot("04-statut-joueur")
+	# 04b: the team is asleep: its turn is lost (0 energy, info row message).
+	await create_timer(FLOAT_WAIT).timeout
+	bs.qa_apply_status(-1, "sleep", 1)
+	await create_timer(FLOAT_WAIT).timeout
+	bs.press_end_turn()
+	_status_line("04b")
+	await _shot("04b-joueur-endormi")
+	# 06: Total Soin cures the team (chips gone).
+	await create_timer(FLOAT_WAIT).timeout
+	var b: Battle = bs.get_battle()
+	var idx: int = -1
+	for i: int in b.potions.size():
+		if b.potions[i].id == "total_soin":
+			idx = i
+	print("016 before potion: player_chips=%s potions=%d idx=%d" % [bs.get_player_status_chips(), b.potions.size(), idx])
+	_main.battle_use_potion(idx)
+	_status_line("06")
+	await _shot("06-soin-statut")
+	# 05: sleeping / frozen enemies show "Dort" / "Gelé"; Aspicot's long status attack must fit.
+	_main.start_encounter(STATUS_INTENTS)
+	bs = _main.get_battle_screen()
+	b = bs.get_battle()
+	b.enemies[2].sequence_index = 0
+	b.enemies[2].strength = STATUS_LONG_STRENGTH
+	b._roll_intent(b.enemies[2])
+	bs.qa_apply_status(0, "sleep", 1)
+	bs.qa_apply_status(1, "freeze", 1)
+	await create_timer(FLOAT_WAIT).timeout
+	_status_line("05")
+	await _shot("05-sommeil-gel")
+
+
 func _run() -> void:
+	if _filter == "story-016":
+		await _status_shots()
+		quit(0)
+		return
 	if _filter == "story-015":
 		await _save_shots()
 		quit(0)

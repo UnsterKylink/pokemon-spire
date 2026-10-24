@@ -7,6 +7,8 @@ extends HBoxContainer
 const FONT_SIZE: int = 14
 const CHIP_RADIUS: int = 8
 const CHIP_PAD_X: int = 6
+## Name of the invisible chip kept in an empty row, so a panel does not jump when its first status arrives.
+const PLACEHOLDER: String = "Placeholder"
 ## "%s" = chip label, %d = turns left (statuses with a duration only).
 const TEXT_TURNS: String = "%s (%d t.)"
 const TEXT_TOOLTIP: String = "%s\n%s"
@@ -25,7 +27,6 @@ func _init() -> void:
 	alignment = BoxContainer.ALIGNMENT_CENTER
 	add_theme_constant_override("separation", 4)
 	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	visible = false
 
 
 ## Shows the statuses of `combatant` (definitions from `book`) and follows its `changed` signal.
@@ -43,7 +44,7 @@ func bind(combatant: Combatant, book: StatusBook) -> void:
 func get_chip_texts() -> PackedStringArray:
 	var out := PackedStringArray()
 	for chip: Node in get_children():
-		if chip.is_queued_for_deletion():
+		if chip.is_queued_for_deletion() or chip.name == PLACEHOLDER:
 			continue
 		out.append((chip.get_node("Text") as Label).text)
 	return out
@@ -59,19 +60,30 @@ static func chip_text(def: StatusData, value: int, turns: int) -> String:
 	return text
 
 
-## Redraws every chip from the bound Combatant (hidden row when it has no status).
+## Redraws every chip from the bound Combatant (an empty row keeps its height).
 func refresh() -> void:
 	for child: Node in get_children():
 		remove_child(child)
 		child.queue_free()
 	if _combatant == null or _book == null:
-		visible = false
 		return
 	for sid: String in _combatant.status_ids():
 		var def: StatusData = _book.get_def(sid)
 		if def != null:
 			add_child(_make_chip(def, _combatant.get_status_value(sid), _combatant.get_status_turns(sid)))
-	visible = get_child_count() > 0
+	if get_child_count() == 0:
+		var ghost := PanelContainer.new()
+		ghost.name = PLACEHOLDER
+		ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ghost.modulate = Color(1, 1, 1, 0)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0)
+		ghost.add_theme_stylebox_override("panel", sb)
+		var label := CardView.make_label(FONT_SIZE)
+		label.name = "Text"
+		label.text = " "
+		ghost.add_child(label)
+		add_child(ghost)
 
 
 func _make_chip(def: StatusData, value: int, turns: int) -> PanelContainer:
