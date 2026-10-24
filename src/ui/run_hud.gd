@@ -32,6 +32,11 @@ const TEXT_DECK_TIP: String = "Voir ton deck (Échap pour fermer)."
 const TEXT_DECK_BLOCKED: String = "Termine d'abord le choix de carte en cours."
 const TEXT_BADGES: String = "Badges :"
 const TEXT_ITEMS: String = "Objets :"
+## Story 013: league progress next to the badges ("Conseil 4 :" + "1/6"), only during the league.
+const TEXT_LEAGUE: String = "Conseil 4 :"
+const TEXT_LEAGUE_VALUE: String = "%d/%d"
+const TEXT_LEAGUE_TIP: String = "Combat %d/%d : %s — %s"
+const COLOR_LEAGUE: Color = Color(1.0, 0.85, 0.3)
 const TEXT_NO_ITEM: String = "aucun"
 ## Story 012: chip shown when the item chips do not all fit in the bar ("+3"; tooltip = the hidden items).
 const TEXT_MORE_ITEMS: String = "+%d"
@@ -46,6 +51,8 @@ var _items_scroll: ScrollContainer
 var _more_chip: PanelContainer
 var _badges_box: HBoxContainer
 var _badges_caption: Label
+var _league_caption: Label
+var _league_value: Label
 var _potions_box: HBoxContainer
 var _chips: Dictionary = {}  # item id -> PanelContainer (display only)
 var _deck_button: Button
@@ -90,6 +97,16 @@ func _init() -> void:
 	_badges_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_badges_box.add_theme_constant_override("separation", 3)
 	row.add_child(_badges_box)
+	_league_caption = _caption(TEXT_LEAGUE)
+	_league_caption.name = "LeagueCaption"
+	_league_caption.visible = false
+	row.add_child(_league_caption)
+	_league_value = CardView.make_label(18)
+	_league_value.name = "LeagueProgress"
+	_league_value.add_theme_color_override("font_color", COLOR_LEAGUE)
+	_league_value.mouse_filter = Control.MOUSE_FILTER_STOP
+	_league_value.visible = false
+	row.add_child(_league_value)
 	row.add_child(_caption(TEXT_ITEMS))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -130,6 +147,14 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 	_money.text = format_money(run.money)
 	BadgeEmblem.fill_row(_badges_box, run, BADGE_SLOT_SIDE)
 	_badges_caption.visible = _badges_box.visible
+	var in_league: bool = run.is_in_league()
+	_league_caption.visible = in_league
+	_league_value.visible = in_league
+	if in_league:
+		var fight: Dictionary = run.current_league_fight()
+		_league_value.text = TEXT_LEAGUE_VALUE % [run.league_stage + 1, run.league.size()]
+		_league_value.tooltip_text = TEXT_LEAGUE_TIP % [run.league_stage + 1, run.league.size(), String(fight["name"]),
+				String(fight["title"])]
 	for child: Node in _items_box.get_children():
 		_items_box.remove_child(child)
 		child.queue_free()
@@ -204,6 +229,11 @@ func get_item_names() -> Array[String]:
 	for id: String in _chips:
 		names.append(((_chips[id] as PanelContainer).get_child(0) as Label).text)
 	return names
+
+
+## Story 013: league progress shown in the bar ("Conseil 4 : 1/6"), "" outside the league.
+func get_league_text() -> String:
+	return "%s %s" % [_league_caption.text, _league_value.text] if _league_value.visible else ""
 
 
 ## Badge slots, for the QA harness: [{earned: bool, tooltip: String}] in zone order.

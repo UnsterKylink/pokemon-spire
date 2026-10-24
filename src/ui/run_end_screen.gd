@@ -5,6 +5,9 @@ extends Control
 ## final Pokémon (sprite, name, types, HP), floors climbed, enemies beaten, battles won, Pokédollars, items,
 ## and the final deck grouped by card. Story 012: the zone reached ("Zone atteinte 3/8 — Arène Eau"), the badges row
 ## (BadgeEmblem: earned in their type colour, the others grey) and the floors of the whole run (8 zones). "Nouvelle partie" emits new_run_requested (Main resets the whole run).
+## Story 013: after Éthernatos the title is the true final victory ("Victoire ! Tu as vaincu Éthernatos"); once the
+## league was reached the deck panel starts with a league row (members, Maître, final boss: beaten / lost / not fought)
+## and a league defeat names the opponent ("K.O. face à Agatha (Conseil 4 1/6)").
 ## Display only: reads RunState.get_summary() / get_deck_entries(). Mouse only, fits 1280x720.
 
 ## Emitted by "Nouvelle partie".
@@ -27,6 +30,18 @@ const TEXT_DEFEAT_SUB: String = "%s est K.O. La partie est terminée."
 ## Story 012 (zones): subtitles naming the badges / the zone of the defeat.
 const TEXT_VICTORY_SUB_ZONES: String = "%s a remporté les %d badges. Bravo, Dresseur !"
 const TEXT_DEFEAT_SUB_ZONES: String = "%s est K.O. en zone %d/%d (Arène %s). La partie est terminée."
+## Story 013 (league): the true final victory, the league subtitles and the league row of the deck panel.
+const TEXT_VICTORY_FINAL: String = "Victoire ! Tu as vaincu %s"
+const TEXT_VICTORY_SUB_LEAGUE: String = "%s a remporté les %d badges, battu le Conseil 4 et le Maître. Bravo, Dresseur !"
+const TEXT_DEFEAT_SUB_LEAGUE: String = "%s est K.O. face à %s (Conseil 4 %d/%d). La partie est terminée."
+const TEXT_LEAGUE: String = "Ligue : %d/%d combats gagnés"
+const TEXT_LEAGUE_TIP: String = "%s — %s (%s) : %s"
+const TEXT_LEAGUE_BEATEN: String = "vaincu"
+const TEXT_LEAGUE_LOST: String = "défaite"
+const TEXT_LEAGUE_UPCOMING: String = "non affronté"
+const COLOR_LEAGUE_LOST: Color = Color(0.95, 0.38, 0.35)
+const COLOR_LEAGUE_DIM: Color = Color(0.45, 0.46, 0.52)
+const COLOR_CHIP_BG: Color = Color(0.13, 0.14, 0.19)
 const TEXT_BADGES: String = "Badges : %d/%d"
 const TEXT_ZONE: String = "%d/%d — Arène %s"
 const STAT_ZONE: String = "Zone atteinte"
@@ -50,6 +65,10 @@ var _stats_grid: GridContainer
 var _badge_caption: Label
 var _badge_row: HBoxContainer
 var _deck_title: Label
+var _league_box: VBoxContainer
+var _league_caption: Label
+var _league_row: HBoxContainer
+var _league_states: Array[Dictionary] = []  # QA: {name, state ("beaten" | "lost" | "upcoming")}
 var _deck_grid: GridContainer
 var _stats: Dictionary = {}  # stat caption -> value text (QA)
 
@@ -68,13 +87,19 @@ func setup(data: GameData, run: RunState, victory: bool) -> void:
 	_build_ui()
 	_victory = victory
 	var s: Dictionary = run.get_summary()
-	_title.text = TEXT_VICTORY if victory else TEXT_DEFEAT
+	var final_win: bool = victory and bool(s.get("eternatus_defeated", false))
+	_title.text = (TEXT_VICTORY_FINAL % String(s["final_boss_name"]) if final_win else TEXT_VICTORY) if victory else TEXT_DEFEAT
 	_title.add_theme_color_override("font_color", COLOR_VICTORY if victory else COLOR_DEFEAT)
 	var zone: Dictionary = run.current_zone()
 	if zone.is_empty():
 		_subtitle.text = (TEXT_VICTORY_SUB if victory else TEXT_DEFEAT_SUB) % String(s["name"])
+	elif final_win:
+		_subtitle.text = TEXT_VICTORY_SUB_LEAGUE % [String(s["name"]), int(s["badges"])]
 	elif victory:
 		_subtitle.text = TEXT_VICTORY_SUB_ZONES % [String(s["name"]), int(s["badges"])]
+	elif bool(s.get("league_started", false)) and run.is_in_league():
+		_subtitle.text = TEXT_DEFEAT_SUB_LEAGUE % [String(s["name"]), String(run.current_league_fight()["name"]),
+				run.league_stage + 1, run.league.size()]
 	else:
 		_subtitle.text = TEXT_DEFEAT_SUB_ZONES % [String(s["name"]), int(s["zone"]), int(s["zone_count"]), String(zone["type_name"])]
 	_sprite.texture = CardView.cropped_sprite(String(s["sprite"]))
@@ -100,6 +125,7 @@ func setup(data: GameData, run: RunState, victory: bool) -> void:
 	BadgeEmblem.fill_row(_badge_row, run, BADGE_SIDE)
 	_badge_caption.text = TEXT_BADGES % [int(s["badges"]), run.zones.size()]
 	_badge_caption.visible = _badge_row.visible
+	_fill_league(data, run, s)
 	_deck_title.text = TEXT_DECK % int(s["deck_size"])
 	for child: Node in _deck_grid.get_children():
 		_deck_grid.remove_child(child)
@@ -147,6 +173,56 @@ func get_deck_lines() -> Array[String]:
 	for child: Node in _deck_grid.get_children():
 		lines.append((child as Label).text)
 	return lines
+
+
+## Subtitle text (QA).
+func get_subtitle_text() -> String:
+	return _subtitle.text
+
+
+## Story 013: the league row, for QA: [{name, state ("beaten" | "lost" | "upcoming")}]; empty when the run never
+## reached the league.
+func get_league_row() -> Array[Dictionary]:
+	return _league_states.duplicate(true)
+
+
+## Story 013: one chip per league fight (members, Maître, final boss): beaten = type colour, the fight lost = red,
+## the others grey. Hidden when the league was never reached.
+func _fill_league(data: GameData, run: RunState, s: Dictionary) -> void:
+	for child: Node in _league_row.get_children():
+		_league_row.remove_child(child)
+		child.queue_free()
+	_league_states.clear()
+	_league_box.visible = bool(s.get("league_started", false)) and not run.league.is_empty()
+	if not _league_box.visible:
+		return
+	var won: int = int(s["league_fights_won"])
+	_league_caption.text = TEXT_LEAGUE % [won, run.league.size()]
+	for i: int in run.league.size():
+		var f: Dictionary = run.league[i]
+		var state: String = "beaten" if i < won else ("lost" if not _victory and i == run.league_stage else "upcoming")
+		_league_states.append({"name": String(f["name"]), "state": state})
+		var type_color: Color = data.get_type_color(String(f["type_id"]))
+		var border: Color = type_color if state == "beaten" else (COLOR_LEAGUE_LOST if state == "lost" else COLOR_LEAGUE_DIM)
+		var chip := PanelContainer.new()
+		chip.mouse_filter = Control.MOUSE_FILTER_STOP
+		var word: String = TEXT_LEAGUE_BEATEN if state == "beaten" else (TEXT_LEAGUE_LOST if state == "lost" else TEXT_LEAGUE_UPCOMING)
+		chip.tooltip_text = TEXT_LEAGUE_TIP % [String(f["name"]), String(f["title"]), String(f["type_name"]), word]
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = COLOR_CHIP_BG.lerp(type_color, 0.25) if state == "beaten" else COLOR_CHIP_BG
+		sb.set_border_width_all(2)
+		sb.border_color = border
+		sb.set_corner_radius_all(8)
+		sb.content_margin_left = 10
+		sb.content_margin_right = 10
+		sb.content_margin_top = 2
+		sb.content_margin_bottom = 2
+		chip.add_theme_stylebox_override("panel", sb)
+		var l: Label = CardView.make_label(17)
+		l.text = String(f["name"])
+		l.add_theme_color_override("font_color", Color.WHITE if state == "beaten" else border.lightened(0.2))
+		chip.add_child(l)
+		_league_row.add_child(chip)
 
 
 ## "Nouvelle partie" (same path as the button).
@@ -269,6 +345,23 @@ func _build_ui() -> void:
 	rbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rbox.add_theme_constant_override("separation", 8)
 	right.add_child(rbox)
+	_league_box = VBoxContainer.new()
+	_league_box.name = "League"
+	_league_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_league_box.add_theme_constant_override("separation", 6)
+	_league_box.visible = false
+	rbox.add_child(_league_box)
+	_league_caption = CardView.make_label(22)
+	_league_caption.name = "LeagueCaption"
+	_league_caption.add_theme_color_override("font_color", COLOR_CAPTION)
+	_league_box.add_child(_league_caption)
+	_league_row = HBoxContainer.new()
+	_league_row.name = "LeagueRow"
+	_league_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_league_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_league_row.add_theme_constant_override("separation", 8)
+	_league_box.add_child(_league_row)
+	_league_box.add_child(HSeparator.new())
 	_deck_title = CardView.make_label(26)
 	_deck_title.name = "DeckTitle"
 	rbox.add_child(_deck_title)

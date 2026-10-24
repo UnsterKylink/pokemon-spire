@@ -3,7 +3,7 @@ extends Control
 ## Story 013 (story-013-conseil-4-ethernatos): the league screen, shown after badge 8 and between two league fights.
 ## Three variants, all from RunState (display only):
 ##  - intro (no league fight won yet): "Route Victoire" / "Le Conseil 4 t'attend";
-##  - intermission (after a win): "<Nom> est vaincu !" and the heal "+X PV récupérés" (Main.get_last_league_heal);
+##  - intermission (after a win): "Victoire contre <Nom> !" and the heal "+X PV récupérés" (Main.get_last_league_heal);
 ##  - final-boss intro (current stage = last): "<Boss> surgit !", dark purple / red palette and the boss sprite.
 ## Every variant lists the league fights in order (marker beaten / current / upcoming, name, title, type chips) with
 ## the current one highlighted, and a button "Affronter <Nom>" that emits finished (Main calls league_continue()).
@@ -31,10 +31,10 @@ const COLOR_BOSS_TITLE: Color = Color(1.0, 0.42, 0.52)
 const PANEL_WIDTH: float = 820.0
 const ROW_HEIGHT: float = 40.0
 const MARKER_SIDE: float = 26.0
-const BOSS_SPRITE_SIDE: float = 112.0
+const BOSS_SPRITE_SIDE: float = 84.0
 const TEXT_INTRO_TITLE: String = "Route Victoire"
 const TEXT_INTRO_SUB: String = "Le Conseil 4 t'attend"
-const TEXT_WIN_TITLE: String = "%s est vaincu !"
+const TEXT_WIN_TITLE: String = "Victoire contre %s !"
 const TEXT_BOSS_TITLE: String = "%s surgit !"
 const TEXT_BOSS_SUB: String = "Une puissance colossale se dresse sur la Route Victoire…"
 const TEXT_HEAL: String = "+%d PV récupérés (PV %d/%d)"
@@ -122,6 +122,7 @@ func setup(data: GameData, run: RunState, last_heal: int) -> void:
 			_boss_sprite.texture = CardView.cropped_sprite(path) if not path.is_empty() else null
 			_boss_sprite.visible = _boss_sprite.texture != null
 	_list_caption.text = TEXT_LIST % [stage + 1, run.league.size()]
+	_list_caption.visible = not _boss_intro  # the final-boss intro needs the room for the sprite (fits 1280x720)
 	_fill_list(data, run, stage)
 	_button.text = TEXT_BUTTON % String(fight.get("name", ""))
 
@@ -134,7 +135,7 @@ func press_continue() -> void:
 	finished.emit()
 
 
-## Displayed title ("Route Victoire" / "Agatha est vaincu !" / "Éthernatos surgit !").
+## Displayed title ("Route Victoire" / "Victoire contre Agatha !" / "Éthernatos surgit !").
 func get_title_text() -> String:
 	return _title.text
 
@@ -234,7 +235,9 @@ func _make_row(data: GameData, f: Dictionary, state: String, status: String) -> 
 	var status_label: Label = CardView.make_label(18)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	status_label.text = status
-	var status_color: Color = COLOR_BEATEN if state == "beaten" else (accent.lightened(0.3) if state == "current" else COLOR_DIM)
+	# Current = gold (boss: its red), not the type colour: dark types (Ténèbres) are unreadable on the panel.
+	var current_color: Color = COLOR_BOSS_TITLE if boss else COLOR_TITLE
+	var status_color: Color = COLOR_BEATEN if state == "beaten" else (current_color if state == "current" else COLOR_DIM)
 	status_label.add_theme_color_override("font_color", status_color)
 	box.add_child(status_label)
 	return row

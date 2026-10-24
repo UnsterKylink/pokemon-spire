@@ -13,6 +13,8 @@ extends SceneTree
 ## 011 (deck access shots: deck panel on map / battle tabs / 45 cards / Mart, see _deck_shots; filter `story-011`).
 ## 012 (8 zones / gyms / badges shots: zone maps + HUD badges, gyms of zones 1 and 8, badge screen, victory with 8
 ## badges, defeat summary; see _zones_shots; filter `story-012`).
+## 013 (league shots: Route Victoire list, Conseil 4 fight with trainer header + HUD progress, intermission heal, Maître,
+## Éthernatos intro / fight, final victory, league defeat; see _league_shots; filter `story-013`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
@@ -54,6 +56,11 @@ const ZONES_SEED: int = 2026
 const ZONES_ITEMS: Array[String] = ["peau_metal", "bandeau", "restes"]
 const ZONES_POTIONS: Array[String] = ["potion", "attaque_plus"]
 const ZONES_DEFEAT_ZONE: int = 3  # 1-based zone where the defeat run loses
+
+## Story 013: run seed, HP set during a league fight so the heal after it shows, and the stage of the defeat run.
+const LEAGUE_SEED: int = 2026
+const LEAGUE_HURT_HP: int = 60
+const LEAGUE_DEFEAT_STAGE: int = 1  # 0-based: the defeat run loses its 2nd league fight
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -649,7 +656,94 @@ func _zones_shots() -> void:
 	await _shot("07-defaite-zone")
 
 
+func _league_line(tag: String) -> void:
+	var run: RunState = _main.get_run_state()
+	var line: String = "%s: screen=%s stage=%d won=%d hp=%d/%d heal=%d hud=\"%s\"" % [tag, _main.get_current_screen_name(),
+			_main.get_league_stage(), run.league_fights_won, run.hp, run.max_hp, _main.get_last_league_heal(),
+			_main.get_hud().get_league_text()]
+	var ls: LeagueScreen = _main.get_league_screen() as LeagueScreen
+	if ls != null and _main.get_current_screen_name() == "league":
+		line += " title=\"%s\" sub=\"%s\" heal_text=\"%s\" button=\"%s\" boss=%s rows=%s" % [ls.get_title_text(),
+				ls.get_subtitle_text(), ls.get_heal_text(), ls.get_button_text(), ls.is_boss_intro(),
+				ls.get_rows().map(func(r: Dictionary) -> String: return "%s:%s" % [r["name"], r["status"]])]
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null and _main.get_current_screen_name() == "battle":
+		var parts: PackedStringArray = PackedStringArray()
+		for e: Combatant in bs.get_battle().enemies:
+			parts.append("%s %s hp=%d str=%d" % [e.id, e.type_ids, e.max_hp, e.strength])
+		line += " header=\"%s\" enc=%s enemies=%s" % [bs.get_trainer_header_text(), bs.get_encounter_id(), parts]
+	print(line)
+
+
+## Wins the current league fight from the league screen: fight (HP lowered so the heal shows) -> reward skipped.
+func _league_fight() -> void:
+	_main.league_continue()
+	_main.qa_set_hp(LEAGUE_HURT_HP)
+	_main.qa_win_league_fight()
+	if _main.get_current_screen_name() == "reward":
+		_main.reward_skip()
+
+
+func _league_shots() -> void:
+	_main.forced_starter_id = "salameche"
+	_main.start_new_run(LEAGUE_SEED)
+	for id: String in ZONES_ITEMS:
+		_main.qa_give_item(id)
+	for id: String in ZONES_POTIONS:
+		_main.qa_give_potion(id)
+	for i: int in 8:  # the 8 badges through the real gym flow; badge 8 -> league intro
+		await _clear_gym()
+	_league_line("intro")
+	await _shot("01-route-victoire")
+	_main.league_continue()
+	await create_timer(FLOAT_WAIT).timeout
+	_league_line("member 1 fight")
+	await _shot("02-conseil-combat")
+	_main.qa_set_hp(LEAGUE_HURT_HP)
+	_main.qa_win_league_fight()
+	_main.reward_skip()
+	_league_line("intermission 1")
+	await _shot("03-intermission")
+	for i: int in 3:  # members 2..4
+		await _league_fight()
+	_league_line("before Maître")
+	_main.league_continue()
+	await create_timer(FLOAT_WAIT).timeout
+	_league_line("Maître fight")
+	await _shot("04-maitre")
+	_main.qa_set_hp(LEAGUE_HURT_HP)
+	_main.qa_win_league_fight()
+	_main.reward_skip()
+	_league_line("boss intro")
+	await _shot("05-ethernatos-intro")
+	_main.league_continue()
+	await create_timer(FLOAT_WAIT).timeout
+	_league_line("boss fight")
+	await _shot("06-ethernatos-combat")
+	_main.qa_win_league_fight()
+	var vs: RunEndScreen = _main.get_victory_screen()
+	print("victory: screen=%s title=\"%s\" sub=\"%s\" league=%s stats=%s" % [_main.get_current_screen_name(),
+			vs.get_title_text(), vs.get_subtitle_text(), vs.get_league_row(), vs.get_stats()])
+	await _shot("07-victoire-finale")
+	# Defeat: a new run straight into the league (QA cheat, no badge), first fight counted as won, the 2nd one lost.
+	_main.start_new_run(LEAGUE_SEED + 1)
+	_main.qa_skip_to_league()
+	_main.qa_set_league_stage(LEAGUE_DEFEAT_STAGE)
+	_main.league_continue()
+	_league_line("defeat fight")
+	print("lost: ", _main.qa_lose_battle())
+	_main.battle_defeat_continue()
+	var ds: RunEndScreen = _main.get_defeat_screen()
+	print("defeat: screen=%s title=\"%s\" sub=\"%s\" league=%s" % [_main.get_current_screen_name(), ds.get_title_text(),
+			ds.get_subtitle_text(), ds.get_league_row()])
+	await _shot("08-defaite-conseil")
+
+
 func _run() -> void:
+	if _filter == "story-013":
+		await _league_shots()
+		quit(0)
+		return
 	if _filter == "story-012":
 		await _zones_shots()
 		quit(0)
