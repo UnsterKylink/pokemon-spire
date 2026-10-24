@@ -31,7 +31,8 @@
 - [ ] Ajout de cartes peu communes et rares pour les types qui n'en ont pas (Insecte, Ténèbres, Combat…) afin que chaque type ait au moins 2 peu communes et 1 rare.
 - [ ] Correction : un ennemi à double type attaque avec le type de l'action (défini en données) et non plus toujours avec son 1er type.
 - [ ] PV, dégâts et modificateurs des ennemis ajustés zone par zone pour une courbe de difficulté régulière ; prix, gains d'argent et taux de potions/objets ajustés.
-- [ ] Un outil ou script de simulation (hors jeu) estime la difficulté (ex. dégâts moyens reçus par zone) pour justifier les valeurs.
+- [ ] Un simulateur (joueur automatique qui joue des parties complètes, du choix de départ jusqu'à Éthernatos) mesure le taux de victoire finale sur plusieurs centaines de parties ; l'outil est gardé dans `tools/` pour être relancé après chaque changement de contenu.
+- [ ] **Objectif fixé par le joueur (2026-10-24) : environ 35 % des parties complètes gagnées** (8 badges + Conseil 4 + Éthernatos), mesuré par le simulateur ; le rapport indique aussi où les parties perdues s'arrêtent (zone, Conseil, Éthernatos) pour une courbe régulière, sans mur ni partie trop facile.
 - [ ] Les valeurs modifiées et leur justification sont notées dans le dossier d'équilibrage (design/balance/).
 
 ---
