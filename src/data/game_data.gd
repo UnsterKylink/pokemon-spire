@@ -20,6 +20,7 @@ const DEFAULT_ZONES_PATH: String = "res://assets/data/zones.json"
 ## Story 013: Conseil 4, Maître, final boss.
 const DEFAULT_LEAGUE_PATH: String = "res://assets/data/league.json"
 ## Story 013b: large roster (720 Pokémon, all generations) merged into the enemies; "" = no roster.
+const DEFAULT_STATUSES_PATH: String = "res://assets/data/statuses.json"
 const DEFAULT_ROSTER_PATH: String = "res://assets/data/roster.json"
 ## Prefix of an encounter id GENERATED from the roster: "roster:<id>,<id>,..." (wild / elite fights, auto gym teams).
 ## create_enemies / get_encounter_enemy_ids decode it; it is never stored in pokemon.json.
@@ -38,6 +39,7 @@ const MIN_TYPES: int = 18
 const MAX_POKEMON_TYPES: int = 2
 
 var _type_chart: TypeChart = TypeChart.neutral_chart()
+var _status_book: StatusBook = StatusBook.new()  # statuses.json (story 016)
 var _cards: Dictionary = {}    # String -> CardData
 var _players: Dictionary = {}  # String -> Dictionary (raw definition)
 var _enemies: Dictionary = {}  # String -> Dictionary (raw definition)
@@ -77,8 +79,10 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 		act_path: String = DEFAULT_ACT_PATH, events_path: String = DEFAULT_EVENTS_PATH,
 		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
 		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
-		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH) -> bool:
+		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH,
+		statuses_path: String = DEFAULT_STATUSES_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
+	_status_book = StatusBook.new()
 	_cards.clear()
 	_players.clear()
 	_enemies.clear()
@@ -138,6 +142,13 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 		return false
 	_type_chart = chart
 	var ok: bool = true
+	if not statuses_path.is_empty():  # statuses before everything that references them (cards, enemies, items, potions)
+		var statuses_root: Dictionary = _read_json(statuses_path)
+		var book: StatusBook = StatusBook.from_dict(statuses_root, chart.get_type_ids()) if not statuses_root.is_empty() else null
+		if book == null:
+			ok = false
+		else:
+			_status_book = book
 	ok = _load_cards(cards_root) and ok
 	ok = _load_players(pokemon_root) and ok
 	ok = _load_enemies(pokemon_root) and ok
@@ -156,6 +167,21 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_zones(zones_root) and ok
 	ok = _load_league(league_root) and ok
 	return ok
+
+
+## The status definitions (statuses.json; empty book until load_all succeeds). Story 016.
+func get_status_book() -> StatusBook:
+	return _status_book
+
+
+## Definition of a status id, or null.
+func get_status(status_id: String) -> StatusData:
+	return _status_book.get_def(status_id)
+
+
+## Every status id in file order.
+func get_status_ids() -> Array[String]:
+	return _status_book.ids()
 
 
 ## The type table (multipliers + names/colours). Neutral/empty until load_all succeeds.
@@ -1254,6 +1280,9 @@ func _load_items(root: Dictionary) -> bool:
 			push_error("GameData: item '%s' is invalid" % item_id)
 			ok = false
 			continue
+		if not _check_effect_status_refs("item '%s'" % item_id, item.effects):
+			ok = false
+			continue
 		if item.total("energy_up_per_turn") > 0:
 			energy_items += 1
 		_items[item_id] = item
@@ -1279,8 +1308,20 @@ func _load_potions(root: Dictionary) -> bool:
 		if potion == null:
 			push_error("GameData: potion '%s' is invalid" % potion_id)
 			ok = false
+		elif not _check_effect_status_refs("potion '%s'" % potion_id, potion.effects):
+			ok = false
 		else:
 			_potions[potion_id] = potion
+	return ok
+
+
+## Every status_immunity / cure_status effect must name a status of statuses.json ("all" allowed for cures).
+func _check_effect_status_refs(label: String, effects: Array[Dictionary]) -> bool:
+	var ok: bool = true
+	for e: Dictionary in effects:
+		if e.has("status") and String(e["status"]) != "all" and not _status_book.has(String(e["status"])):
+			push_error("GameData: %s references unknown status '%s'" % [label, String(e["status"])])
+			ok = false
 	return ok
 
 
@@ -1779,6 +1820,13 @@ func _load_cards(cards_root: Dictionary) -> bool:
 		if def is Dictionary:
 			card = CardData.from_dict(card_id, def)
 			# Attacks must have a type; a skill may omit it but, if given, it must be known.
+			if card != null and not card.status_id.is_empty():
+				if not _status_book.has(card.status_id):
+					push_error("GameData: card '%s' inflicts unknown status '%s'" % [card_id, card.status_id])
+					card = null
+				elif card.description.find(_status_book.name_of(card.status_id)) < 0:
+					push_error("GameData: card '%s' description must mention its status '%s'" % [card_id, _status_book.name_of(card.status_id)])
+					card = null
 			if card != null and not _check_type_ref("card '%s'" % card_id, card.type_id,
 					card.kind == CardData.KIND_ATTACK):
 				card = null
@@ -1891,8 +1939,12 @@ func _check_enemy_def(eid: String, def_v: Variant) -> bool:
 			if pattern_v == Combatant.PATTERN_WEIGHTED and not action.has("weight"):
 				push_error("GameData: enemy '%s' action #%d needs a 'weight' (weighted pattern)" % [eid, i])
 				ok = false
-			if EnemyIntent.from_dict(action) == null:
+			var parsed: EnemyIntent = EnemyIntent.from_dict(action)
+			if parsed == null:
 				push_error("GameData: enemy '%s' action #%d is invalid" % [eid, i])
+				ok = false
+			elif not parsed.status_id.is_empty() and not _status_book.has(parsed.status_id):
+				push_error("GameData: enemy '%s' action #%d inflicts unknown status '%s'" % [eid, i, parsed.status_id])
 				ok = false
 	return ok
 

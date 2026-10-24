@@ -27,6 +27,9 @@ var actions: Array[EnemyIntent] = []
 var intent: EnemyIntent = null
 ## Position in the action list for the "sequence" pattern.
 var sequence_index: int = 0
+## Active status ailments (story 016): status id -> {"value": int, "turns": int}. Insertion order = application order.
+## Managed by Battle (apply/tick/cure); the UI reads it via the helpers below.
+var statuses: Dictionary = {}
 
 
 ## Creates a combatant from a JSON definition. Returns null if invalid.
@@ -95,6 +98,46 @@ func take_damage(amount: int) -> int:
 	hp -= hp_lost
 	changed.emit()
 	return hp_lost
+
+
+## Direct HP loss that ignores block (status damage). Returns HP actually lost.
+func lose_hp(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var lost: int = mini(hp, amount)
+	hp -= lost
+	changed.emit()
+	return lost
+
+
+## True if the status is active.
+func has_status(status_id: String) -> bool:
+	return statuses.has(status_id)
+
+
+## Stack value of a status (0 if absent).
+func get_status_value(status_id: String) -> int:
+	return int((statuses[status_id] as Dictionary)["value"]) if statuses.has(status_id) else 0
+
+
+## Turns remaining of a status (0 if absent; for poison, which is not turn-limited, 0 too).
+func get_status_turns(status_id: String) -> int:
+	return int((statuses[status_id] as Dictionary)["turns"]) if statuses.has(status_id) else 0
+
+
+## Active status ids, in application order.
+func status_ids() -> Array[String]:
+	var out: Array[String] = []
+	for k: String in statuses.keys():
+		out.append(k)
+	return out
+
+
+## Silently removes every status (end of battle).
+func clear_statuses() -> void:
+	if not statuses.is_empty():
+		statuses.clear()
+		changed.emit()
 
 
 ## Restores up to `amount` HP (never above max HP). Returns the HP actually restored.

@@ -3,7 +3,7 @@ extends RefCounted
 ## Immutable definition of a single-use potion (assets/data/potions.json). Used during the player's turn
 ## via Battle.use_potion. Implements: story-006-objets-et-services, criterion 2.
 
-const EFFECT_TYPES: Array = ["heal_flat", "heal_percent_max", "block_flat", "energy_gain", "draw_cards", "damage_bonus_turn"]
+const EFFECT_TYPES: Array = ["heal_flat", "heal_percent_max", "block_flat", "energy_gain", "draw_cards", "damage_bonus_turn", "cure_status"]
 
 var id: String = ""
 var display_name: String = ""

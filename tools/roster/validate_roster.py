@@ -15,6 +15,7 @@ def main():
     roster = load("roster.json")
     types = set(load("types.json")["types"])
     cards = load("cards.json")["cards"]
+    statuses = set(load("statuses.json")["statuses"])
     poke = load("pokemon.json")
     taken, _ = G.existing_slugs()
     taken |= set(poke["enemies"]) | set(poke.get("player", {}))
@@ -46,6 +47,11 @@ def main():
         for a in acts:
             if a.get("type") not in ("attack", "block", "buff") or not (isinstance(a.get("value"), int) and a["value"] > 0):
                 bad(w + "action %s" % a)
+            if "status" in a:  # story 016: {id, value} on attack actions only, id from statuses.json
+                st = a["status"]
+                if a["type"] != "attack" or not isinstance(st, dict) or set(st) != {"id", "value"} \
+                        or st["id"] not in statuses or not (isinstance(st["value"], int) and st["value"] > 0):
+                    bad(w + "status %s" % a)
             if v["pattern"] == "weighted" and not (isinstance(a.get("weight"), int) and a["weight"] > 0): bad(w + "weight")
             if v["pattern"] == "sequence" and "weight" in a: bad(w + "weight in sequence")
         if not any(a["type"] == "attack" for a in acts): bad(w + "no attack action")

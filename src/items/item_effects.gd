@@ -48,3 +48,15 @@ static func damage_bonus_sources(items: Array[ItemData], card: CardData, attacks
 			continue
 		result.append(item)
 	return result
+
+
+## Status ids the held items make their carrier immune to (passive "status_immunity" effects).
+static func status_immunities(items: Array[ItemData]) -> Array[String]:
+	var out: Array[String] = []
+	for item: ItemData in items:
+		if item.trigger != ItemData.TRIGGER_PASSIVE:
+			continue
+		for e: Dictionary in item.effects:
+			if String(e["type"]) == "status_immunity" and String(e["status"]) not in out:
+				out.append(String(e["status"]))
+	return out

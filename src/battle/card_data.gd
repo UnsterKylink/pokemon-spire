@@ -29,6 +29,9 @@ var pokemon_id: String = ""
 var upgraded: bool = false
 ## Optional per-card improvement from cards.json ("upgrade": {damage, block, cost} deltas); {} = use the global rules.
 var upgrade_override: Dictionary = {}
+## Optional status inflicted on the target (statuses.json id + stack value); "" = none (story 016). Mentioned in `description`.
+var status_id: String = ""
+var status_value: int = 0
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -55,6 +58,16 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	card.type_id = String(d.get("type", ""))
 	card.rarity = String(d.get("rarity", ""))
 	card.pokemon_id = String(d.get("pokemon", ""))
+	var status_v: Variant = d.get("status", null)
+	if status_v != null:
+		var sv: Variant = (status_v as Dictionary).get("value", null) if status_v is Dictionary else null
+		if not (status_v is Dictionary) or not ((status_v as Dictionary).get("id", null) is String) \
+				or String((status_v as Dictionary)["id"]).is_empty() \
+				or not (sv is int or sv is float) or float(sv) <= 0.0 or float(sv) != floorf(float(sv)):
+			push_error("CardData: card '%s' has an invalid 'status' (expected {id, value>0})" % card_id)
+			return null
+		card.status_id = String((status_v as Dictionary)["id"])
+		card.status_value = int(sv)
 	var up: Variant = d.get("upgrade", {})
 	if not (up is Dictionary) or not valid_upgrade_rule(up):
 		push_error("CardData: card '%s' has an invalid 'upgrade' (expected {damage, block, cost} integers)" % card_id)
@@ -63,9 +76,9 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	return card
 
 
-## True if the card needs an enemy target to be played (derived from its damage).
+## True if the card needs an enemy target to be played (derived from its damage, or a status to inflict).
 func needs_target() -> bool:
-	return damage > 0
+	return damage > 0 or not status_id.is_empty()
 
 
 ## A copy of this card carried by another Pokémon (stolen cards, story 009).
@@ -89,6 +102,8 @@ func _copy() -> CardData:
 	copy.pokemon_id = pokemon_id
 	copy.upgraded = upgraded
 	copy.upgrade_override = upgrade_override
+	copy.status_id = status_id
+	copy.status_value = status_value
 	return copy
 
 
@@ -125,11 +140,18 @@ func upgraded_copy(rules: Dictionary) -> CardData:
 	copy.damage = new_damage
 	copy.block = new_block
 	copy.cost = new_cost
+	# Prefer the "N dégâts" / "N points de protection" wording so a status value equal to the damage is not rewritten.
 	if new_damage != damage:
-		copy.description = copy.description.replace(str(damage), str(new_damage))
+		copy.description = _replace_number(copy.description, damage, new_damage, " dégâts")
 	if new_block != block:
-		copy.description = copy.description.replace(str(block), str(new_block))
+		copy.description = _replace_number(copy.description, block, new_block, " points de protection")
 	return copy
+
+
+static func _replace_number(text: String, old_n: int, new_n: int, suffix: String) -> String:
+	if text.find(str(old_n) + suffix) >= 0:
+		return text.replace(str(old_n) + suffix, str(new_n) + suffix)
+	return text.replace(str(old_n), str(new_n))
 
 
 ## True if upgraded_copy(rules) would succeed.

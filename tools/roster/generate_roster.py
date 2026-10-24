@@ -55,6 +55,15 @@ DEFENSE_MARGIN = 0.15                                         # def_n - atk_n ab
 FAST_THRESHOLD = 0.6                                          # speed_n above -> fast pattern
 CANDIDATE_START_MAX_BST = 330
 
+# Status rule (story 016): a roster Pokemon whose type has a status (first matching type in order) inflicts it with
+# probability STATUS_CHANCE_PCT % (stable hash of the slug) through its STRONGEST attack action: "status": {"id", "value"}.
+# Ids come from assets/data/statuses.json.
+STATUS_BY_TYPE = {"fire": "burn", "poison": "poison", "electric": "paralysis", "ice": "freeze",
+                  "psychic": "sleep", "ghost": "sleep", "grass": "sleep"}
+STATUS_CHANCE_PCT = 40
+STATUS_VALUE = {"burn": {1: 2, 2: 3, 3: 4}, "poison": {1: 2, 2: 3, 3: 5},
+                "paralysis": {1: 1, 2: 1, 3: 1}, "freeze": {1: 1, 2: 1, 3: 1}, "sleep": {1: 1, 2: 1, 3: 1}}
+
 STAT_IDS = {1: "hp", 2: "atk", 3: "def", 4: "spa", 5: "spd", 6: "spe"}
 
 
@@ -203,6 +212,18 @@ def make_behaviour(slug, st, tier):
     return pat, acts
 
 
+def add_status(slug, types, tier, acts):
+    """Story 016: puts the type-based status (see STATUS_BY_TYPE) on the strongest attack action, in place."""
+    sid = next((STATUS_BY_TYPE[t] for t in types if t in STATUS_BY_TYPE), None)
+    if sid is None or h(slug + "status") % 100 >= STATUS_CHANCE_PCT:
+        return acts
+    attacks = [a for a in acts if a["type"] == "attack"]
+    if attacks:
+        best = max(attacks, key=lambda a: a["value"])
+        best["status"] = {"id": sid, "value": STATUS_VALUE[sid][tier]}
+    return acts
+
+
 def pick(lst, key, i=0):
     return lst[(h(key) + i) % len(lst)]
 
@@ -305,6 +326,7 @@ def build():
         tier = tier_for(stage, chain_len[r], bst)
         ty = [types[d][k] for k in sorted(types[d])]
         pat, acts = make_behaviour(slug, st, tier)
+        acts = add_status(slug, ty, tier, acts)
         nxt = min(children[d]) if d in children else None
         out[slug] = {
             "name": names[d], "dex": d, "generation": int(sp[d]["generation_id"]), "types": ty,
@@ -328,7 +350,7 @@ DOC = (
     "membres deja presents dans pokemon.json restent referencables par leur slug), evolves_to (slug de l'evolution suivante, "
     "branche de plus petit dex, null si aucune ; peut designer un Pokemon de pokemon.json), tier 1|2|3 (puissance utilisee "
     "pour les formules : = stage sauf especes sans evolution, rangees par BST), bst (total des stats de base), max_hp, "
-    "pattern 'sequence'|'weighted' + actions [{type attack|block|buff, value, weight? (weighted)}] (meme format que "
+    "pattern 'sequence'|'weighted' + actions [{type attack|block|buff, value, weight? (weighted), status? {id, value} (attaque seulement, statuses.json)}] (meme format que "
     "pokemon.json enemies), teaches [1-2 ids de cartes d'attaque de cards.json ; le 1er est toujours du type primaire], "
     "sprite (res://assets/sprites/pokemon/<slug>.png, 96px), roles {wild_ok: peut apparaitre sauvage/elite/arene, "
     "carrier_ok: peut porter une carte de recompense, candidate_start: stade 1 avec BST <= 330, proposable au depart}}. "

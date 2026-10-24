@@ -1,5 +1,5 @@
 {
-	"_doc": "Potions a usage unique, utilisables pendant le tour du joueur en combat (sans cout d'energie). max_carried: potions portees au maximum. id -> {name, description, price (Pokedollars au Poke Mart), effects:[{type, value|percent}]}. Effets: heal_flat, heal_percent_max (percent), block_flat, energy_gain (energie immediate), draw_cards, damage_bonus_turn (degats en plus sur chaque attaque jusqu'a la fin du tour).",
+	"_doc": "Potions a usage unique, utilisables pendant le tour du joueur en combat (sans cout d'energie). max_carried: potions portees au maximum. id -> {name, description, price (Pokedollars au Poke Mart), effects:[{type, value|percent}]}. Effets: heal_flat, heal_percent_max (percent), block_flat, energy_gain (energie immediate), draw_cards, damage_bonus_turn (degats en plus sur chaque attaque jusqu'a la fin du tour), cure_status ({status: id de statuses.json ou \"all\"} soigne le statut du Pokemon actif).",
 	"max_carried": 3,
 	"potions": {
 		"potion": {"name": "Potion", "description": "Soigne 20 PV.", "price": 40, "effects": [{"type": "heal_flat", "value": 20}]},
@@ -7,6 +7,12 @@
 		"attaque_plus": {"name": "Attaque +", "description": "Tes attaques infligent 5 dégâts de plus ce tour.", "price": 45, "effects": [{"type": "damage_bonus_turn", "value": 5}]},
 		"defense_plus": {"name": "Défense +", "description": "Gagne 12 points de protection.", "price": 45, "effects": [{"type": "block_flat", "value": 12}]},
 		"energie_plus": {"name": "Énergie +", "description": "Gagne 2 énergie.", "price": 50, "effects": [{"type": "energy_gain", "value": 2}]},
-		"pioche": {"name": "Pioche", "description": "Pioche 3 cartes.", "price": 50, "effects": [{"type": "draw_cards", "value": 3}]}
+		"pioche": {"name": "Pioche", "description": "Pioche 3 cartes.", "price": 50, "effects": [{"type": "draw_cards", "value": 3}]},
+		"total_soin": {"name": "Total Soin", "description": "Guérit tous les statuts.", "price": 60, "effects": [{"type": "cure_status", "status": "all"}]},
+		"antidote": {"name": "Antidote", "description": "Guérit le poison.", "price": 30, "effects": [{"type": "cure_status", "status": "poison"}]},
+		"anti_brule": {"name": "Anti-Brûlure", "description": "Guérit la brûlure.", "price": 30, "effects": [{"type": "cure_status", "status": "burn"}]},
+		"antigel": {"name": "Antigel", "description": "Dégèle le Pokémon.", "price": 30, "effects": [{"type": "cure_status", "status": "freeze"}]},
+		"reveil": {"name": "Réveil", "description": "Réveille le Pokémon endormi.", "price": 30, "effects": [{"type": "cure_status", "status": "sleep"}]},
+		"anti_para": {"name": "Anti-Para", "description": "Guérit la paralysie.", "price": 30, "effects": [{"type": "cure_status", "status": "paralysis"}]}
 	}
 }

@@ -168,7 +168,8 @@ func get_pokemon_info(pokemon_id: String) -> Dictionary:
 ## Drinking a potion in the battle also removes it from `potions` (kept in sync through potion_used).
 func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: RandomNumberGenerator) -> Battle:
 	var battle := Battle.new(build_player_combatant(), enemies, deck.duplicate(), effective_energy_per_turn(),
-			effective_hand_size(), rng, type_chart, get_pokemon_info, starter_pokemon_id, items, potions)
+			effective_hand_size(), rng, type_chart, get_pokemon_info, starter_pokemon_id, items, potions,
+			_data.get_status_book() if _data != null else null)
 	battle.potion_used.connect(_on_battle_potion_used)
 	return battle
 

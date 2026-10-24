@@ -22,6 +22,17 @@ signal battle_won
 signal battle_lost
 ## Emitted when a held item's effect fired (UI feedback). Story 006.
 signal item_triggered(item: ItemData)
+## Status ailments (story 016). `value` of status_applied is the amount ADDED (read the combatant for the total).
+signal status_applied(target: Combatant, status_id: String, value: int)
+## A status dealt `amount` damage at the end of its carrier's turn (damage statuses only, after the HP changed).
+signal status_ticked(target: Combatant, status_id: String, amount: int)
+## An application was refused (type / held-item immunity) OR a played card of the paralysed player failed (the card is spent).
+signal status_blocked(target: Combatant, status_id: String)
+## `target` loses its turn because of `status_id`: an enemy does not act (no enemy_acted), the player starts the turn with 0 energy,
+## an enemy fails its action through paralysis (chance rolled with the injected RNG).
+signal turn_skipped(target: Combatant, status_id: String)
+## A status disappeared (expired, decayed to 0, cured, woke on damage, thawed). Not emitted by the silent end-of-battle clear.
+signal status_removed(target: Combatant, status_id: String)
 ## Emitted after a potion of `potions` was drunk (already removed from `potions`). Story 006.
 signal potion_used(potion: PotionData)
 
@@ -47,6 +58,7 @@ var _attacks_played: int = 0
 var _rng: RandomNumberGenerator
 var _type_chart: TypeChart
 var _pokemon_lookup: Callable = Callable()
+var _status_book: StatusBook
 
 
 ## Starts a battle. pokemon_lookup(pokemon_id) -> Dictionary {id, name, sprite_path, types} (GameData.get_pokemon_info)
@@ -58,7 +70,9 @@ var _pokemon_lookup: Callable = Callable()
 func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Array[CardData],
 		energy_per_turn: int, cards_per_turn: int, rng: RandomNumberGenerator,
 		type_chart: TypeChart = null, pokemon_lookup: Callable = Callable(), starter_pokemon_id: String = "",
-			held_items: Array[ItemData] = [], carried_potions: Array[PotionData] = []) -> void:
+			held_items: Array[ItemData] = [], carried_potions: Array[PotionData] = [],
+			status_book: StatusBook = null) -> void:
+	_status_book = status_book if status_book != null else StatusBook.new()
 	player = player_combatant
 	items = held_items.duplicate()
 	potions = carried_potions.duplicate()
@@ -121,6 +135,16 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	var card: CardData = hand[index]
 	if card.needs_target() and not is_valid_target(target_index):
 		return false
+	# Paralysed player: each played card may fizzle (energy spent, no effect). The RNG is only drawn when paralysed.
+	var fizzle_id: String = _roll_card_fizzle()
+	if not fizzle_id.is_empty():
+		energy -= card.cost
+		hand.remove_at(index)
+		discard_pile.append(card)
+		status_blocked.emit(player, fizzle_id)
+		card_played.emit(card)
+		state_changed.emit()
+		return true
 	# Only attack cards bring their Pokémon in, BEFORE the hit (types/intents use the new Pokémon).
 	if card.kind == CardData.KIND_ATTACK and not card.pokemon_id.is_empty() and card.pokemon_id != active_pokemon_id:
 		var old_id: String = active_pokemon_id
@@ -137,13 +161,15 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	if card.damage > 0:
 		hit_target = enemies[target_index]
 		# Bonuses (items, "Attaque +") are added BEFORE the type multiplier, like enemy strength.
-		var bonus: int = turn_damage_bonus
+		var bonus: int = turn_damage_bonus - _attack_penalty(player)  # burn: weaker attacks (before the type multiplier)
 		for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
 			bonus += item.total("damage_bonus")
 			item_triggered.emit(item)
 		hit_mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
 		hit_amount = _type_chart.final_damage(card.damage + bonus, card.type_id, hit_target.type_ids)
 		hit_target.take_damage(hit_amount)  # block absorbs AFTER the type multiplier
+		if hit_amount > 0:
+			_on_damaged(hit_target, card.type_id)
 		if not hit_target.is_alive():
 			hit_target.intent = null  # a K.O. enemy no longer acts
 	if card.block > 0:
@@ -152,12 +178,13 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		hit_resolved.emit(hit_target, hit_amount, hit_mult)
 	if card.kind == CardData.KIND_ATTACK:
 		_attacks_played += 1
+	# Status of the card: applied AFTER the damage (a sleeping target is not woken by its own card). A hit that deals
+	# no damage because of a 0x type multiplier inflicts nothing; a status skill always applies.
+	if not card.status_id.is_empty() and is_valid_target(target_index) and (card.damage <= 0 or hit_mult > 0.0):
+		apply_status(enemies[target_index], card.status_id, card.status_value)
 	card_played.emit(card)
 	if first_living_enemy() < 0:
-		_fire_items(ItemData.TRIGGER_BATTLE_END)  # before the win is announced, so the HP is persisted by the caller
-		state = State.WON
-		state_changed.emit()
-		battle_won.emit()
+		_win()
 		return true
 	state_changed.emit()
 	return true
@@ -173,16 +200,30 @@ func end_turn() -> bool:
 	hand.clear()
 	_fire_items(ItemData.TRIGGER_TURN_END)
 	turn_damage_bonus = 0
+	_tick_statuses(player)  # the player's statuses tick at the end of its turn, before the enemies act
+	if not player.is_alive():
+		_lose()
+		return true
 	for e: Combatant in enemies:
-		if not e.is_alive() or e.intent == null:
+		if not e.is_alive():
 			continue
-		_execute_intent(e)
+		if e.intent != null:
+			var skip_id: String = _consume_skip_turn(e)
+			if skip_id.is_empty():
+				skip_id = _roll_fail(e)
+			if skip_id.is_empty():
+				_execute_intent(e)
+			else:
+				e.reset_block()
+				turn_skipped.emit(e, skip_id)
 		if not player.is_alive():
 			break
+		_tick_statuses(e)  # enemy statuses tick right after the enemy's own turn
 	if not player.is_alive():
-		state = State.LOST
-		state_changed.emit()
-		battle_lost.emit()
+		_lose()
+		return true
+	if first_living_enemy() < 0:
+		_win()
 		return true
 	for e: Combatant in enemies:
 		_roll_intent(e)
@@ -203,6 +244,8 @@ func use_potion(index: int) -> bool:
 	potions.remove_at(index)
 	for e: Dictionary in potion.effects:
 		match String(e["type"]):
+			"cure_status":
+				cure_status(player, String(e["status"]))
 			"energy_gain":
 				energy += int(e["value"])
 			"draw_cards":
@@ -218,10 +261,14 @@ func use_potion(index: int) -> bool:
 
 ## Recomputes the final value of every living enemy's already-chosen attack against the CURRENT
 ## active Pokémon's types. The chosen action itself never changes.
+## Also refreshes the burn penalty and the "loses its turn" label of every intent (statuses changed).
 func refresh_intents() -> void:
 	for e: Combatant in enemies:
-		if e.is_alive() and e.intent != null and e.intent.type == EnemyIntent.TYPE_ATTACK:
-			e.intent.value = _type_chart.final_damage(e.intent.base_value, e.get_primary_type(), player.type_ids)
+		if e.is_alive() and e.intent != null:
+			if e.intent.type == EnemyIntent.TYPE_ATTACK:
+				e.intent.value = _type_chart.final_damage(maxi(0, e.intent.base_value - _attack_penalty(e)),
+						e.get_primary_type(), player.type_ids)
+			e.intent.skip_label = _skip_label(e)
 
 
 func _apply_identity(pokemon_id: String) -> void:
@@ -246,12 +293,18 @@ func _execute_intent(enemy: Combatant) -> void:
 			# intent.value is already the FINAL damage vs the player (strength + type applied).
 			player.take_damage(intent.value)
 			hit = true
+			if intent.value > 0:
+				_on_damaged(player, enemy.get_primary_type())
 		EnemyIntent.TYPE_BLOCK:
 			enemy.add_block(intent.value)
 		EnemyIntent.TYPE_BUFF:
 			enemy.strength += intent.value
 	if hit:
-		hit_resolved.emit(player, intent.value, _type_chart.damage_multiplier(enemy.get_primary_type(), player.type_ids))
+		var mult: float = _type_chart.damage_multiplier(enemy.get_primary_type(), player.type_ids)
+		hit_resolved.emit(player, intent.value, mult)
+		# Status of the attack: applied unless the hit is fully immune (type multiplier 0), even if block absorbed it.
+		if not intent.status_id.is_empty() and mult > 0.0 and player.is_alive():
+			apply_status(player, intent.status_id, intent.status_value)
 	enemy_acted.emit(enemy, intent)
 
 
@@ -280,8 +333,10 @@ func _roll_intent(enemy: Combatant) -> void:
 	var rolled: EnemyIntent = chosen.with_bonus(bonus)
 	rolled.base_value = rolled.value
 	if rolled.type == EnemyIntent.TYPE_ATTACK:
-		# Strength is added BEFORE the type multiplier; the displayed value is the final one.
-		rolled.value = _type_chart.final_damage(rolled.value, enemy.get_primary_type(), player.type_ids)
+		# Strength is added BEFORE the type multiplier (burn subtracts its penalty there too); the displayed value is the final one.
+		rolled.value = _type_chart.final_damage(maxi(0, rolled.value - _attack_penalty(enemy)), enemy.get_primary_type(), player.type_ids)
+		rolled.status_label = _status_book.name_of(rolled.status_id)
+	rolled.skip_label = _skip_label(enemy)
 	enemy.intent = rolled
 
 
@@ -304,6 +359,10 @@ func _start_player_turn(first: bool = false) -> void:
 		player.reset_block()
 	energy = max_energy
 	turn_damage_bonus = 0
+	var lost_turn: String = _consume_skip_turn(player)  # asleep / frozen: the whole turn is lost (0 energy; potions still work)
+	if not lost_turn.is_empty():
+		energy = 0
+		turn_skipped.emit(player, lost_turn)
 	_fire_items(ItemData.TRIGGER_TURN_START)
 	_draw_cards(hand_size)
 	turn_started.emit()
@@ -328,3 +387,173 @@ func _shuffle(cards: Array[CardData]) -> void:
 		var tmp: CardData = cards[i]
 		cards[i] = cards[j]
 		cards[j] = tmp
+
+
+# --- Status ailments (story 016) -----------------------------------------------------------------------
+# Turn flow: the player's statuses tick at the end of its turn (before the enemies act); each enemy first
+# consumes a lost turn (sleep/freeze) or rolls its paralysis, acts if not skipped, THEN ticks its own statuses.
+# A combatant killed by a tick is dead (enemy: intent dropped, battle_won once none is left; player: battle_lost).
+# Statuses live on the Combatant (statuses dict) and are cleared silently when the battle ends.
+
+## Applies `value` of status `status_id` to `target` (a living combatant of this battle). Returns false when refused:
+## unknown status / dead target, or immune (status_blocked emitted). Immunity: any of the target's types in the
+## status's immune_types (the player uses the ACTIVE Pokémon's types), or a held "status_immunity" item.
+## Re-applying stacks the value (stackable statuses) and refreshes the duration.
+func apply_status(target: Combatant, status_id: String, value: int) -> bool:
+	var def: StatusData = _status_book.get_def(status_id)
+	if def == null:
+		push_error("Battle: unknown status '%s'" % status_id)
+		return false
+	if target == null or not target.is_alive() or value <= 0:
+		return false
+	if is_immune(target, status_id):
+		status_blocked.emit(target, status_id)
+		return false
+	if target.statuses.has(status_id):
+		var entry: Dictionary = target.statuses[status_id]
+		if def.stackable:
+			entry["value"] = int(entry["value"]) + value
+		entry["turns"] = def.initial_turns()
+	else:
+		target.statuses[status_id] = {"value": value if def.stackable else 1, "turns": def.initial_turns()}
+	target.changed.emit()
+	status_applied.emit(target, status_id, value)
+	refresh_intents()
+	return true
+
+
+## True if `target` can never receive the status (type immunity, or held item immunity for the player).
+func is_immune(target: Combatant, status_id: String) -> bool:
+	var def: StatusData = _status_book.get_def(status_id)
+	if def == null:
+		return false
+	for t: String in target.type_ids:
+		if t in def.immune_types:
+			return true
+	return target == player and status_id in ItemEffects.status_immunities(items)
+
+
+## Removes `status_id` ("all" = every status) from `target`; returns how many were removed (status_removed per status).
+func cure_status(target: Combatant, status_id: String) -> int:
+	var removed: int = 0
+	for sid: String in target.status_ids():
+		if status_id == "all" or sid == status_id:
+			_remove_status(target, sid)
+			removed += 1
+	if removed > 0:
+		refresh_intents()
+	return removed
+
+
+func _remove_status(target: Combatant, status_id: String) -> void:
+	target.statuses.erase(status_id)
+	target.changed.emit()
+	status_removed.emit(target, status_id)
+
+
+func _attack_penalty(c: Combatant) -> int:
+	var sum: int = 0
+	for sid: String in c.statuses.keys():
+		var def: StatusData = _status_book.get_def(sid)
+		if def != null:
+			sum += def.attack_penalty
+	return sum
+
+
+## Label ("Dort") of the first status that will make this enemy lose its next turn, "" if none.
+func _skip_label(c: Combatant) -> String:
+	for sid: String in c.statuses.keys():
+		var def: StatusData = _status_book.get_def(sid)
+		if def != null and def.skip_turns > 0:
+			return def.skip_label
+	return ""
+
+
+## A damaging hit landed on `target` (amount >= 1 before block): wake_on_damage statuses and statuses thawed by `attack_type` go.
+func _on_damaged(target: Combatant, attack_type: String) -> void:
+	var changed_any: bool = false
+	for sid: String in target.status_ids():
+		var def: StatusData = _status_book.get_def(sid)
+		if def != null and (def.wake_on_damage or (not attack_type.is_empty() and attack_type in def.thaw_types)):
+			_remove_status(target, sid)
+			changed_any = true
+	if changed_any:
+		refresh_intents()
+
+
+## Consumes one lost turn of the first skip_turns status (removed when no turns are left). Returns its id or "".
+func _consume_skip_turn(c: Combatant) -> String:
+	for sid: String in c.status_ids():
+		var def: StatusData = _status_book.get_def(sid)
+		if def == null or def.skip_turns <= 0:
+			continue
+		var entry: Dictionary = c.statuses[sid]
+		entry["turns"] = int(entry["turns"]) - 1
+		if int(entry["turns"]) <= 0:
+			_remove_status(c, sid)
+			refresh_intents()
+		else:
+			c.changed.emit()
+		return sid
+	return ""
+
+
+## Rolls the skip_chance of every status of `c` with the injected RNG; returns the id that made the action fail, or "".
+## The RNG is only consumed when such a status is present, so battles without paralysis keep their sequences.
+func _roll_fail(c: Combatant) -> String:
+	for sid: String in c.status_ids():
+		var def: StatusData = _status_book.get_def(sid)
+		if def != null and def.skip_chance > 0.0 and _rng.randf() < def.skip_chance:
+			return sid
+	return ""
+
+
+func _roll_card_fizzle() -> String:
+	return _roll_fail(player)
+
+
+## End-of-turn tick of `c`: damage statuses deal their value (ignoring block), values decay, durations shrink.
+func _tick_statuses(c: Combatant) -> void:
+	for sid: String in c.status_ids():
+		if not c.is_alive():
+			break
+		var def: StatusData = _status_book.get_def(sid)
+		if def == null or not c.statuses.has(sid):
+			continue
+		var entry: Dictionary = c.statuses[sid]
+		if def.tick_damage:
+			var amount: int = int(entry["value"])
+			c.lose_hp(amount)
+			status_ticked.emit(c, sid, amount)
+			if not c.is_alive():
+				if c != player:
+					c.intent = null
+				break
+			if def.value_decay > 0:
+				entry["value"] = int(entry["value"]) - def.value_decay
+				if int(entry["value"]) <= 0:
+					_remove_status(c, sid)
+					continue
+		if def.duration > 0:
+			entry["turns"] = int(entry["turns"]) - 1
+			if int(entry["turns"]) <= 0:
+				_remove_status(c, sid)
+				continue
+		c.changed.emit()
+	if c != player:
+		refresh_intents()
+
+
+func _win() -> void:
+	_fire_items(ItemData.TRIGGER_BATTLE_END)  # before the win is announced, so the HP is persisted by the caller
+	state = State.WON
+	player.clear_statuses()
+	state_changed.emit()
+	battle_won.emit()
+
+
+func _lose() -> void:
+	state = State.LOST
+	player.clear_statuses()
+	state_changed.emit()
+	battle_lost.emit()

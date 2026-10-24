@@ -20,7 +20,7 @@ const EFFECTS_BY_TRIGGER: Dictionary = {
 	"turn_end": ["heal_flat", "heal_percent_max", "block_flat"],
 	"card_played": ["damage_bonus"],
 	"on_pickup": ["max_hp_up", "heal_flat", "heal_percent_max"],
-	"passive": ["draw_up", "energy_up_per_turn"],
+	"passive": ["draw_up", "energy_up_per_turn", "status_immunity"],
 }
 
 var id: String = ""
@@ -74,6 +74,12 @@ static func validate_effect(owner_id: String, e: Dictionary, allowed: Array) -> 
 	if t not in allowed:
 		push_error("'%s': effect type '%s' is not allowed here (allowed: %s)" % [owner_id, t, str(allowed)])
 		return false
+	if t == "status_immunity" or t == "cure_status":  # {type, status: statuses.json id (cure_status also accepts "all")}
+		var sid: Variant = e.get("status", null)
+		if not (sid is String) or String(sid).is_empty() or (String(sid) == "all" and t == "status_immunity"):
+			push_error("'%s': effect '%s' needs a 'status' id" % [owner_id, t])
+			return false
+		return true
 	if t == "heal_percent_max":
 		var p: Variant = e.get("percent", null)
 		if not ((p is int or p is float) and p > 0 and p <= 100):
