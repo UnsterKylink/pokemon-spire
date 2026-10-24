@@ -1,0 +1,30 @@
+{
+ "_doc": "Cartes d'attaque ajoutees a assets/data/cards.json par add_cards.py (idempotent). pokemon = porteur EXISTANT de pokemon.json (le champ est cosmetique ; pas de Pokemon Fee dans pokemon.json avant integration du roster : l'integration peut re-pointer les cartes fee vers un porteur du roster).",
+ "cards": [
+  ["vent_feerique", "Vent Féérique", 1, "common", "fairy", 6, "pikachu"],
+  ["eclat_magique", "Éclat Magique", 1, "common", "fairy", 7, "pikachu"],
+  ["calinerie", "Câlinerie", 2, "uncommon", "fairy", 13, "pikachu"],
+  ["pouvoir_lunaire", "Pouvoir Lunaire", 3, "rare", "fairy", 20, "pikachu"],
+  ["poudreuse", "Poudreuse", 0, "common", "ice", 4, "glaceon"],
+  ["blizzard", "Blizzard", 3, "rare", "ice", 20, "lapras"],
+  ["balayage", "Balayage", 1, "common", "fighting", 7, "hitmonlee"],
+  ["close_combat", "Close Combat", 3, "rare", "fighting", 20, "machamp"],
+  ["tempete_verte", "Tempête Verte", 3, "rare", "grass", 21, "venusaur"],
+  ["cradovague", "Cradovague", 2, "uncommon", "poison", 12, "muk"],
+  ["coud_boue", "Coud'Boue", 1, "common", "ground", 6, "geodude"],
+  ["rapace", "Rapace", 3, "rare", "flying", 20, "pidgeot"],
+  ["psycho_boost", "Psycho-Boost", 3, "rare", "psychic", 22, "alakazam"],
+  ["ombre_portee", "Ombre Portée", 0, "common", "ghost", 4, "haunter"],
+  ["hantise", "Hantise", 3, "rare", "ghost", 20, "gengar"],
+  ["tranche_nuit", "Tranche-Nuit", 2, "uncommon", "dark", 12, "umbreon"],
+  ["vibrobscur", "Vibrobscur", 3, "rare", "dark", 20, "houndoom"],
+  ["luminocanon", "Luminocanon", 3, "rare", "steel", 20, "probopass"],
+  ["lame_de_roc", "Lame de Roc", 3, "rare", "rock", 20, "onix"],
+  ["plaie_croix", "Plaie-Croix", 2, "uncommon", "bug", 12, "pinsir"],
+  ["bourdon", "Bourdon", 3, "rare", "bug", 19, "pinsir"],
+  ["coup_d_boule", "Coup d'Boule", 1, "common", "normal", 7, "rattata"],
+  ["poing_eclair", "Poing-Éclair", 2, "uncommon", "electric", 12, "electabuzz"],
+  ["surf", "Surf", 2, "uncommon", "water", 12, "vaporeon"],
+  ["ultralaser", "Ultralaser", 3, "rare", "normal", 22, "snorlax"]
+ ]
+}
