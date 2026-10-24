@@ -23,6 +23,8 @@ extends SceneTree
 ## starter after a defeat deleted the save; see _save_shots; filter `story-015`). Story 016 (status chips, feedback,
 ## immunity, team status / lost turn, cure potion, "Dort"/"Gelé" intents, status cards; see _status_shots; filter `story-016`).
 ## Story 019 (dual-type intent "(Type)", zone-1 gym after balancing; see _balance_shots; filter `story-019`). Uses a scratch save file (SAVE_QA_PATH,
+## Story 017 (capture: HUD balls, capture mode with chances, success / failure feedback, reward with the capture, Mart
+## balls, team tab with a captured Pokémon, trainer fight without capture; see _capture_shots; filter `story-017`).
 ## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
@@ -83,6 +85,9 @@ const STATUS_INTENTS: String = "trio_vol"  # Roucool / Nosferapti / Aspicot (Asp
 ## Strength given to Aspicot in the intent shot so its status attack reads "Attaque 13 + Poison 2" (long intent).
 const STATUS_LONG_STRENGTH: int = 22  # (4 + 22) x0.5 (Insecte vs Feu) = 13
 
+## Story 017 shots: run seed and the wild trio staged for the capture shots.
+const CAPTURE_SEED: int = 1701
+const CAPTURE_TRIO: String = "trio_r2"
 ## Story 019 shots: run seed (any seed works; fixed for reproducible shots).
 const STORY_019_SEED: int = 1907
 var _main: Main
@@ -1121,7 +1126,118 @@ func _balance_shots() -> void:
 	await _shot("02-arene-zone1")
 
 
+## Story 017: one line of capture state for the shot log.
+func _capture_line(tag: String) -> void:
+	var run: RunState = _main.get_run_state()
+	var line: String = "017 %s: hud=\"%s\" tip=\"%s\" run_balls=%s captured=%s" % [tag, _main.get_hud().get_balls_text(),
+			_main.get_hud().get_balls_tooltip().replace("\n", " | "), run.balls, run.captured]
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null and _main.get_current_screen_name() == "battle":
+		var b: Battle = bs.get_battle()
+		var texts := PackedStringArray()
+		for i: int in b.enemies.size():
+			texts.append("%s=%s" % [b.enemies[i].id, bs.get_enemy_capture_texts(i)])
+		line += " allowed=%s mode=%s button=%s enemies=%s capture=%s float=\"%s\" energy=%d hint=\"%s\"" % [b.capture_allowed,
+				bs.is_capture_mode(), bs.get_capture_button_state(), _enemy_summary(b), texts, bs.get_capture_float_text(), b.energy,
+				bs.get_hint_text()]
+	print(line)
+
+
+## Story 017: capture shots (filter `story-017`).
+func _capture_shots() -> void:
+	_main.start_new_run(CAPTURE_SEED, "salameche")
+	for bid: String in ["poke_ball", "poke_ball", "poke_ball", "super_ball", "hyper_ball"]:
+		_main.qa_give_ball(bid)
+	for iid: String in ["restes", "bandeau", "baie_oran", "orbe_vie"]:
+		_main.qa_give_item(iid)
+	_main.qa_give_potion("total_soin")
+	_capture_line("01")
+	await _shot("01-hud-balls")
+	# 02: wild trio; enemy 1 weakened and asleep, capture mode on (chances per ball on each enemy).
+	_main.start_encounter(CAPTURE_TRIO, "wild")
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var weak: Combatant = b.enemies[1]
+	weak.hp = maxi(1, weak.max_hp / 5)
+	weak.changed.emit()
+	bs.qa_apply_status(1, "sleep", 1)
+	await create_timer(FLOAT_WAIT).timeout
+	bs.toggle_capture_mode()
+	_capture_line("02")
+	await _shot("02-mode-capture")
+	# 04: a Poké Ball on a full-HP enemy (low chance): retried until a failure is on screen.
+	var failed: bool = false
+	for attempt: int in 3:
+		if failed or b.ball_count("poke_ball") <= 0:
+			break
+		var target: int = 0 if b.enemies[0] != weak else 2
+		var r: Dictionary = _main.battle_use_ball("poke_ball", target)
+		print("017 throw full-hp: ", {"used": r.get("used"), "success": r.get("success"), "chance": r.get("chance"), "roll": r.get("roll")})
+		failed = bool(r.get("used", false)) and not bool(r.get("success", true))
+		if not failed:
+			bs.qa_force_hand(["griffe", "griffe", "griffe", "griffe", "griffe"])
+	_capture_line("04")
+	await _shot("04-capture-ratee")
+	# 03: the weakened, sleeping enemy with the best ball left, until it is captured (enemy slots rebuilt).
+	await create_timer(FLOAT_WAIT).timeout
+	for attempt: int in 4:
+		var idx: int = b.enemies.find(weak)
+		if idx < 0 or b.ball_ids().is_empty():
+			break
+		if b.energy < b.ball_energy_cost():
+			bs.qa_force_hand(["griffe", "griffe", "griffe", "griffe", "griffe"])
+		var ids: Array[String] = b.ball_ids()
+		var r: Dictionary = _main.battle_use_ball(ids[ids.size() - 1], idx)
+		print("017 throw weak: ", {"used": r.get("used"), "success": r.get("success"), "chance": r.get("chance"), "roll": r.get("roll")})
+	_capture_line("03")
+	await _shot("03-capture-reussie")
+	# 05: win the rest of the fight: the reward shows the capture (and a ball loot chip, staged if the loot roll gave none).
+	_win_battle(true)
+	var rs: RewardScreen = _main.get_reward_screen()
+	var loot: Dictionary = _main.get_last_loot().duplicate()
+	if loot.get("ball", null) == null:
+		loot["ball"] = _main.get_hud().ball_book.get("poke_ball", null)  # display staging only (the run is unchanged)
+		print("017 05: ball loot chip staged (the loot roll gave no ball)")
+	rs.set_loot(loot)
+	print("017 05 captures=%s loot=%s" % [rs.get_capture_texts(), rs.get_loot_texts()])
+	await _shot("05-recompense-capture")
+	_main.reward_skip()
+	# 06: Mart with its balls row: one bought ("Vendu"), then the bag filled up ("Sac plein").
+	_main.qa_set_money(400)
+	_main.qa_open_room("mart")
+	var shop: ShopInventory = _main.get_shop_inventory()
+	if not shop.balls.is_empty():
+		_main.shop_buy_ball(0)
+	var guard: int = 0
+	while _main.get_run_state().ball_total() < _main.get_run_state().max_balls() and guard < 6:
+		guard += 1
+		_main.qa_give_ball("poke_ball")
+	_main.get_shop_screen().refresh()
+	_main.qa_set_money(40)
+	_main.get_shop_screen().refresh()
+	var shop_lines := PackedStringArray()
+	for e: ShopEntry in shop.balls:
+		shop_lines.append("%s %d sold=%s" % [e.get_name(), e.price, e.sold])
+	print("017 06 shop balls=%s" % [shop_lines])
+	_capture_line("06")
+	await _shot("06-mart-balls")
+	_main.shop_leave()
+	# 07: the team tab of the deck panel (starter + the captured Pokémon).
+	_main.open_deck("team")
+	print("017 07 team=%s" % [_main.get_deck_panel().get_lines()])
+	await _shot("07-equipe")
+	_main.close_deck()
+	# 08: a gym (trainer) fight: the capture button is disabled with the reason.
+	_main.qa_start_gym()
+	_capture_line("08")
+	await _shot("08-dresseur-sans-capture")
+
+
 func _run() -> void:
+	if _filter == "story-017":
+		await _capture_shots()
+		quit(0)
+		return
 	if _filter == "story-019":
 		await _balance_shots()
 		quit(0)

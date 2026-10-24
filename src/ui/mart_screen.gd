@@ -6,7 +6,7 @@ extends Control
 ## to the map. Holds no game state: it reads the visit's ShopInventory and emits buy_requested / remove_requested,
 ## Main applies them and calls refresh. Implements: story-006-objets-et-services (criterion 5).
 
-## The player clicked an article: kind = ShopEntry.KIND_CARD / KIND_ITEM / KIND_POTION, index in that list.
+## The player clicked an article: kind = ShopEntry.KIND_CARD / KIND_ITEM / KIND_POTION / KIND_BALL (story 017), index in that list.
 signal buy_requested(kind: String, index: int)
 ## The player picked deck[deck_index] in the removal picker.
 signal remove_requested(deck_index: int)
@@ -24,6 +24,10 @@ const COLOR_STATUS: Color = Color(0.55, 1.0, 0.6)
 const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
 const CARD_SIZE: Vector2 = Vector2(170, 200)
 const TILE_SIZE: Vector2 = Vector2(224, 118)
+## Story 017: the Poké Balls row (lower tiles so the row fits above the buttons).
+const BALL_TILE_SIZE: Vector2 = Vector2(320, 100)
+const TEXT_BALLS: String = "Poké Balls"
+const TEXT_BAG_FULL: String = "Sac de Balls plein (%d/%d)."
 const TEXT_TITLE: String = "Poké Mart"
 const TEXT_SOLD: String = "Vendu"
 const TEXT_NO_MONEY: String = "Pas assez de Pokédollars."
@@ -42,6 +46,8 @@ var _status: Label
 var _cards_box: HBoxContainer
 var _items_box: HBoxContainer
 var _potions_box: HBoxContainer
+var _balls_box: HBoxContainer
+var _balls_col: VBoxContainer
 var _remove_button: Button
 var _picker: DeckPicker
 var _done: bool = false
@@ -72,8 +78,8 @@ func setup(data: GameData, run: RunState, shop: ShopInventory) -> void:
 func refresh(status: String = "") -> void:
 	if not status.is_empty():
 		_status.text = status
-	_info.text = "PV %d/%d   |   Deck : %d cartes   |   Potions %d/%d" % [_run.hp, _run.max_hp, _run.deck.size(),
-			_run.potions.size(), _run.max_potions()]
+	_info.text = "PV %d/%d   |   Deck : %d cartes   |   Potions %d/%d   |   Balls %d/%d" % [_run.hp, _run.max_hp,
+			_run.deck.size(), _run.potions.size(), _run.max_potions(), _run.ball_total(), _run.max_balls()]
 	_clear(_cards_box)
 	for i: int in _shop.cards.size():
 		_cards_box.add_child(_make_card_slot(i))
@@ -88,6 +94,20 @@ func refresh(status: String = "") -> void:
 		var full: bool = _run.potions.size() >= _run.max_potions()
 		var reason: String = TEXT_BELT_FULL % [_run.potions.size(), _run.max_potions()] if not e.sold and full else ""
 		_potions_box.add_child(_make_tile(e, i, _shop.can_buy_potion(i), reason, COLOR_POTION))
+	_clear(_balls_box)
+	_balls_col.visible = not _shop.balls.is_empty()
+	for i: int in _shop.balls.size():
+		var e: ShopEntry = _shop.balls[i]
+		var bag_full: bool = _run.ball_total() >= _run.max_balls()
+		var reason: String = TEXT_BAG_FULL % [_run.ball_total(), _run.max_balls()] if not e.sold and bag_full else ""
+		var tile: Button = _make_tile(e, i, _shop.can_buy_ball(i), reason, BallIcon.color_of(e.ball.id).lightened(0.3))
+		tile.custom_minimum_size = BALL_TILE_SIZE
+		var icon: BallIcon = BallIcon.make(e.ball.id, 22)
+		icon.position = Vector2(10, 9)
+		icon.size = Vector2(22, 22)
+		icon.modulate = Color(1, 1, 1, 0.45) if tile.disabled else Color.WHITE
+		tile.add_child(icon)
+		_balls_box.add_child(tile)
 	var price: String = RunHud.format_money(_shop.removal_price())
 	_remove_button.text = TEXT_REMOVE % price
 	_remove_button.disabled = not _shop.can_remove_card(0)
@@ -110,6 +130,12 @@ func buy_item(index: int) -> void:
 func buy_potion(index: int) -> void:
 	if not _done and not _picker.is_open() and _shop.can_buy_potion(index):
 		buy_requested.emit(ShopEntry.KIND_POTION, index)
+
+
+## Story 017: clicks ball article `index` (refused when sold, unaffordable or the bag is full).
+func buy_ball(index: int) -> void:
+	if not _done and not _picker.is_open() and _shop.can_buy_ball(index):
+		buy_requested.emit(ShopEntry.KIND_BALL, index)
 
 
 ## "Retirer une carte": opens the deck picker (if the removal is affordable).
@@ -196,7 +222,7 @@ func _make_card_slot(index: int) -> Control:
 	return col
 
 
-func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent: Color) -> Control:
+func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent: Color) -> Button:
 	var b := Button.new()
 	b.name = "%s%d" % [e.kind.capitalize(), index]
 	b.custom_minimum_size = TILE_SIZE
@@ -232,11 +258,13 @@ func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent:
 	box.add_child(d)
 	var price: Label = _price_label(e, can_buy)
 	if not reason.is_empty() and not e.sold:
-		price.text = "%s · %s" % [price.text, TEXT_OWNED.trim_suffix(".") if reason == TEXT_OWNED else "Pleine"]
+		price.text = "%s · %s" % [price.text, TEXT_OWNED.trim_suffix(".") if reason == TEXT_OWNED else ("Sac plein" if e.kind == ShopEntry.KIND_BALL else "Pleine")]
 	box.add_child(price)
 	margin.modulate = Color(1, 1, 1, 0.45) if b.disabled else Color.WHITE
 	if e.kind == ShopEntry.KIND_ITEM:
 		b.pressed.connect(buy_item.bind(index))
+	elif e.kind == ShopEntry.KIND_BALL:
+		b.pressed.connect(buy_ball.bind(index))
 	else:
 		b.pressed.connect(buy_potion.bind(index))
 	return b
@@ -331,6 +359,16 @@ func _build_ui() -> void:
 	_potions_box.add_theme_constant_override("separation", 10)
 	potions_col.add_child(_potions_box)
 	goods.add_child(potions_col)
+	_balls_col = VBoxContainer.new()
+	_balls_col.name = "BallsRow"
+	_balls_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_balls_col.add_child(_caption(TEXT_BALLS))
+	_balls_box = HBoxContainer.new()
+	_balls_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_balls_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_balls_box.add_theme_constant_override("separation", 10)
+	_balls_col.add_child(_balls_box)
+	root.add_child(_balls_col)
 	var spacer := Control.new()
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL

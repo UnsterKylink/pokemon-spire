@@ -137,6 +137,7 @@ func _ready() -> void:
 	_encounter_order = _data.get_encounter_order()
 	_hud = RunHud.new()
 	_hud.visible = false
+	_hud.ball_book = _data.get_ball_book()
 	_hud.potion_pressed.connect(battle_use_potion)
 	_hud.deck_pressed.connect(toggle_deck)
 	add_child(_hud)
@@ -463,11 +464,11 @@ func battle_use_potion(index: int) -> bool:
 
 
 ## QA (story 017): throws ball `ball` (id or index into Battle.ball_ids()) at enemy `enemy_index` of the current battle,
-## straight through Battle.use_ball (the UI agent may route it through the battle screen). {} outside a battle.
+## through BattleScreen.throw_ball (the same path as a click on a ball button in capture mode). {} outside a battle.
 func battle_use_ball(ball: Variant, enemy_index: int) -> Dictionary:
 	if _battle_screen == null or _battle_screen.get_battle() == null:
 		return {}
-	return _battle_screen.get_battle().use_ball(ball, enemy_index)
+	return _battle_screen.throw_ball(ball, enemy_index)
 
 
 ## QA-ONLY CHEAT (story 017): gives one ball `ball_id` (if the bag has room).
@@ -589,7 +590,7 @@ func qa_set_money(amount: int) -> void:
 
 # --- Deck panel (story 011) ---------------------------------------------------------------------
 
-## Opens the deck panel (outside a battle only the full deck; in a battle `tab` = "deck" | "draw" | "discard").
+## Opens the deck panel on `tab` = "deck" | "team" (story 017, always) | "draw" | "discard" (in a battle only).
 ## Refused (false) when there is no run, or while a modal card picker (Centre upgrade / Mart removal) is open.
 ## Never changes the run or the battle.
 func open_deck(tab: String = "deck") -> bool:
@@ -600,6 +601,8 @@ func open_deck(tab: String = "deck") -> bool:
 		which = DeckOverlay.Tab.DRAW
 	elif tab == "discard":
 		which = DeckOverlay.Tab.DISCARD
+	elif tab == "team":
+		which = DeckOverlay.Tab.TEAM
 	_deck_panel.open(_run, _data, _battle_screen.get_battle() if _battle_screen != null else null, which)
 	return true
 
@@ -1179,6 +1182,7 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_set_screen(_reward_screen, SCREEN_REWARD)
 	_reward_screen.setup(_data, _run, _offers)
 	_reward_screen.set_loot(_last_loot if not _fight_room_type.is_empty() and _fight_room_type != ROOM_LEAGUE else {})
+	_reward_screen.set_captures(_last_captures)
 
 
 func _on_card_chosen(card: CardData) -> void:

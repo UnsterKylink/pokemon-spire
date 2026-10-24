@@ -44,6 +44,13 @@ const TEXT_POTIONS: String = "Potions :"
 const TEXT_EMPTY_SLOT: String = "— vide —"
 const TEXT_POTION_HINT: String = "Clique pour l'utiliser (sans coût d'énergie)."
 const TEXT_POTION_LATER: String = "Utilisable pendant ton tour, en combat."
+## Story 017: Poké Balls carried ("Balls : 3" + one drawn icon per ball; tooltip = each kind and its count).
+const TEXT_BALLS: String = "Balls :"
+const TEXT_BALLS_TIP: String = "Poké Balls : %d/%d"
+const TEXT_BALLS_LINE: String = "%s ×%d"
+const TEXT_BALLS_NONE: String = "Aucune Ball. Achète-en au Poké Mart ou gagne-en en combat."
+const TEXT_BALLS_HINT: String = "En combat sauvage : bouton « Capturer »."
+const BALL_ICON_SIDE: float = 14.0
 
 var _money: Label
 var _items_box: HBoxContainer
@@ -56,6 +63,12 @@ var _league_value: Label
 var _potions_box: HBoxContainer
 var _chips: Dictionary = {}  # item id -> PanelContainer (display only)
 var _deck_button: Button
+## Story 017: balls indicator (caption + count + icons; the box carries the tooltip).
+var _balls_box: HBoxContainer
+var _balls_value: Label
+var _balls_icons: HBoxContainer
+## Story 017: ball id -> BallData (GameData.get_ball_book), set by Main; only used for the tooltip names.
+var ball_book: Dictionary = {}
 
 
 ## Formats an amount of Pokédollars ("50 P$").
@@ -122,6 +135,22 @@ func _init() -> void:
 	_items_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_items_box.add_theme_constant_override("separation", 6)
 	scroll.add_child(_items_box)
+	_balls_box = HBoxContainer.new()
+	_balls_box.name = "Balls"
+	_balls_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	_balls_box.add_theme_constant_override("separation", 4)
+	row.add_child(_balls_box)
+	var balls_caption: Label = _caption(TEXT_BALLS)
+	balls_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_balls_box.add_child(balls_caption)
+	_balls_value = CardView.make_label(18)
+	_balls_value.name = "BallsValue"
+	_balls_value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_balls_box.add_child(_balls_value)
+	_balls_icons = HBoxContainer.new()
+	_balls_icons.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_balls_icons.add_theme_constant_override("separation", 1)
+	_balls_box.add_child(_balls_icons)
 	row.add_child(_caption(TEXT_POTIONS))
 	_potions_box = HBoxContainer.new()
 	_potions_box.name = "Potions"
@@ -181,6 +210,36 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 	var potions: Array[PotionData] = battle.potions if battle != null else run.potions
 	for i: int in maxi(run.max_potions(), potions.size()):
 		_potions_box.add_child(_make_potion_slot(potions, i, battle))
+	_refresh_balls(run)
+
+
+## Story 017: "Balls : N", one icon per ball carried (kind colours), tooltip = "Poké Ball ×2" lines.
+func _refresh_balls(run: RunState) -> void:
+	for child: Node in _balls_icons.get_children():
+		_balls_icons.remove_child(child)
+		child.queue_free()
+	var total: int = run.ball_total()
+	_balls_value.text = str(total)
+	_balls_value.add_theme_color_override("font_color", COLOR_POTION if total > 0 else COLOR_EMPTY)
+	var lines: PackedStringArray = PackedStringArray([TEXT_BALLS_TIP % [total, run.max_balls()]])
+	for bid: String in run.balls.keys():
+		var n: int = run.ball_count(bid)
+		var def: BallData = ball_book.get(bid, null)
+		lines.append(TEXT_BALLS_LINE % [def.display_name if def != null else bid, n])
+		for k: int in n:
+			_balls_icons.add_child(BallIcon.make(bid, BALL_ICON_SIDE))
+	lines.append(TEXT_BALLS_HINT if total > 0 else TEXT_BALLS_NONE)
+	_balls_box.tooltip_text = "\n".join(lines)
+
+
+## Story 017: balls indicator text ("Balls : 3") and tooltip, for the QA harness.
+func get_balls_text() -> String:
+	return "%s %s" % [TEXT_BALLS, _balls_value.text]
+
+
+## Story 017: tooltip of the balls indicator, for the QA harness.
+func get_balls_tooltip() -> String:
+	return _balls_box.tooltip_text
 
 
 ## Briefly highlights the chip of `item` (an item effect just fired). Display only.

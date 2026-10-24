@@ -21,6 +21,12 @@ const COLOR_LOOT_BG: Color = Color(0.16, 0.17, 0.23)
 const COLOR_LOOT_CAPTION: Color = Color(0.7, 0.72, 0.82)
 const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
 const TEXT_LOOT: String = "Butin :"
+## Story 017: captured Pokémon row (name, number of cards) and ball loot chip.
+const TEXT_CAPTURED: String = "Capturé : %s rejoint l'équipe — +%d carte%s"
+const TEXT_CAPTURED_AGAIN: String = "Capturé : %s (déjà dans l'équipe) — +%d carte%s"
+const TEXT_BALL_LOOT: String = "Ball : %s"
+const COLOR_CAPTURED: Color = Color(0.45, 1.0, 0.55)
+const CAPTURE_SPRITE_SIDE: float = 40.0
 
 var _data: GameData
 var _run: RunState
@@ -29,6 +35,7 @@ var _title: Label
 var _info: Label
 var _cards_box: HBoxContainer
 var _loot_box: HBoxContainer
+var _captures_box: HBoxContainer
 var _done: bool = false
 var _built: bool = false
 
@@ -75,6 +82,62 @@ func set_loot(loot: Dictionary) -> void:
 	var potion: PotionData = loot.get("potion", null)
 	if potion != null:
 		_loot_box.add_child(_loot_chip("Potion : " + potion.display_name, potion.description, COLOR_POTION))
+	var ball: BallData = loot.get("ball", null)
+	if ball != null:
+		var chip: PanelContainer = _loot_chip(TEXT_BALL_LOOT % ball.display_name, ball.description, BallIcon.color_of(ball.id).lightened(0.3))
+		var row: HBoxContainer = HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_theme_constant_override("separation", 6)
+		var title: Label = chip.get_child(0).get_child(0) as Label
+		chip.get_child(0).remove_child(title)
+		row.add_child(BallIcon.make(ball.id, 18))
+		row.add_child(title)
+		chip.get_child(0).add_child(row)
+		chip.get_child(0).move_child(row, 0)
+		_loot_box.add_child(chip)
+
+
+## Story 017: shows the Pokémon captured in the fight (Main.get_last_captures() rows: id, name, sprite, types, cards,
+## first_time), one chip each with its sprite: "Capturé : <Nom> rejoint l'équipe — +2 cartes". Empty = row hidden.
+func set_captures(captures: Array[Dictionary]) -> void:
+	_build_ui()
+	for child: Node in _captures_box.get_children():
+		_captures_box.remove_child(child)
+		child.queue_free()
+	_captures_box.visible = not captures.is_empty()
+	for row: Dictionary in captures:
+		var n: int = (row.get("cards", []) as Array).size()
+		var text: String = (TEXT_CAPTURED if bool(row.get("first_time", true)) else TEXT_CAPTURED_AGAIN) % [String(row["name"]), n,
+				"s" if n > 1 else ""]
+		var names := PackedStringArray()
+		for c: CardData in row.get("cards", []):
+			names.append(c.display_name)
+		var chip: PanelContainer = _loot_chip(text, ", ".join(names), COLOR_CAPTURED)
+		var box: Container = chip.get_child(0) as Container
+		chip.remove_child(box)
+		var h := HBoxContainer.new()
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_theme_constant_override("separation", 8)
+		var sprite := TextureRect.new()
+		sprite.texture = CardView.cropped_sprite(String(row.get("sprite", "")))
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		sprite.custom_minimum_size = Vector2.ONE * CAPTURE_SPRITE_SIDE
+		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(sprite)
+		h.add_child(box)
+		chip.add_child(h)
+		_captures_box.add_child(chip)
+
+
+## Story 017: texts of the capture chips, for the QA harness.
+func get_capture_texts() -> Array[String]:
+	var texts: Array[String] = []
+	for child: Node in _captures_box.get_children():
+		if child is PanelContainer:
+			texts.append(((child as PanelContainer).get_child(0).get_child(1).get_child(0) as Label).text)
+	return texts
 
 
 ## Texts of the loot chips ("+15 P$", "Objet : Restes", ...), for the QA harness.
@@ -82,7 +145,10 @@ func get_loot_texts() -> Array[String]:
 	var texts: Array[String] = []
 	for child: Node in _loot_box.get_children():
 		if child is PanelContainer:
-			texts.append(((child as PanelContainer).get_child(0).get_child(0) as Label).text)
+			var first: Node = (child as PanelContainer).get_child(0).get_child(0)
+			if first is HBoxContainer:  # story 017 ball chip: icon + title
+				first = first.get_child(1)
+			texts.append((first as Label).text)
 	return texts
 
 
@@ -143,6 +209,13 @@ func _build_ui() -> void:
 	_loot_box.add_theme_constant_override("separation", 14)
 	_loot_box.visible = false
 	root.add_child(_loot_box)
+	_captures_box = HBoxContainer.new()
+	_captures_box.name = "Captures"
+	_captures_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_captures_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_captures_box.add_theme_constant_override("separation", 14)
+	_captures_box.visible = false
+	root.add_child(_captures_box)
 	_cards_box = HBoxContainer.new()
 	_cards_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cards_box.alignment = BoxContainer.ALIGNMENT_CENTER

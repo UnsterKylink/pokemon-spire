@@ -9,6 +9,10 @@ extends Control
 ## Story 004: the screen no longer owns game state; Main gives it a Battle (built from RunState) via
 ## setup() and listens to battle_won / defeat_acknowledged.
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
+## Story 017 (capture): in wild fights with balls, "Capturer" (info row) toggles a capture mode where each capturable enemy
+## shows one button per ball carried with its success chance ("Poké Ball 34 %"); a click throws it (throw_ball, the one
+## path also used by Main.battle_use_ball). "Capturé !" / "Raté… (34 %)" float over the target; a captured enemy leaves
+## the arena (the enemy slots are rebuilt). Trainer fights (gym / elite / league): the button is disabled with the reason.
 
 ## Emitted when the player wins; carries the ids of the enemies of this battle (all defeated).
 signal battle_won(defeated_ids: Array[String])
@@ -98,6 +102,30 @@ const TEXT_PLAYER_LOST_TURN_OTHER: String = "Ton équipe est entravée : −%d �
 const TEXT_STATUS_UNCHANGED: String = "%s : sans effet"
 const COLOR_LOST_TURN: Color = Color(0.75, 0.7, 1.0)
 const INTENT_FONT_SIZE: int = 22
+## Story 017: capture mode texts / colours / sizes.
+const TEXT_CAPTURE: String = "Capturer"
+const TEXT_CAPTURE_CANCEL: String = "Annuler"
+const TEXT_CAPTURE_TIP: String = "Lancer une Poké Ball sur un Pokémon sauvage (%d énergie ; la Ball est perdue même en cas d'échec)."
+const TEXT_CAPTURE_CANCEL_TIP: String = "Quitter le mode capture."
+const TEXT_CAPTURE_TRAINER: String = "Impossible de capturer un Pokémon de Dresseur."
+const TEXT_CAPTURE_NONE: String = "Aucun Pokémon capturable dans ce combat."
+const TEXT_CAPTURE_NO_ENERGY: String = "Pas assez d'énergie (%d requise)."
+const TEXT_CAPTURE_WAIT: String = "Attends ton tour."
+const TEXT_CAPTURE_HINT: String = "Capture : choisis une Ball sur un Pokémon (%d énergie)"
+const TEXT_BALL_CHANCE: String = "%s %d %%"
+const TEXT_BALL_TIP: String = "%s ×%d — %d %% de chances de capturer %s.\n%s"
+const TEXT_NOT_CAPTURABLE: String = "Non capturable"
+const TEXT_CAPTURED: String = "Capturé !"
+const TEXT_CAPTURE_FAILED: String = "Raté… (%d %%)"
+const COLOR_CAPTURE: Color = Color(1.0, 0.45, 0.45)
+const COLOR_CAPTURED: Color = Color(0.45, 1.0, 0.55)
+const COLOR_CAPTURE_FAILED: Color = Color(1.0, 0.62, 0.5)
+const COLOR_CAPTURE_BG: Color = Color(0.1, 0.11, 0.15, 0.92)
+const MODULATE_CAPTURABLE: Color = Color(1.0, 0.85, 0.85)
+const CAPTURE_BUTTON_SIZE: Vector2 = Vector2(120, 44)
+const BALL_BUTTON_HEIGHT: float = 28.0
+const BALL_BUTTON_ICON: float = 16.0
+const CAPTURE_FLOAT_Y: float = 0.55
 const INTENT_FONT_MIN: int = 14
 
 
@@ -125,6 +153,9 @@ class EnemyView extends RefCounted:
 	var float_text: FloatText
 	var status_chips: StatusChipRow
 	var status_float: FloatText
+	## Story 017: the enemy shown in this slot, and the capture overlay over its sprite (capture mode only).
+	var combatant: Combatant
+	var capture_box: VBoxContainer
 
 
 ## Story 013: league trainer header colours.
@@ -175,6 +206,11 @@ var _end_dim: ColorRect
 var _message_label: Label
 var _restart_button: Button
 var _hint_label: Label
+## Story 017: capture mode.
+var _capture_button: Button
+var _capture_mode: bool = false
+var _capture_float: FloatText
+var _last_throw_chance: float = 0.0
 
 
 func _ready() -> void:
@@ -261,6 +297,54 @@ func get_hint_text() -> String:
 	return _hint_label.text
 
 
+## Story 017: true while the capture mode is on (ball buttons shown over the capturable enemies).
+func is_capture_mode() -> bool:
+	return _capture_mode
+
+
+## Story 017: presses "Capturer" / "Annuler" (same path as the mouse). Ignored while the button is hidden / disabled.
+func toggle_capture_mode() -> void:
+	if _battle == null or not _capture_button.visible or _capture_button.disabled:
+		return
+	_capture_mode = not _capture_mode
+	_selected_index = -1
+	_refresh()
+
+
+## Story 017: throws `ball` (id or index into Battle.ball_ids()) at enemies[enemy_index] -- the ball buttons of the capture
+## mode and Main.battle_use_ball both come here. Returns Battle.use_ball's result ({used: false, ...} when refused).
+func throw_ball(ball: Variant, enemy_index: int) -> Dictionary:
+	if _battle == null or not _battle.can_use_ball(ball, enemy_index):
+		return {"used": false, "success": false, "chance": 0.0, "roll": 1.0}
+	_selected_index = -1
+	return _battle.use_ball(ball, enemy_index)
+
+
+## Story 017, QA: state of the capture button {visible, disabled, text, tooltip}.
+func get_capture_button_state() -> Dictionary:
+	return {"visible": _capture_button.visible, "disabled": _capture_button.disabled, "text": _capture_button.text,
+			"tooltip": _capture_button.tooltip_text}
+
+
+## Story 017, QA: texts of the capture overlay of enemy enemy_index ("Poké Ball 34 %", or "Non capturable"); empty
+## outside the capture mode.
+func get_enemy_capture_texts(enemy_index: int) -> PackedStringArray:
+	var out := PackedStringArray()
+	if enemy_index < 0 or enemy_index >= _enemy_views.size() or not _enemy_views[enemy_index].capture_box.visible:
+		return out
+	for child: Node in _enemy_views[enemy_index].capture_box.get_children():
+		if child is Button:
+			out.append((child as Button).text)
+		elif child is Label:
+			out.append((child as Label).text)
+	return out
+
+
+## Story 017, QA: the capture feedback currently shown ("Capturé !" / "Raté… (34 %)", "" if none).
+func get_capture_float_text() -> String:
+	return _visible_float_text(_capture_float)
+
+
 ## Drinks potion `index` of the battle (player's turn only, no energy cost). False if not possible.
 func use_potion(index: int) -> bool:
 	if _battle == null or not _battle.can_use_potion(index):
@@ -284,6 +368,8 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_hide_float(_item_float)
 	_hide_float(_potion_float)
 	_hide_float(_player_status_float)
+	_hide_float(_capture_float)
+	_capture_mode = false
 	_pending_items.clear()
 	_lost_turn_status = ""
 	_pending_lost_turn = ""
@@ -303,6 +389,9 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.status_removed.connect(_on_status_removed)
 	_battle.status_unchanged.connect(_on_status_unchanged)
 	_battle.turn_started.connect(_on_turn_started)
+	_battle.ball_thrown.connect(_on_ball_thrown)
+	_battle.capture_succeeded.connect(_on_capture_succeeded)
+	_battle.capture_failed.connect(_on_capture_failed)
 	_battle.start()
 	_refresh_active_pokemon(player)
 	_refresh()
@@ -346,6 +435,7 @@ func select_card(index: int) -> void:
 	if _battle == null or not _battle.can_play(index):
 		return
 	var card: CardData = _battle.hand[index]
+	_capture_mode = false
 	if not card.needs_target():
 		_selected_index = -1
 		_battle.play_card(index)
@@ -415,6 +505,7 @@ func press_end_turn() -> void:
 ## Clicks empty background: deselects.
 func click_background() -> void:
 	_selected_index = -1
+	_capture_mode = false
 	_refresh()
 
 
@@ -489,7 +580,7 @@ func _build_ui() -> void:
 	# Info row.
 	var info := HBoxContainer.new()
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	info.add_theme_constant_override("separation", 24)
+	info.add_theme_constant_override("separation", 18)
 	root.add_child(info)
 	_encounter_label = _make_label(20)
 	_encounter_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
@@ -507,6 +598,14 @@ func _build_ui() -> void:
 	_hint_label = _make_label(18)
 	_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_child(_hint_label)
+	_capture_button = Button.new()
+	_capture_button.name = "CaptureButton"
+	_capture_button.text = TEXT_CAPTURE
+	_capture_button.custom_minimum_size = CAPTURE_BUTTON_SIZE
+	_capture_button.add_theme_color_override("font_color", COLOR_CAPTURE)
+	_capture_button.visible = false
+	_capture_button.pressed.connect(toggle_capture_mode)
+	info.add_child(_capture_button)
 	_end_turn_button = Button.new()
 	_end_turn_button.text = "Fin de tour"
 	_end_turn_button.custom_minimum_size = END_TURN_SIZE
@@ -584,6 +683,7 @@ func _build_ui() -> void:
 	_item_float = _make_float_text()
 	_potion_float = _make_float_text()
 	_player_status_float = _make_float_text()
+	_capture_float = _make_float_text()
 
 
 func _make_label(font_size: int) -> Label:
@@ -694,6 +794,15 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.status_chips.bind(enemies[i], _data.get_status_book())
 		v.float_text = _make_float_text()
 		v.status_float = _make_float_text()
+		v.combatant = enemies[i]
+		v.capture_box = VBoxContainer.new()
+		v.capture_box.name = "Capture"
+		v.capture_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+		v.capture_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		v.capture_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.capture_box.add_theme_constant_override("separation", 4)
+		v.capture_box.visible = false
+		v.sprite.add_child(v.capture_box)
 		_enemy_views.append(v)
 
 
@@ -712,6 +821,8 @@ func _on_active_pokemon_changed(_old_id: String, _new_id: String) -> void:
 	var p: Combatant = _battle.player
 	_refresh_active_pokemon(p)
 	_show_float(_switch_float, _player_sprite, TEXT_SWITCH % p.display_name, COLOR_SWITCH)
+	if _views_stale():
+		_build_enemy_views(_battle.enemies)
 	for i: int in _enemy_views.size():
 		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 
@@ -853,6 +964,126 @@ func _flush_status_float(f: FloatText, target: Combatant) -> void:
 	_show_float(f, anchor, "\n".join(lines), Color(0, 0, 0, 0) if multi else colors[0], STATUS_FLOAT_Y)
 
 
+# --- Capture (story 017) ------------------------------------------------------------
+
+func _on_ball_thrown(_target: Combatant, _ball: BallData, chance: float) -> void:
+	_last_throw_chance = chance
+
+
+## The target already left Battle.enemies: the float goes where its sprite was, then the slots are rebuilt.
+func _on_capture_succeeded(target: Combatant) -> void:
+	var rect := Rect2()
+	for v: EnemyView in _enemy_views:
+		if v.combatant == target:
+			rect = v.sprite.get_global_rect()
+	_build_enemy_views(_battle.enemies)
+	_show_float(_capture_float, null, TEXT_CAPTURED, COLOR_CAPTURED, CAPTURE_FLOAT_Y, rect)
+
+
+func _on_capture_failed(target: Combatant) -> void:
+	for v: EnemyView in _enemy_views:
+		if v.combatant == target:
+			_show_float(_capture_float, v.sprite, TEXT_CAPTURE_FAILED % roundi(_last_throw_chance * 100.0), COLOR_CAPTURE_FAILED,
+					CAPTURE_FLOAT_Y)
+
+
+## True when the enemy slots no longer match Battle.enemies (a capture removed one).
+func _views_stale() -> bool:
+	if _enemy_views.size() != _battle.enemies.size():
+		return true
+	for i: int in _enemy_views.size():
+		if _enemy_views[i].combatant != _battle.enemies[i]:
+			return true
+	return false
+
+
+func _any_capturable() -> bool:
+	for i: int in _battle.enemies.size():
+		if _battle.is_capturable(i):
+			return true
+	return false
+
+
+## Shows / enables "Capturer" and leaves the capture mode when it is no longer possible.
+func _refresh_capture_button() -> void:
+	var has_balls: bool = not _battle.ball_ids().is_empty()
+	var cost: int = _battle.ball_energy_cost()
+	_capture_button.visible = has_balls
+	var reason: String = ""
+	if not _battle.capture_allowed:
+		reason = TEXT_CAPTURE_TRAINER
+	elif _battle.state != Battle.State.PLAYER_TURN:
+		reason = TEXT_CAPTURE_WAIT
+	elif not _any_capturable():
+		reason = TEXT_CAPTURE_NONE
+	elif _battle.energy < cost:
+		reason = TEXT_CAPTURE_NO_ENERGY % cost
+	if not has_balls or not reason.is_empty():
+		_capture_mode = false
+	_capture_button.disabled = not reason.is_empty()
+	_capture_button.text = TEXT_CAPTURE_CANCEL if _capture_mode else TEXT_CAPTURE
+	_capture_button.tooltip_text = reason if not reason.is_empty() else (TEXT_CAPTURE_CANCEL_TIP if _capture_mode
+			else TEXT_CAPTURE_TIP % cost)
+
+
+## Capture overlay of one enemy: one button per ball carried with its chance, or "Non capturable".
+func _refresh_capture_box(v: EnemyView, enemy_index: int) -> void:
+	for child: Node in v.capture_box.get_children():
+		v.capture_box.remove_child(child)
+		child.queue_free()
+	v.capture_box.visible = _capture_mode and v.combatant.is_alive()
+	if not v.capture_box.visible:
+		return
+	if not _battle.is_capturable(enemy_index):
+		var l: Label = _make_label(16)
+		l.text = TEXT_NOT_CAPTURABLE
+		l.add_theme_color_override("font_color", COLOR_IMMUNE.lightened(0.3))
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 6)
+		v.capture_box.add_child(l)
+		return
+	var book: Dictionary = _data.get_ball_book()
+	for bid: String in _battle.ball_ids():
+		var def: BallData = book.get(bid, null)
+		if def == null:
+			continue
+		var pct: int = roundi(_battle.capture_chance(bid, enemy_index) * 100.0)
+		var usable: bool = _battle.can_use_ball(bid, enemy_index)
+		var b := Button.new()
+		b.name = "Ball_" + bid
+		b.text = TEXT_BALL_CHANCE % [def.display_name, pct]
+		b.custom_minimum_size = Vector2(0, BALL_BUTTON_HEIGHT)
+		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		b.add_theme_font_size_override("font_size", 15)
+		b.disabled = not usable
+		var accent: Color = BallIcon.color_of(bid).lightened(0.25)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = COLOR_CAPTURE_BG
+		sb.set_border_width_all(2)
+		sb.border_color = accent
+		sb.set_corner_radius_all(8)
+		sb.content_margin_left = 6.0 + BALL_BUTTON_ICON + 4.0
+		sb.content_margin_right = 8
+		var hover: StyleBoxFlat = sb.duplicate()
+		hover.bg_color = COLOR_CAPTURE_BG.lightened(0.2)
+		hover.border_color = COLOR_SELECTED
+		var dis: StyleBoxFlat = sb.duplicate()
+		dis.border_color = accent.darkened(0.5)
+		b.add_theme_stylebox_override("normal", sb)
+		b.add_theme_stylebox_override("hover", hover)
+		b.add_theme_stylebox_override("pressed", hover)
+		b.add_theme_stylebox_override("disabled", dis)
+		b.add_theme_color_override("font_color", Color.WHITE)
+		var icon: BallIcon = BallIcon.make(bid, BALL_BUTTON_ICON)
+		icon.position = Vector2(6, (BALL_BUTTON_HEIGHT - BALL_BUTTON_ICON) * 0.5)
+		icon.size = Vector2.ONE * BALL_BUTTON_ICON
+		b.add_child(icon)
+		var why: String = TEXT_CAPTURE_TIP % _battle.ball_energy_cost() if usable else TEXT_CAPTURE_NO_ENERGY % _battle.ball_energy_cost()
+		b.tooltip_text = TEXT_BALL_TIP % [def.display_name, _battle.ball_count(bid), pct, v.combatant.display_name, why]
+		b.pressed.connect(throw_ball.bind(bid, enemy_index))
+		v.capture_box.add_child(b)
+
+
 # --- Effectiveness feedback ------------------------------------------------
 
 func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> void:
@@ -883,7 +1114,8 @@ func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> voi
 ## Shows the floating label over `anchor` for FLOAT_DURATION s (drifts up, fades at the end).
 ## `y_ratio` = start height inside the anchor (0 = its top). Any previous tween of the same label is killed
 ## first; nothing here blocks input or logic.
-func _show_float(f: FloatText, anchor: Control, text: String, color: Color, y_ratio: float = 0.0) -> void:
+## Story 017: `anchor` may be null, then `at_rect` (global) is used (the captured enemy's slot is already gone).
+func _show_float(f: FloatText, anchor: Control, text: String, color: Color, y_ratio: float = 0.0, at_rect: Rect2 = Rect2()) -> void:
 	if f.tween != null and f.tween.is_valid():
 		f.tween.kill()
 	f.label.text = text
@@ -894,12 +1126,12 @@ func _show_float(f: FloatText, anchor: Control, text: String, color: Color, y_ra
 	# Wait one frame so container layout has settled (e.g. right after a new encounter
 	# rebuilt the enemy slots); otherwise the anchor rect is stale.
 	await get_tree().process_frame
-	if not is_inside_tree() or my_serial != f.serial or not is_instance_valid(f.label) or not is_instance_valid(anchor):
+	if not is_inside_tree() or my_serial != f.serial or not is_instance_valid(f.label) or (anchor != null and not is_instance_valid(anchor)):
 		return
 	f.label.modulate = Color.WHITE
 	f.label.visible = true
 	f.label.reset_size()
-	var r: Rect2 = anchor.get_global_rect()
+	var r: Rect2 = anchor.get_global_rect() if anchor != null else at_rect
 	var start: Vector2 = Vector2(r.get_center().x - f.label.size.x * 0.5, r.position.y + 8.0 + r.size.y * y_ratio)
 	# Keep the whole text on screen (the rightmost enemy slot is near the edge).
 	var screen_w: float = get_viewport_rect().size.x
@@ -984,8 +1216,15 @@ func _refresh() -> void:
 		_hint_label.add_theme_color_override("font_color", COLOR_LOST_TURN)
 	elif _selected_index < 0 and _battle.turn_damage_bonus > 0 and not over:
 		_hint_label.text = TEXT_TURN_BONUS % _battle.turn_damage_bonus
+	if _views_stale():
+		_build_enemy_views(_battle.enemies)
+	_refresh_capture_button()
+	if _capture_mode:
+		_hint_label.text = TEXT_CAPTURE_HINT % _battle.ball_energy_cost()
+		_hint_label.add_theme_color_override("font_color", COLOR_CAPTURE)
 	for i: int in _enemy_views.size():
 		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
+		_refresh_capture_box(_enemy_views[i], i)
 	_player_chips.refresh()
 	_rebuild_hand()
 	# Victory goes straight to the reward screen (Main); the overlay is for defeat only.
@@ -1013,6 +1252,8 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 		v.panel.modulate = MODULATE_KO
 	elif _selected_index >= 0:
 		v.panel.modulate = MODULATE_TARGETABLE
+	elif _capture_mode and _battle.is_capturable(_battle.enemies.find(e)):
+		v.panel.modulate = MODULATE_CAPTURABLE
 	else:
 		v.panel.modulate = Color.WHITE
 
