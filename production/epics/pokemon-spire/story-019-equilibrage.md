@@ -33,6 +33,7 @@
 - [ ] PV, dégâts et modificateurs des ennemis ajustés zone par zone pour une courbe de difficulté régulière ; prix, gains d'argent et taux de potions/objets ajustés.
 - [ ] Un simulateur (joueur automatique qui joue des parties complètes, du choix de départ jusqu'à Éthernatos) mesure le taux de victoire finale sur plusieurs centaines de parties ; l'outil est gardé dans `tools/` pour être relancé après chaque changement de contenu.
 - [ ] **Objectif fixé par le joueur (2026-10-24) : environ 35 % des parties complètes gagnées** (8 badges + Conseil 4 + Éthernatos), mesuré par le simulateur ; le rapport indique aussi où les parties perdues s'arrêtent (zone, Conseil, Éthernatos) pour une courbe régulière, sans mur ni partie trop facile.
+- [ ] **Progression garantie (exigence joueur, 2026-10-24)** : le joueur doit sentir qu'il va plus loin à chaque partie — au moins 75 % des parties obtiennent 3 badges ou plus, au moins 50 % atteignent le Conseil 4, au plus 5 % des parties meurent en zone 1, et aucune étape ne cause plus d'environ 20 % des défaites ; les défaites ont lieu surtout tard (zones 6–8, Ligue, Éthernatos), Éthernatos restant difficile mais battable. Mesuré par le simulateur (entonnoir des badges + ces 4 contrôles dans `design/balance/report-final.md`).
 - [ ] Les valeurs modifiées et leur justification sont notées dans le dossier d'équilibrage (design/balance/).
 
 ---

@@ -1,7 +1,7 @@
 {
 	"starter_pokemon": "salameche",
 	"player": {
-		"salameche": {"name": "Salamèche", "types": ["fire"], "max_hp": 90, "sprite": "res://assets/sprites/pokemon/charmander.png", "energy_per_turn": 3, "hand_size": 5, "starter_deck": {"griffe": 5, "abri": 4, "flammeche": 2}}
+		"salameche": {"name": "Salamèche", "types": ["fire"], "max_hp": 90, "sprite": "res://assets/sprites/pokemon/charmander.png", "energy_per_turn": 3, "hand_size": 5, "starter_deck": {"griffe": 5, "abri": 4, "flammeche": 1}}
 	},
 	"_enemies_doc": "boss: true (optionnel) = boss final unique (story 013, ex. Ethernatos) : jamais capturable / proposable comme starter. types: 1 ou 2 ids distincts de types.json (obligatoire, joueur et ennemis). pattern: 'sequence' (actions in order, looping) or 'weighted' (random pick by 'weight'). teaches: ids de cartes d'attaque (cards.json) que ce Pokemon apprend au joueur quand il est battu (liste vide ou absente = aucune). Action: type attack|block|buff, value > 0 (buff = +value strength: all later attacks +value), weight > 0 (weighted only). attack_type (optionnel, attaques seulement, story 019) : id de types.json du type de cette attaque ; absent = 1er type du Pokemon (regle des doubles types : l'attaque la plus forte prend le 2e type, tools/roster/add_attack_types.py). | Story 010 : `roster_roles` (starters / route1), `starter_candidates` (Pokémon proposables au départ), tous les Pokémon de `enemies` peuvent aussi porter des cartes.",
 	"starter_deck_template": {"basic_count": 5, "skill": "abri", "skill_count": 4, "strong_count": 2},

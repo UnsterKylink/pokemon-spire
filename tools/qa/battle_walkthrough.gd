@@ -21,7 +21,8 @@ extends SceneTree
 ## without a next form, the team evolution summary, the deck afterwards; see _evolution_shots; filter `story-014`).
 ## Story 015 (save / resume: resume screen of a zone-3 run, map after the resume, unreadable save, starter without a save,
 ## starter after a defeat deleted the save; see _save_shots; filter `story-015`). Story 016 (status chips, feedback,
-## immunity, team status / lost turn, cure potion, "Dort"/"Gelé" intents, status cards; see _status_shots; filter `story-016`). Uses a scratch save file (SAVE_QA_PATH,
+## immunity, team status / lost turn, cure potion, "Dort"/"Gelé" intents, status cards; see _status_shots; filter `story-016`).
+## Story 019 (dual-type intent "(Type)", zone-1 gym after balancing; see _balance_shots; filter `story-019`). Uses a scratch save file (SAVE_QA_PATH,
 ## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
@@ -82,6 +83,8 @@ const STATUS_INTENTS: String = "trio_vol"  # Roucool / Nosferapti / Aspicot (Asp
 ## Strength given to Aspicot in the intent shot so its status attack reads "Attaque 13 + Poison 2" (long intent).
 const STATUS_LONG_STRENGTH: int = 22  # (4 + 22) x0.5 (Insecte vs Feu) = 13
 
+## Story 019 shots: run seed (any seed works; fixed for reproducible shots).
+const STORY_019_SEED: int = 1907
 var _main: Main
 var _out_dir: String = "user://qa"
 var _filter: String = ""
@@ -1098,7 +1101,31 @@ func _status_shots() -> void:
 	await _shot("09-main-7-cartes-statuts")
 
 
+## Story 019: a dual-type enemy's intent showing the attack's type "(Type)" (Étourmi Normal/Vol, 2nd action = its Vol
+## attack) and the new zone-1 gym fight (roster team of 3 tier-1 Pokémon of the zone type, x0.7 HP) (filter `story-019`).
+func _balance_shots() -> void:
+	_main.start_new_run(STORY_019_SEED, "salameche")
+	_main.start_encounter("solo_starly")
+	var bs: BattleScreen = _main.get_battle_screen()
+	for i: int in 1:
+		bs.press_end_turn()
+		await create_timer(FLOAT_WAIT).timeout
+		_main.qa_set_hp(90)
+	print("019 01 intents=%s" % [_intent_summary(bs.get_battle())])
+	await _shot("01-intent-type")
+	_main.start_new_run(STORY_019_SEED, "salameche")
+	_main.qa_start_gym()
+	var gb: Battle = _main.get_battle_screen().get_battle()
+	print("019 02 zone=%s enc=%s enemies=%s intents=%s" % [String(_main.get_zone().get("type_id", "")), _main.get_battle_screen().get_encounter_id(),
+			_enemy_summary(gb), _intent_summary(gb)])
+	await _shot("02-arene-zone1")
+
+
 func _run() -> void:
+	if _filter == "story-019":
+		await _balance_shots()
+		quit(0)
+		return
 	if _filter == "story-016":
 		await _status_shots()
 		quit(0)
