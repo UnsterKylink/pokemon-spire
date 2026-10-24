@@ -64,6 +64,8 @@ var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (f
 var _evolution_hp_bonus_default: int = 0
 var _team_evolution_battles: Array[int] = []  # story 014: battles won needed for stage 1->2, 2->3 (team Pokémon)
 var _team_evolution_bonus_hp: int = 0
+## Story 019: default number of re-draws of a soft-locking wild / elite encounter (zones.json softlock_rerolls).
+const DEFAULT_SOFTLOCK_REROLLS: int = 10
 var _zones_cfg: Dictionary = {}  # validated zones.json (story 012)
 var _league_cfg: Dictionary = {}  # validated league.json (story 013)
 var _roster_ids: Dictionary = {}  # roster id -> its entry (story 013b; the entry is ALSO in _enemies)
@@ -385,7 +387,52 @@ func get_room_rarity_weights(room_type: String) -> Dictionary:
 ## rooms draw from the zone's type pool with probability wild_type_share / elite_type_share (one extra rng roll),
 ## else from the room's pool (the early-floor override only if the zone's tier has early_pool) PLUS the pools
 ## unlocked by the badges already earned. Without a zone nothing changes (same rolls as before story 012).
-func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGenerator, zone: Dictionary = {}) -> String:
+## Story 019 (soft-lock fix): with a non-empty `attack_types` (deck_attack_types of the player's deck), a wild / elite
+## encounter in which some enemy takes x0 from EVERY one of those types (unbeatable: e.g. a Normal-only deck against a
+## Ghost) is re-drawn with the same rng, at most zones.json `softlock_rerolls` times (default
+## DEFAULT_SOFTLOCK_REROLLS); if every draw is blocked the last one is kept (graceful fallback). No extra roll when
+## the first draw is fine, so runs without a blocked fight draw exactly as before.
+func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGenerator, zone: Dictionary = {},
+		attack_types: Array[String] = []) -> String:
+	var encounter_id: String = _pick_encounter_once(room_type, floor_number, rng, zone)
+	if attack_types.is_empty() or room_type == ROOM_GYM:
+		return encounter_id
+	var rerolls: int = int(_zones_cfg.get("softlock_rerolls", DEFAULT_SOFTLOCK_REROLLS))
+	var tries: int = 0
+	while tries < rerolls and encounter_softlocks(encounter_id, attack_types):
+		encounter_id = _pick_encounter_once(room_type, floor_number, rng, zone)
+		tries += 1
+	return encounter_id
+
+
+## Story 019: distinct types of the damaging attack cards of `deck` (kind attack, damage > 0), in deck order.
+func deck_attack_types(deck: Array[CardData]) -> Array[String]:
+	var result: Array[String] = []
+	for c: CardData in deck:
+		if c != null and c.kind == CardData.KIND_ATTACK and c.damage > 0 and not result.has(c.type_id):
+			result.append(c.type_id)
+	return result
+
+
+## Story 019: true if some enemy of `encounter_id` is immune (x0) to EVERY type of `attack_types` (the fight cannot be
+## won with damage). False for an empty `attack_types` or an unknown encounter.
+func encounter_softlocks(encounter_id: String, attack_types: Array[String]) -> bool:
+	if attack_types.is_empty():
+		return false
+	for eid: String in get_encounter_enemy_ids(encounter_id):
+		var types: Array[String] = []
+		types.assign((_enemies.get(eid, {}) as Dictionary).get("types", []))
+		var hittable: bool = false
+		for t: String in attack_types:
+			if _type_chart.damage_multiplier(t, types) > 0.0:
+				hittable = true
+				break
+		if not hittable:
+			return true
+	return false
+
+
+func _pick_encounter_once(room_type: String, floor_number: int, rng: RandomNumberGenerator, zone: Dictionary) -> String:
 	if not zone.is_empty() and room_type == ROOM_GYM:
 		return String(zone["gym_encounter"])
 	var room: Dictionary = get_room_type(room_type)
@@ -862,6 +909,10 @@ func _load_zones(root: Dictionary) -> bool:
 			elif (evo_v as Array).count(n_v) > 1:
 				push_error("GameData: evolution_after_badges lists badge %d twice" % int(n_v))
 				ok = false
+	var rr_v: Variant = root.get("softlock_rerolls", DEFAULT_SOFTLOCK_REROLLS)
+	if not _is_number(rr_v) or float(rr_v) < 0 or float(rr_v) != floorf(float(rr_v)):
+		push_error("GameData: zones file 'softlock_rerolls' must be an integer >= 0")
+		ok = false
 	if ok:
 		_zones_cfg = root
 	return ok

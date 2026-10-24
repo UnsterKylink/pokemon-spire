@@ -1094,7 +1094,8 @@ func _on_node_chosen(node_id: String) -> void:
 
 
 func _start_room_fight(node: MapNode) -> void:
-	var encounter_id: String = _data.pick_encounter(node.room_type, node.floor, _encounter_rng, _run.current_zone())
+	var encounter_id: String = _data.pick_encounter(node.room_type, node.floor, _encounter_rng, _run.current_zone(),
+			_data.deck_attack_types(_run.deck))
 	var mods: Dictionary = _data.get_fight_modifiers(node.room_type, _run.current_zone())
 	var enemies: Array[Combatant] = _data.create_enemies(encounter_id, float(mods["hp_multiplier"]), int(mods["strength_bonus"]))
 	if enemies.is_empty():

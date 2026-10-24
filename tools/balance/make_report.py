@@ -122,6 +122,19 @@ def render(s, tag, note):
     for k in range(9):
         L.append(f"| {k} | {s['badges_hist'][str(k)] if str(k) in s['badges_hist'] else s['badges_hist'][k]} |")
     L.append("")
+    # Story 019 "progression garantie" (player requirement 2026-10-24): observed values only, the reader compares.
+    dead = n - s["wins"]
+    z1 = sum(s["deaths_by_stage"][f"zone1_{r}"] for r in ("wild", "elite", "boss"))
+    worst = max((st for st in STAGES if st != "victory"), key=lambda st: s["deaths_by_stage"][st])
+    eth_reach = s["deaths_by_stage"]["league_eternatus"] + s["wins"]
+    L.append("### Progression garantie (exigence joueur du 2026-10-24)\n")
+    L.append("| Mesure | Valeur | Repère joueur |\n|---|---:|---|")
+    L.append(f"| Parties avec au moins 3 badges | {pct(s['entered'][3], n)} | >= 75 % |")
+    L.append(f"| Parties qui atteignent le Conseil 4 | {pct(s['entered'][8], n)} | >= 50 % |")
+    L.append(f"| Défaites en zone 1 (toutes salles) | {pct(z1, n)} des parties | <= 5 % |")
+    L.append(f"| Étape la plus meurtrière : {worst} | {pct(s['deaths_by_stage'][worst], dead)} des défaites ({pct(s['deaths_by_stage'][worst], n)} des parties) | <= ~20 % des défaites |")
+    L.append(f"| Victoire parmi les parties qui atteignent Éthernatos | {pct(s['wins'], eth_reach)} | difficile mais battable |")
+    L.append("")
     L.append("## PV perdus par zone (moyenne sur les parties qui y entrent)\n")
     L.append("| Zone | Parties entrées | PV perdus / partie |\n|---|---:|---:|")
     for z in range(9):
