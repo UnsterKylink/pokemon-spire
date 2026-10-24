@@ -21,6 +21,14 @@ const SPRITE_SOURCE_SIZE: float = 96.0
 const ENEMY_SPRITE_SCALES: Array[float] = [2.0, 2.0, 1.6]
 const PLAYER_SPRITE_SCALE: float = 2.0
 const CARD_SIZE: Vector2 = Vector2(170, 200)
+## Fit-in-720p layout (story 016 fix): outer margins, vertical gaps between the rows and inside the fighter panels.
+const SCREEN_MARGIN_X: int = 16
+const SCREEN_MARGIN_Y: int = 8
+const ROW_SEPARATION: int = 4
+const PANEL_SEPARATION: int = 2
+## Extra height of the hand row over the card height (selected card border stays inside).
+const HAND_EXTRA_HEIGHT: float = 4.0
+const END_TURN_SIZE: Vector2 = Vector2(160, 44)
 ## Hand layout: normal / tight card spacing and the usable width (1280 minus side margins).
 const HAND_SEPARATION: int = 12
 const HAND_SEPARATION_TIGHT: int = 6
@@ -81,10 +89,13 @@ const TEXT_STATUS_FAILED: String = "Raté ! (%s)"
 const TEXT_SKIPPED: Dictionary = {"sleep": "Dort…", "freeze": "Gelé !"}
 const TEXT_WOKE: String = "Réveillé !"
 const TEXT_THAWED: String = "Dégelé !"
-## Info row when the player's turn is lost (by status id, fallback for other ids).
-const TEXT_PLAYER_LOST_TURN: Dictionary = {"sleep": "Ton équipe dort : 0 énergie ce tour",
-		"freeze": "Ton équipe est gelée : 0 énergie ce tour"}
-const TEXT_PLAYER_LOST_TURN_OTHER: String = "Ton équipe perd son tour : 0 énergie ce tour"
+## Info row when the player's team is asleep / frozen at the start of its turn (by status id, fallback for other ids);
+## %d = energy lost this turn (Battle.energy_lost, from statuses.json player_energy_loss).
+const TEXT_PLAYER_LOST_TURN: Dictionary = {"sleep": "Ton équipe dort : −%d énergie ce tour",
+		"freeze": "Ton équipe est gelée : −%d énergie ce tour"}
+const TEXT_PLAYER_LOST_TURN_OTHER: String = "Ton équipe est entravée : −%d énergie ce tour"
+## A non-refreshing status (paralysis) re-applied while active: nothing happens (status name).
+const TEXT_STATUS_UNCHANGED: String = "%s : sans effet"
 const COLOR_LOST_TURN: Color = Color(0.75, 0.7, 1.0)
 const INTENT_FONT_SIZE: int = 22
 const INTENT_FONT_MIN: int = 14
@@ -231,6 +242,15 @@ func get_enemy_status_chips(enemy_index: int) -> PackedStringArray:
 	return _enemy_views[enemy_index].status_chips.get_chip_texts()
 
 
+## QA: global rectangles of the hand card buttons, left to right (layout checks: the full card must fit the window).
+func get_hand_card_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for child: Node in _hand_box.get_children():
+		if child is Control and not child.is_queued_for_deletion():
+			out.append((child as Control).get_global_rect())
+	return out
+
+
 ## Story 016: status chip texts under the player's panel.
 func get_player_status_chips() -> PackedStringArray:
 	return _player_chips.get_chip_texts()
@@ -281,6 +301,7 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.status_blocked.connect(_on_status_blocked)
 	_battle.turn_skipped.connect(_on_turn_skipped)
 	_battle.status_removed.connect(_on_status_removed)
+	_battle.status_unchanged.connect(_on_status_unchanged)
 	_battle.turn_started.connect(_on_turn_started)
 	_battle.start()
 	_refresh_active_pokemon(player)
@@ -410,13 +431,15 @@ func _build_ui() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
+	for side: String in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, SCREEN_MARGIN_X)
+	for side: String in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, SCREEN_MARGIN_Y)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_theme_constant_override("separation", 8)
+	root.add_theme_constant_override("separation", ROW_SEPARATION)
 	margin.add_child(root)
 
 	# Arena: player left, enemies (1..3) right.
@@ -428,6 +451,7 @@ func _build_ui() -> void:
 	var player_box := VBoxContainer.new()
 	player_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	player_box.add_theme_constant_override("separation", PANEL_SEPARATION)
 	player_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	arena.add_child(player_box)
 	_player_caption = _make_label(16)
@@ -442,11 +466,14 @@ func _build_ui() -> void:
 	player_box.add_child(_player_sprite)
 	_player_hp_bar = _make_hp_bar(COLOR_HP_PLAYER, PLAYER_SPRITE_SCALE)
 	player_box.add_child(_player_hp_bar)
+	# HP and block share one row (saves a line of height, story 016 fit-in-720p fix).
+	var player_hp_row := _make_hp_row()
+	player_box.add_child(player_hp_row)
 	_player_hp_label = _make_label(18)
-	player_box.add_child(_player_hp_label)
-	_player_block = _make_label(20)
+	player_hp_row.add_child(_player_hp_label)
+	_player_block = _make_label(18)
 	_player_block.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
-	player_box.add_child(_player_block)
+	player_hp_row.add_child(_player_block)
 	_player_chips = StatusChipRow.new()
 	player_box.add_child(_player_chips)
 
@@ -482,7 +509,7 @@ func _build_ui() -> void:
 	info.add_child(_hint_label)
 	_end_turn_button = Button.new()
 	_end_turn_button.text = "Fin de tour"
-	_end_turn_button.custom_minimum_size = Vector2(160, 48)
+	_end_turn_button.custom_minimum_size = END_TURN_SIZE
 	_end_turn_button.pressed.connect(press_end_turn)
 	info.add_child(_end_turn_button)
 
@@ -490,7 +517,8 @@ func _build_ui() -> void:
 	_hand_box = HBoxContainer.new()
 	_hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_hand_box.custom_minimum_size = Vector2(0, CARD_SIZE.y + 10)
+	_hand_box.name = "HandBox"
+	_hand_box.custom_minimum_size = Vector2(0, CARD_SIZE.y + HAND_EXTRA_HEIGHT)
 	_hand_box.add_theme_constant_override("separation", 12)
 	root.add_child(_hand_box)
 
@@ -562,6 +590,15 @@ func _make_label(font_size: int) -> Label:
 	return CardView.make_label(font_size)
 
 
+## Centred row holding the "PV x/y" and "Protection n" labels of a fighter.
+func _make_hp_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	return row
+
+
 func _make_type_badge(font_size: int = 16) -> PanelContainer:
 	return CardView.make_type_badge(font_size)
 
@@ -626,6 +663,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.panel.name = "Enemy%d" % i
 		v.panel.mouse_filter = Control.MOUSE_FILTER_STOP  # receives the click that plays the card
 		v.panel.alignment = BoxContainer.ALIGNMENT_CENTER
+		v.panel.add_theme_constant_override("separation", PANEL_SEPARATION)
 		v.panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.panel.gui_input.connect(_on_enemy_input.bind(i))
 		_enemies_box.add_child(v.panel)
@@ -643,11 +681,14 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.panel.add_child(v.sprite)
 		v.hp_bar = _make_hp_bar(COLOR_HP_ENEMY, sprite_scale)
 		v.panel.add_child(v.hp_bar)
+		var hp_row := _make_hp_row()
+		hp_row.mouse_filter = Control.MOUSE_FILTER_PASS
+		v.panel.add_child(hp_row)
 		v.hp_label = _make_label(18)
-		v.panel.add_child(v.hp_label)
+		hp_row.add_child(v.hp_label)
 		v.block_label = _make_label(18)
 		v.block_label.add_theme_color_override("font_color", COLOR_INTENT_BLOCK)
-		v.panel.add_child(v.block_label)
+		hp_row.add_child(v.block_label)
 		v.status_chips = StatusChipRow.new()
 		v.panel.add_child(v.status_chips)
 		v.status_chips.bind(enemies[i], _data.get_status_book())
@@ -736,6 +777,12 @@ func _on_turn_skipped(target: Combatant, status_id: String) -> void:
 	_queue_status_float(target, text, def.color, TEXT_WOKE if def.wake_on_damage else TEXT_THAWED)
 	if target == _battle.player:
 		_pending_lost_turn = status_id
+
+
+func _on_status_unchanged(target: Combatant, status_id: String) -> void:
+	var def: StatusData = _data.get_status(status_id)
+	if def != null:
+		_queue_status_float(target, TEXT_STATUS_UNCHANGED % def.display_name, COLOR_IMMUNE)
 
 
 ## Only waking up and thawing get a message; expiries and cures just remove the chip.
@@ -933,7 +980,7 @@ func _refresh() -> void:
 	_hint_label.text = "Choisissez une cible" if _selected_index >= 0 else ""
 	_hint_label.remove_theme_color_override("font_color")
 	if _selected_index < 0 and not over and not _lost_turn_status.is_empty():
-		_hint_label.text = String(TEXT_PLAYER_LOST_TURN.get(_lost_turn_status, TEXT_PLAYER_LOST_TURN_OTHER))
+		_hint_label.text = String(TEXT_PLAYER_LOST_TURN.get(_lost_turn_status, TEXT_PLAYER_LOST_TURN_OTHER)) % _battle.energy_lost
 		_hint_label.add_theme_color_override("font_color", COLOR_LOST_TURN)
 	elif _selected_index < 0 and _battle.turn_damage_bonus > 0 and not over:
 		_hint_label.text = TEXT_TURN_BONUS % _battle.turn_damage_bonus

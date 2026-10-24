@@ -123,6 +123,14 @@ func _shot(shot_name: String) -> void:
 		for c: CardData in b.hand:
 			hand.append(c.deck_key())
 		line += " hand=%s" % [hand]
+		# Story 016 fit-in-720p fix: every hand card must be fully inside the window.
+		var rects: Array[Rect2] = bs.get_hand_card_rects()
+		var bottom: float = 0.0
+		for r: Rect2 in rects:
+			bottom = maxf(bottom, r.end.y)
+		var win_h: float = root.get_visible_rect().size.y
+		line += " cards=%d card_h=%d hand_bottom=%d/%d fits=%s" % [rects.size(), int(rects[0].size.y) if not rects.is_empty() else 0,
+				int(bottom), int(win_h), bottom <= win_h]
 	for o: RewardOffer in _main.get_reward_offers():
 		line += " [%s/%s%s]" % [o.card.id, o.card.rarity, "*" + o.source_pokemon_name if o.stolen else ""]
 	var ev: Dictionary = _main.get_current_event()
@@ -1037,7 +1045,7 @@ func _status_shots() -> void:
 	bs.press_end_turn()
 	_status_line("04")
 	await _shot("04-statut-joueur")
-	# 04b: the team is asleep: its turn is lost (0 energy, info row message).
+	# 04b: the team is asleep: it loses 2 energy this turn (info row message), then gets the RÉPIT chip.
 	await create_timer(FLOAT_WAIT).timeout
 	bs.qa_apply_status(-1, "sleep", 1)
 	await create_timer(FLOAT_WAIT).timeout
@@ -1055,6 +1063,12 @@ func _status_shots() -> void:
 	_main.battle_use_potion(idx)
 	_status_line("06")
 	await _shot("06-soin-statut")
+	# 08: aftermath immunity: after the sleep, the team cannot be put to sleep / frozen ("Immunisé !", RÉPIT chip).
+	await create_timer(FLOAT_WAIT).timeout
+	var blocked: bool = not bs.qa_apply_status(-1, "freeze", 1)
+	print("016 08 freeze refused by aftermath: %s aftermath_turns=%d" % [blocked, b.player.aftermath_turns])
+	_status_line("08")
+	await _shot("08-repit")
 	# 05: sleeping / frozen enemies show "Dort" / "Gelé"; Aspicot's long status attack must fit.
 	_main.start_encounter(STATUS_INTENTS)
 	bs = _main.get_battle_screen()
@@ -1067,6 +1081,21 @@ func _status_shots() -> void:
 	await create_timer(FLOAT_WAIT).timeout
 	_status_line("05")
 	await _shot("05-sommeil-gel")
+	# 09: worst-case layout: 3 enemies with 3 chips each, chips on the team, 7-card hand (all fully visible).
+	_main.start_encounter(STATUS_TRIO)
+	bs = _main.get_battle_screen()
+	for i: int in 3:
+		bs.qa_apply_status(i, "poison", 3)
+		bs.qa_apply_status(i, "burn", 2)
+		bs.qa_apply_status(i, "paralysis", 1)
+	bs.qa_apply_status(-1, "poison", 2)
+	bs.qa_apply_status(-1, "paralysis", 1)
+	var seven: Array[String] = STATUS_HAND.duplicate()
+	seven.append_array(["toxik", "feu_follet"])
+	bs.qa_force_hand(seven)
+	await create_timer(FLOAT_WAIT).timeout
+	_status_line("09")
+	await _shot("09-main-7-cartes-statuts")
 
 
 func _run() -> void:
