@@ -14,6 +14,12 @@ extends Control
 ## zone types are drawn with the run's seeded RNG). Badge flow API: get_last_badge() / get_badges() / badge_continue().
 ## story-013-conseil-4-ethernatos (after badge 8: league screen -> 4 Conseil 4 fights -> Maître -> Éthernatos -> victory;
 ## heal + card reward between fights, data: league.json). API: get_league_stage() / get_league_member() / league_continue().
+## story-015-sauvegarde (autosave / resume): at every SAFE point (the act map or a league intermission is shown) the run is
+## written to ONE slot (SaveGame, `user://savegame.json`, atomic); at launch a valid save shows the ResumeScreen ("Reprendre
+## la partie") before the starter choice. A quit mid-battle / mid-room resumes at the map before that room. Victory / defeat
+## delete the save. Autosave is ON only for the real game (this scene is the project's current scene) and OFF when a CLI flag
+## forces a fresh run (--seed / --starter / --encounter) or when Main is instantiated by a QA script: such scripts opt in
+## with qa_set_save_path(<scratch path>), so they never touch the real save.
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -45,6 +51,10 @@ const SCREEN_LEAGUE: String = "league"
 ## Story 013: _fight_room_type of a league fight (no loot, league reward weights).
 const ROOM_LEAGUE: String = "league"
 const SCREEN_DEFEAT: String = "defeat"
+## Story 015: the "Reprendre la partie" screen (ResumeScreen) shown at launch when a save exists (or is unreadable).
+const SCREEN_RESUME: String = "resume"
+## Story 015: names of Main's RandomNumberGenerators in the save (order = the seeding order of start_new_run).
+const RNG_NAMES: Array[String] = ["battle", "encounter", "reward", "event", "starter", "loot", "shop", "zone", "league"]
 ## Room type of the zone's gym fight (story 012: its win pays loot + a card reward, then the badge; the last zone ends the run).
 const ROOM_BOSS: String = "boss"
 ## QA: player turns qa_lose_battle() ends at most before giving up.
@@ -52,6 +62,12 @@ const QA_LOSE_MAX_TURNS: int = 60
 
 var _data: GameData
 var _run: RunState
+## Story 015: the save slot file, whether the run is autosaved (see the header), the live resume screen and the
+## loaded-save result it shows (SaveGame.load_run format + extras checked).
+var _save_path: String = SaveGame.DEFAULT_PATH
+var _autosave: bool = false
+var _resume_screen: ResumeScreen
+var _resume_result: Dictionary = {}
 var _battle_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _encounter_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _reward_rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -127,7 +143,10 @@ func _ready() -> void:
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
+	var cli_forced: bool = false
 	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with(STARTER_ARG_PREFIX) or arg.begins_with(SEED_ARG_PREFIX) or arg.begins_with(ENCOUNTER_ARG_PREFIX):
+			cli_forced = true
 		if arg.begins_with(STARTER_ARG_PREFIX):
 			forced_starter_id = arg.substr(STARTER_ARG_PREFIX.length())
 			if _data.get_pokemon_info(forced_starter_id).is_empty():
@@ -145,6 +164,10 @@ func _ready() -> void:
 	if not debug_encounter.is_empty() and forced_starter_id.is_empty():
 		forced_starter_id = _data.get_default_player_id()  # a debug fight needs a run, so no choice screen
 	_cli_seed = forced_seed
+	_autosave = not cli_forced and get_tree().current_scene == self  # the real game only (see the header)
+	if _autosave:
+		_show_title()
+		return
 	start_new_run(forced_seed)
 	if not debug_encounter.is_empty():
 		start_encounter(debug_encounter)
@@ -166,7 +189,8 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_evolution_summary = {}
 	_team_evolution_rows = []
 	_hud.visible = false
-	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng, _zone_rng, _league_rng]
+	_resume_result = {}
+	var rngs: Array[RandomNumberGenerator] = _rng_list()
 	for i: int in rngs.size():
 		if act_seed != 0:
 			rngs[i].seed = act_seed + i + 1
@@ -179,6 +203,11 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_pending_act_seed = act_seed
 	_starter_choices = _data.draw_starter_choices(_starter_rng, STARTER_CHOICE_COUNT)
 	_show_starter_screen()
+
+
+## The run's generators in RNG_NAMES order.
+func _rng_list() -> Array[RandomNumberGenerator]:
+	return [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng, _shop_rng, _zone_rng, _league_rng]
 
 
 func _begin_run(starter_id: String, act_seed: int) -> void:
@@ -900,6 +929,141 @@ func qa_win_league_fight() -> void:
 	_on_battle_won(ids)
 
 
+# --- Save / resume (story 015) ---------------------------------------------------------------------
+
+## QA: the live ResumeScreen (null elsewhere).
+func get_resume_screen() -> ResumeScreen:
+	return _resume_screen
+
+
+## QA-ONLY: points the save slot at `path` (a scratch file) AND turns autosave on, so QA runs never touch the real save.
+func qa_set_save_path(path: String) -> void:
+	_save_path = path
+	_autosave = true
+
+
+## QA-ONLY: turns autosave on / off without changing the path.
+func qa_set_autosave(enabled: bool) -> void:
+	_autosave = enabled
+
+
+## QA: true if a file exists in the save slot.
+func qa_has_save() -> bool:
+	return SaveGame.exists(_save_path)
+
+
+## QA-ONLY: writes the save now (as on the map, or on the league screen). False if autosave is off or there is no run.
+func qa_save_now() -> bool:
+	return _autosave_now()
+
+
+## QA-ONLY: simulates quitting and relaunching: drops the run and shows the resume screen (valid / unreadable save) or the
+## starter choice (no save), exactly like the launch of the real game. Without autosave it just starts a fresh run.
+func qa_quit_to_title() -> void:
+	_clear_screens()
+	_run = null
+	_hud.visible = false
+	if _autosave:
+		_show_title()
+	else:
+		start_new_run(_cli_seed)
+
+
+## "Reprendre" on the resume screen: rebuilds the saved run (state, map, RNG states) and shows its map / league screen.
+func resume_continue() -> void:
+	if _screen_name != SCREEN_RESUME or not bool(_resume_result.get("ok", false)):
+		return
+	var result: Dictionary = _resume_result
+	_clear_screens()
+	_last_loot = {}
+	_last_badge = {}
+	_encounter_id = ""
+	_fight_room_type = ""
+	_evolution_summary = {}
+	_team_evolution_rows = []
+	_resume_result = {}
+	var extras: Dictionary = result["extras"]
+	var rngs: Array[RandomNumberGenerator] = _rng_list()
+	for i: int in RNG_NAMES.size():
+		SaveGame.rng_apply(rngs[i], (extras["rngs"] as Dictionary)[RNG_NAMES[i]])
+	_cli_seed = int(String(extras.get("cli_seed", "0")))
+	_last_league_heal = int(extras.get("last_league_heal", -1))
+	_run = result["run"]
+	if String(extras["screen"]) == SCREEN_LEAGUE:
+		_show_league_screen()
+	else:
+		_show_map()
+
+
+## "Nouvelle partie" on the resume screen: the save (or its unreadable remains) is deleted, then the starter choice.
+func resume_new_game() -> void:
+	if _screen_name != SCREEN_RESUME:
+		return
+	SaveGame.delete(_save_path)
+	start_new_run(_cli_seed)
+
+
+## Launch / relaunch: a valid save -> resume screen; an unreadable one -> the same screen with the reason (the file is kept
+## as .bak); none -> the starter choice.
+func _show_title() -> void:
+	var result: Dictionary = SaveGame.load_run(_save_path, _data)
+	if bool(result.get("missing", false)):
+		start_new_run(_cli_seed)
+		return
+	if bool(result["ok"]):
+		var reason: String = _check_extras(result["run"], result["extras"])
+		if not reason.is_empty():
+			result = SaveGame._fail(reason)
+	_clear_screens()
+	_resume_result = result
+	_resume_screen = ResumeScreen.new()
+	_resume_screen.continue_requested.connect(resume_continue)
+	_resume_screen.new_game_requested.connect(resume_new_game)
+	_set_screen(_resume_screen, SCREEN_RESUME)
+	if bool(result["ok"]):
+		_resume_screen.setup_valid(_data, result["run"], String(result["saved_at"]))
+	else:
+		SaveGame.quarantine(_save_path)
+		_resume_screen.setup_error(String(result["error"]))
+
+
+## Main's part of the save must be complete and consistent with the run: "" = fine, else the French reason.
+func _check_extras(run: RunState, extras: Dictionary) -> String:
+	var screen: String = String(extras.get("screen", ""))
+	if screen != SCREEN_MAP and screen != SCREEN_LEAGUE:
+		return "écran de reprise inconnu"
+	if screen == SCREEN_MAP and run.act == null:
+		return "carte de zone absente"
+	if screen == SCREEN_LEAGUE and not run.is_in_league():
+		return "étape de ligue absente"
+	var rngs: Variant = extras.get("rngs")
+	if not (rngs is Dictionary):
+		return "états aléatoires absents"
+	var probe := RandomNumberGenerator.new()
+	for n: String in RNG_NAMES:
+		if not SaveGame.rng_apply(probe, (rngs as Dictionary).get(n)):
+			return "état aléatoire invalide : %s" % n
+	return ""
+
+
+## Writes the autosave if enabled (SAFE points only: called when the map / league screen is shown). True if written.
+func _autosave_now() -> bool:
+	if not _autosave or _run == null or _run.is_defeated():
+		return false
+	var rngs: Dictionary = {}
+	var list: Array[RandomNumberGenerator] = _rng_list()
+	for i: int in RNG_NAMES.size():
+		rngs[RNG_NAMES[i]] = SaveGame.rng_to_dict(list[i])
+	var extras: Dictionary = {"screen": SCREEN_LEAGUE if _screen_name == SCREEN_LEAGUE else SCREEN_MAP,
+			"last_league_heal": _last_league_heal, "cli_seed": str(_cli_seed), "rngs": rngs}
+	return SaveGame.write(_save_path, SaveGame.to_dict(_run, extras))
+
+
+func _delete_save() -> void:
+	if _autosave:
+		SaveGame.delete(_save_path)
+
+
 # --- Flow ----------------------------------------------------------------------------------------
 
 func _show_map() -> void:
@@ -909,6 +1073,7 @@ func _show_map() -> void:
 	_map_screen.deck_requested.connect(open_deck)
 	_set_screen(_map_screen, SCREEN_MAP)
 	_map_screen.setup(_data, _run)
+	_autosave_now()
 
 
 func _on_node_chosen(node_id: String) -> void:
@@ -1038,6 +1203,7 @@ func _next_zone_or_victory() -> void:
 ## The battle is lost: HP 0 is written to the run now (the HUD / summary read it); the overlay's "Continuer"
 ## then shows the defeat summary (_show_defeat).
 func _on_battle_lost() -> void:
+	_delete_save()  # the run is lost: no way back to a safe point by quitting
 	_run.record_battle_result(_battle_screen.get_battle().player)
 	_refresh_hud()
 
@@ -1093,6 +1259,7 @@ func _show_league_screen() -> void:
 	screen.finished.connect(league_continue)
 	_set_screen(screen, SCREEN_LEAGUE)
 	screen.setup(_data, _run, _last_league_heal)
+	_autosave_now()
 
 
 func _show_victory() -> void:
@@ -1107,6 +1274,7 @@ func _show_defeat() -> void:
 
 
 func _show_run_end(victory: bool) -> void:
+	_delete_save()  # victory or defeat ends the run for good
 	_clear_screens()
 	_end_screen = RunEndScreen.new()
 	_end_screen.new_run_requested.connect(_on_new_run_requested)
@@ -1261,6 +1429,7 @@ func _clear_screens() -> void:
 	_mart_screen = null
 	_evolution_screen = null
 	_end_screen = null
+	_resume_screen = null
 	_badge_screen = null
 	_league_screen = null
 	_evolution_offers = []

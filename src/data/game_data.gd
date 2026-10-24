@@ -181,6 +181,19 @@ func get_card(card_id: String) -> CardData:
 	return _cards[card_id]
 
 
+## Story 015 (save/resume): existence checks that do not push_error (get_card / get_item / get_potion do).
+func has_card(card_id: String) -> bool:
+	return _cards.has(card_id)
+
+
+func has_item(item_id: String) -> bool:
+	return _items.has(item_id)
+
+
+func has_potion(potion_id: String) -> bool:
+	return _potions.has(potion_id)
+
+
 ## Builds a fresh player Combatant, or null if the id is unknown. current_hp < 0 = full HP.
 func create_player(player_id: String, current_hp: int = -1) -> Combatant:
 	if not _players.has(player_id):
