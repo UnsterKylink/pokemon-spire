@@ -46,8 +46,8 @@
 			"min_floor": 3,
 			"encounter_pool": "elite",
 			"modifiers": {
-				"hp_multiplier": 1.4,
-				"strength_bonus": 1
+				"hp_multiplier": 1.2,
+				"strength_bonus": 0
 			},
 			"reward": {
 				"rarity_weights": {
@@ -61,7 +61,7 @@
 			"name": "Centre Pokémon",
 			"weight": 10,
 			"min_floor": 4,
-			"heal_percent": 30
+			"heal_percent": 50
 		},
 		"mart": {
 			"name": "Poké Mart",

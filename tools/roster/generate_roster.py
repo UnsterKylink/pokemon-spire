@@ -39,15 +39,15 @@ TYPE_IDS = {1: "normal", 2: "fighting", 3: "flying", 4: "poison", 5: "ground", 6
 # ---------------------------------------------------------------- HP / behaviour formulas (constants)
 # tier = stage for evolving lines; a lone species (stage 1 by definition) uses BST bands to get a tier.
 LONE_TIER_BST = [(400, 1), (480, 2), (10 ** 9, 3)]           # (bst <=, tier)
-HP_RANGE = {1: (28, 50), 2: (50, 80), 3: (80, 140)}           # max_hp range per tier
+HP_RANGE = {1: (28, 48), 2: (42, 66), 3: (55, 85)}           # max_hp range per tier
 HP_STAT_RANGE = (30, 150)                                     # base HP stat normalised on this span
 BST_RANGE = {1: (180, 400), 2: (300, 520), 3: (400, 680)}     # BST normalised per tier
 HP_MIX = 0.5                                                  # weight of the HP stat vs BST in the HP score
 ATK_STAT_RANGE = (30, 150)                                    # max(atk, spa)
 DEF_STAT_RANGE = (30, 150)                                    # mean(def, spd)
 SPD_STAT_RANGE = (30, 150)
-ATTACK_RANGE = {1: (5, 9), 2: (8, 14), 3: (12, 22)}
-BLOCK_RANGE = {1: (4, 7), 2: (6, 11), 3: (9, 16)}
+ATTACK_RANGE = {1: (4, 8), 2: (6, 11), 3: (8, 13)}
+BLOCK_RANGE = {1: (4, 7), 2: (5, 9), 3: (7, 11)}
 BUFF_VALUE = {1: 1, 2: 1, 3: 2}
 HEAVY_FACTOR = 1.4                                            # heavy attack = attack * this
 OFFENSE_MARGIN = 0.15                                         # atk_n - def_n above -> glass cannon
