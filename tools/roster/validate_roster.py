@@ -17,8 +17,10 @@ def main():
     cards = load("cards.json")["cards"]
     statuses = set(load("statuses.json")["statuses"])
     poke = load("pokemon.json")
-    taken, _ = G.existing_slugs()
-    taken |= set(poke["enemies"]) | set(poke.get("player", {}))
+    # Only true duplicates are errors: a pokemon.json enemy/player with the same id. Evolution targets in
+    # pokemon.json `evolutions` (e.g. stage-3 forms added in story 014) may legitimately be roster species.
+    taken = set(poke["enemies"]) | set(poke.get("player", {}))
+    known_slugs, _ = G.existing_slugs()  # incl. sprite slugs (e.g. "charmander" for the player "salameche")
     if not isinstance(roster.get("_doc"), str) or not roster["_doc"]: bad("missing _doc")
     r = roster.get("pokemon", {})
     keys = {"name", "dex", "generation", "types", "stage", "line_id", "evolves_to", "tier", "bst", "max_hp",
@@ -36,7 +38,7 @@ def main():
         if not (1 <= len(v["types"]) <= 2) or len(set(v["types"])) != len(v["types"]) or not set(v["types"]) <= types:
             bad(w + "types %s" % v["types"])
         if v["stage"] not in (1, 2, 3) or v["tier"] not in (1, 2, 3): bad(w + "stage/tier")
-        if v["line_id"] not in r and v["line_id"] not in taken: bad(w + "line_id unknown %s" % v["line_id"])
+        if v["line_id"] not in r and v["line_id"] not in taken and v["line_id"] not in known_slugs: bad(w + "line_id unknown %s" % v["line_id"])
         if v["evolves_to"] is not None and v["evolves_to"] not in r and v["evolves_to"] not in taken:
             bad(w + "evolves_to unknown %s" % v["evolves_to"])
         if v["stage"] == 1 and v["line_id"] != pid and v["line_id"] not in taken: bad(w + "stage 1 line_id")
