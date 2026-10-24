@@ -13,8 +13,10 @@ const VERSION: int = 1
 const DEFAULT_PATH: String = "user://savegame.json"
 const BACKUP_SUFFIX: String = ".bak"
 const TEMP_SUFFIX: String = ".tmp"
-## Dictionary keys whose whole-number values must stay floats after a JSON round trip.
-const FLOAT_KEYS: Array[String] = ["hp_multiplier", "wild_type_share", "elite_type_share"]
+## Free-form data trees (copied from the data files) stored with their floats TAGGED ({"#f": value}): a JSON number comes
+## back as a float, so untagged whole numbers are restored as ints and tagged ones as floats -- an exact round trip.
+const TREE_FIELDS: Array[String] = ["evolution_history", "team_progress", "zones", "badges", "league"]
+const FLOAT_TAG: String = "#f"
 const INT_FIELDS: Array[String] = ["max_hp", "hp", "energy_per_turn", "hand_size", "bonus_hand_size", "bonus_energy",
 		"battles_won", "enemies_defeated", "evolution_stage", "money", "card_removals", "zone_index", "floors_done",
 		"league_stage", "league_fights_won"]
@@ -59,11 +61,11 @@ static func to_dict(run: RunState, extras: Dictionary = {}) -> Dictionary:
 			"deck": deck, "battles_won": run.battles_won, "enemies_defeated": run.enemies_defeated,
 			"base_pokemon_id": run.base_pokemon_id, "starter_pokemon_id": run.starter_pokemon_id,
 			"evolution_applied": run.evolution_applied, "evolved": run.evolved, "evolution_stage": run.evolution_stage,
-			"evolution_history": run.evolution_history.duplicate(true), "team_progress": run.team_progress.duplicate(true),
+			"evolution_history": _enc(run.evolution_history), "team_progress": _enc(run.team_progress),
 			"evolved_badges": run._evolved_badges.duplicate(), "money": run.money, "items": items, "potions": potions,
-			"card_removals": run.card_removals, "zones": run.zones.duplicate(true), "zone_index": run.zone_index,
-			"badges": badges, "base_map_seed": str(run._base_map_seed), "floors_done": run._floors_done,
-			"league": run.league.duplicate(true), "league_stage": run.league_stage,
+			"card_removals": run.card_removals, "zones": _enc(run.zones), "zone_index": run.zone_index,
+			"badges": _enc(badges), "base_map_seed": str(run._base_map_seed), "floors_done": run._floors_done,
+			"league": _enc(run.league), "league_stage": run.league_stage,
 			"league_fights_won": run.league_fights_won, "final_boss_defeated": run.final_boss_defeated, "act": act}
 	return {"version": VERSION, "saved_at": Time.get_datetime_string_from_system(false, true),
 			"saved_unix": int(Time.get_unix_time_from_system()), "run": run_dict, "extras": extras.duplicate(true)}
@@ -83,7 +85,10 @@ static func from_dict(data: Variant, game: GameData) -> Dictionary:
 		return _fail("données du jeu indisponibles")
 	if not (d.get("run") is Dictionary):
 		return _fail("section « run » manquante")
-	var rd: Dictionary = d["run"]
+	var rd: Dictionary = (d["run"] as Dictionary).duplicate()
+	for k: String in TREE_FIELDS:
+		if rd.has(k):
+			rd[k] = _dec(rd[k])
 	var reason: String = _check_fields(rd)
 	if reason.is_empty():
 		reason = _check_references(rd, game)
@@ -270,8 +275,8 @@ static func _build_run(rd: Dictionary, game: GameData) -> RunState:
 	r.evolution_applied = bool(rd["evolution_applied"])
 	r.evolved = bool(rd["evolved"])
 	r.evolution_stage = int(rd["evolution_stage"])
-	r.evolution_history.assign(_norm(rd["evolution_history"]))
-	r.team_progress = _norm(rd["team_progress"])
+	r.evolution_history.assign(rd["evolution_history"])
+	r.team_progress = rd["team_progress"]
 	for b: Variant in rd["evolved_badges"]:
 		r._evolved_badges.append(int(b))
 	r.money = int(rd["money"])
@@ -280,15 +285,15 @@ static func _build_run(rd: Dictionary, game: GameData) -> RunState:
 	for id: String in rd["potions"]:
 		r.potions.append(game.get_potion(id))
 	r.card_removals = int(rd["card_removals"])
-	r.zones.assign(_norm(rd["zones"]))
+	r.zones.assign(rd["zones"])
 	r.zone_index = int(rd["zone_index"])
-	var badges: Array = _norm(rd["badges"])
+	var badges: Array = (rd["badges"] as Array).duplicate(true)
 	for b: Dictionary in badges:
 		b["color"] = game.get_type_color(String(b["type_id"]))
 	r.badges.assign(badges)
 	r._base_map_seed = int(String(rd["base_map_seed"]))
 	r._floors_done = int(rd["floors_done"])
-	r.league.assign(_norm(rd["league"]))
+	r.league.assign(rd["league"])
 	r.league_stage = int(rd["league_stage"])
 	r.league_fights_won = int(rd["league_fights_won"])
 	r.final_boss_defeated = bool(rd["final_boss_defeated"])
@@ -333,19 +338,39 @@ static func _build_act(a: Dictionary) -> ActProgress:
 	return p
 
 
-## JSON round trip restores whole numbers as floats: turns them back into ints (except FLOAT_KEYS), recursively.
-static func _norm(v: Variant, key: String = "") -> Variant:
+## Deep copy of a data tree with every float tagged {"#f": value} (see TREE_FIELDS).
+static func _enc(v: Variant) -> Variant:
 	if v is Dictionary:
 		var out: Dictionary = {}
 		for k: Variant in (v as Dictionary).keys():
-			out[k] = _norm(v[k], String(k))
+			out[k] = _enc(v[k])
 		return out
 	if v is Array:
 		var arr: Array = []
 		for e: Variant in (v as Array):
-			arr.append(_norm(e, key))
+			arr.append(_enc(e))
 		return arr
-	if v is float and not FLOAT_KEYS.has(key) and v == floorf(v) and absf(v) < 9.0e15:
+	if v is float:
+		return {FLOAT_TAG: v}
+	return v
+
+
+## Inverse of _enc after a JSON round trip: tagged values -> float, other whole numbers -> int (JSON parses all as float).
+static func _dec(v: Variant) -> Variant:
+	if v is Dictionary:
+		var dv: Dictionary = v
+		if dv.size() == 1 and dv.has(FLOAT_TAG) and _is_num(dv[FLOAT_TAG]):
+			return float(dv[FLOAT_TAG])
+		var out: Dictionary = {}
+		for k: Variant in dv.keys():
+			out[k] = _dec(dv[k])
+		return out
+	if v is Array:
+		var arr: Array = []
+		for e: Variant in (v as Array):
+			arr.append(_dec(e))
+		return arr
+	if v is float and v == floorf(v) and absf(v) < 9.0e15:
 		return int(v)
 	return v
 
@@ -407,7 +432,7 @@ static func read(path: String) -> Dictionary:
 		return {"ok": false, "missing": false, "data": null, "error": "fichier vide"}
 	var json := JSON.new()
 	if json.parse(text) != OK:
-		return {"ok": false, "missing": false, "data": null, "error": "JSON invalide (ligne %d)" % json.get_error_line()}
+		return {"ok": false, "missing": false, "data": null, "error": "JSON invalide (fichier tronqué ou corrompu)"}
 	return {"ok": true, "missing": false, "data": json.data, "error": ""}
 
 

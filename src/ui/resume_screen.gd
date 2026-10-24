@@ -42,6 +42,11 @@ var _new_button: Button
 var _sprite_row: HBoxContainer
 
 
+func _init() -> void:
+	name = "ResumeScreen"
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+
+
 func _ready() -> void:
 	_build_ui()
 

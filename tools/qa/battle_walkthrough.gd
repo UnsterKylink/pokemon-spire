@@ -19,6 +19,9 @@ extends SceneTree
 ## newly possible gym type, a roster starter's deck; see _diversity_shots; filter `story-013b`).
 ## Story 014 (in-run evolutions: starter stage 1->2 at badge 1 with its card choice, 2->3 at badge 4, a Pokémon
 ## without a next form, the team evolution summary, the deck afterwards; see _evolution_shots; filter `story-014`).
+## Story 015 (save / resume: resume screen of a zone-3 run, map after the resume, unreadable save, starter without a save,
+## starter after a defeat deleted the save; see _save_shots; filter `story-015`). Uses a scratch save file (SAVE_QA_PATH,
+## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
@@ -65,6 +68,10 @@ const ZONES_DEFEAT_ZONE: int = 3  # 1-based zone where the defeat run loses
 const LEAGUE_SEED: int = 2026
 const LEAGUE_HURT_HP: int = 60
 const LEAGUE_DEFEAT_STAGE: int = 1  # 0-based: the defeat run loses its 2nd league fight
+
+## Story 015: scratch save slot of the save shots (deleted with its .bak at the end).
+const SAVE_QA_PATH: String = "user://qa_story015_savegame.json"
+const SAVE_SEED: int = 2026
 
 var _main: Main
 var _out_dir: String = "user://qa"
@@ -903,7 +910,79 @@ func _diversity_shots() -> void:
 	_main.map_close_deck()
 
 
+func _act_text(run: RunState) -> String:
+	return JSON.stringify(SaveGame.to_dict(run)["run"]["act"])
+
+
+func _save_shots() -> void:
+	for p: String in [SAVE_QA_PATH, SAVE_QA_PATH + ".bak"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+	_main.qa_set_save_path(SAVE_QA_PATH)
+	_main.start_new_run(SAVE_SEED, "salameche")
+	for i: int in 2:  # badges 1 and 2 through the real gym flow (evolution after badge 1)
+		_main.qa_skip_to_gym()
+		_main.qa_win_gym()
+		_main.reward_skip()
+		_drain_team_evolution()
+		_main.badge_continue()
+		if _main.get_current_screen_name() == "evolution":
+			_main.evolution_continue()
+			_main.evolution_pick(0)
+			_main.evolution_continue()
+	for id: String in ZONES_ITEMS:
+		_main.qa_give_item(id)
+	for id: String in ZONES_POTIONS:
+		_main.qa_give_potion(id)
+	_main.qa_give_cards(6)
+	_main.qa_set_money(312)
+	var run: RunState = _main.get_run_state()
+	run.act.enter(run.act.reachable_ids()[0])  # one room done on the zone-3 map
+	_main.qa_save_now()
+	var before_act: String = _act_text(run)
+	var before_sum: Dictionary = run.get_summary()
+	print("015 saved: zone=%d badges=%d form=%s deck=%d items=%d potions=%d money=%d visited=%s has_save=%s" % [
+			run.zone_index + 1, run.badges.size(), run.starter_pokemon_id, run.deck.size(), run.items.size(),
+			run.potions.size(), run.money, run.act.visited, _main.qa_has_save()])
+	_main.qa_quit_to_title()
+	print("015 resume lines: ", _main.get_resume_screen().get_summary_lines())
+	await _shot("01-reprendre")
+	_main.resume_continue()
+	var after: RunState = _main.get_run_state()
+	print("015 after resume: screen=%s same_map=%s same_summary=%s reachable=%s" % [_main.get_current_screen_name(),
+			_act_text(after) == before_act, after.get_summary() == before_sum, _main.map_reachable_ids()])
+	await _shot("02-apres-reprise")
+	var f := FileAccess.open(SAVE_QA_PATH, FileAccess.WRITE)
+	f.store_string("{\"version\": 1, \"run\": {\"player_id\": ")  # truncated file
+	f.close()
+	_main.qa_quit_to_title()
+	print("015 unreadable: ", _main.get_resume_screen().get_message().replace("\n", " | "), " bak=",
+			FileAccess.file_exists(SAVE_QA_PATH + ".bak"))
+	await _shot("03-sauvegarde-illisible")
+	_main.resume_new_game()
+	_main.qa_quit_to_title()  # relaunch without any save
+	print("015 no save: screen=%s has_save=%s" % [_main.get_current_screen_name(), _main.qa_has_save()])
+	await _shot("04-pas-de-sauvegarde-depart")
+	_main.starter_choose(0)
+	print("015 new run saved at the map: ", _main.qa_has_save())
+	_main.map_choose(_main.map_reachable_ids()[0])
+	_main.qa_lose_battle()
+	print("015 lost battle: has_save=%s" % _main.qa_has_save())
+	_main.battle_defeat_continue()
+	_main.defeat_new_run()
+	_main.qa_quit_to_title()
+	print("015 after defeat relaunch: screen=%s has_save=%s" % [_main.get_current_screen_name(), _main.qa_has_save()])
+	await _shot("05-apres-defaite")
+	for p: String in [SAVE_QA_PATH, SAVE_QA_PATH + ".bak"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+
+
 func _run() -> void:
+	if _filter == "story-015":
+		await _save_shots()
+		quit(0)
+		return
 	if _filter == "story-014":
 		await _evolution_shots()
 		quit(0)
