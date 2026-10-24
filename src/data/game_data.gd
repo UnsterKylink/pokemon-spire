@@ -353,8 +353,18 @@ func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGener
 		return ""
 	var entries: Array = pools[pool_id]
 	if not zone.is_empty() and room_type in ZONE_TYPED_ROOMS:
-		if rng.randf() < float(zone.get(room_type + "_type_share", 0.0)):
-			entries = pools[String(zone[room_type + "_pool"])]
+		var typed: bool = rng.randf() < float(zone.get(room_type + "_type_share", 0.0))
+		# Story 013b: generated from the roster with the zone's roster share (always when the typed pool is missing).
+		var roster: Dictionary = zone.get("roster", {})
+		var fixed_typed_pool: String = String(zone.get(room_type + "_pool", ""))
+		var from_roster: bool = rng.randf() < float(roster.get(room_type + "_share", 0.0))
+		if typed and fixed_typed_pool.is_empty():
+			from_roster = true
+		if from_roster and not _roster_ids.is_empty():
+			var early: bool = pool_id != String(room.get("encounter_pool", ""))
+			return _roster_encounter(room_type, zone, typed, early, rng)
+		if typed and not fixed_typed_pool.is_empty():
+			entries = pools[fixed_typed_pool]
 		else:
 			entries = entries.duplicate()
 			for extra: String in zone.get("unlocked_" + room_type + "_pools", []):
@@ -368,6 +378,82 @@ func pick_encounter(room_type: String, floor_number: int, rng: RandomNumberGener
 			return String(entry["encounter"])
 		roll -= float(entry["weight"])
 	return String((entries[entries.size() - 1] as Dictionary)["encounter"])
+
+
+## Story 013b: generated wild / elite encounter "roster:<id>,..." for `zone`: size from the zone's
+## wild_size_weights / elite_size_weights (roster_encounters.early_size_weights on the wild_early floors), each
+## Pokémon's tier from tier_weights (+ elite_tier_bonus for elites, capped at ROSTER_MAX_TIER), all of the zone's type
+## when `typed`, no duplicate species. Deterministic for a seeded rng.
+func _roster_encounter(room_type: String, zone: Dictionary, typed: bool, early: bool, rng: RandomNumberGenerator) -> String:
+	var roster: Dictionary = zone.get("roster", {})
+	var cfg: Dictionary = _zones_cfg.get("roster_encounters", {})
+	var size_w: Dictionary = roster.get(room_type + "_size_weights", {"1": 1})
+	if early and room_type == "wild" and cfg.has("early_size_weights"):
+		size_w = cfg["early_size_weights"]
+	var size: int = int(_weighted_key(size_w, rng))
+	var bonus: int = int(cfg.get("elite_tier_bonus", 0)) if room_type == "elite" else 0
+	var tier_w: Dictionary = {}
+	for k: String in (roster.get("tier_weights", {"1": 1}) as Dictionary).keys():
+		var t: String = str(mini(ROSTER_MAX_TIER, int(k) + bonus))
+		tier_w[t] = float(tier_w.get(t, 0.0)) + float(roster["tier_weights"][k])
+	var type_id: String = String(zone.get("type_id", "")) if typed else ""
+	var ids: Array[String] = []
+	for i: int in size:
+		var pid: String = _draw_roster_pokemon(type_id, int(_weighted_key(tier_w, rng)), ids, rng)
+		if pid.is_empty():
+			break
+		ids.append(pid)
+	return ROSTER_ENCOUNTER_PREFIX + ",".join(ids)
+
+
+## One wild_ok roster Pokémon of `type_id` ("" = any) and `tier` (nearest tier with a free candidate if none), not in
+## `exclude`; "" if there is none at all.
+func _draw_roster_pokemon(type_id: String, tier: int, exclude: Array[String], rng: RandomNumberGenerator) -> String:
+	var by_tier: Dictionary = _roster_wild.get(type_id, {})
+	for dist: int in range(0, ROSTER_MAX_TIER):
+		for t: int in [tier - dist, tier + dist]:
+			var free: Array[String] = []
+			for pid: String in by_tier.get(t, []):
+				if not exclude.has(pid):
+					free.append(pid)
+			if not free.is_empty():
+				return free[rng.randi_range(0, free.size() - 1)]
+	return ""
+
+
+## Weighted pick of a key of `weights` (key -> number), keys in sorted order (deterministic).
+func _weighted_key(weights: Dictionary, rng: RandomNumberGenerator) -> String:
+	var keys: Array = weights.keys()
+	keys.sort()
+	var total: float = 0.0
+	for k: String in keys:
+		total += float(weights[k])
+	var roll: float = rng.randf() * total
+	for k: String in keys:
+		if roll < float(weights[k]):
+			return k
+		roll -= float(weights[k])
+	return String(keys[keys.size() - 1])
+
+
+## Number of wild_ok roster Pokémon having `type_id` ("" = any), all tiers.
+func get_roster_wild_count(type_id: String = "") -> int:
+	var n: int = 0
+	for t: int in (_roster_wild.get(type_id, {}) as Dictionary).keys():
+		n += (_roster_wild[type_id][t] as Array).size()
+	return n
+
+
+## Roster entry (copy) of a roster id ({} if not a roster Pokémon): tier, generation, stage, roles, evolves_to...
+func get_roster_entry(pokemon_id: String) -> Dictionary:
+	return (_roster_ids.get(pokemon_id, {}) as Dictionary).duplicate(true)
+
+
+## Ids of every roster Pokémon (file order).
+func get_roster_ids() -> Array[String]:
+	var ids: Array[String] = []
+	ids.assign(_roster_ids.keys())
+	return ids
 
 
 ## Ids of the events that may appear in event rooms.
@@ -420,15 +506,29 @@ func draw_zones(rng: RandomNumberGenerator) -> Array[Dictionary]:
 		var tmp: String = pool[i]
 		pool[i] = pool[j]
 		pool[j] = tmp
+	pool = _gym_types_leaving_league(pool, count)
+	if pool.size() < count:
+		push_error("GameData: the gym type pool cannot leave enough Conseil 4 types free")
+		return zones
 	var gyms: Dictionary = _zones_cfg["gym_types"]
 	var tiers: Array = _zones_cfg["tiers"]
 	for i: int in count:
 		var type_id: String = pool[i]
 		var g: Dictionary = gyms[type_id]
 		var tier: Dictionary = tiers[i]
+		var roster: Dictionary = (tier.get("roster", {}) as Dictionary).duplicate(true)
+		var gym_encounter: String = String(g.get("encounter", ""))
+		if gym_encounter.is_empty():  # story 013b: auto team of the type from the roster, drawn now (fixed for the run)
+			var team: Array[String] = []
+			for t_v: Variant in roster.get("gym_team_tiers", []):
+				var pid: String = _draw_roster_pokemon(type_id, int(t_v), team, rng)
+				if not pid.is_empty():
+					team.append(pid)
+			gym_encounter = ROSTER_ENCOUNTER_PREFIX + ",".join(team)
 		var zone: Dictionary = {"index": i, "number": i + 1, "type_id": type_id, "type_name": get_type_name(type_id),
-				"leader": String(g["leader"]), "gym_encounter": String(g["encounter"]), "badge_id": String(g["badge_id"]),
-				"badge_name": String(g["badge_name"]), "wild_pool": String(g["wild_pool"]), "elite_pool": String(g["elite_pool"]),
+				"leader": String(g["leader"]), "gym_encounter": gym_encounter, "badge_id": String(g["badge_id"]),
+				"badge_name": String(g["badge_name"]), "wild_pool": String(g.get("wild_pool", "")),
+				"elite_pool": String(g.get("elite_pool", "")), "roster": roster,
 				"gym_modifiers": _modifiers_of(tier["gym_modifiers"]), "modifiers": _modifiers_of(tier["modifiers"]),
 				"wild_type_share": float(tier["wild_type_share"]), "elite_type_share": float(tier["elite_type_share"]),
 				"early_pool": bool(tier["early_pool"]), "unlocked_wild_pools": [], "unlocked_elite_pools": []}
@@ -442,6 +542,25 @@ func draw_zones(rng: RandomNumberGenerator) -> Array[Dictionary]:
 					(zone["unlocked_elite_pools"] as Array).append(pool_id)
 		zones.append(zone)
 	return zones
+
+
+## Story 013b: the first `count` types of the shuffled `pool` such that at least member_count Conseil 4 types
+## (league.json member_type_pool) stay free; a league type that would break that is skipped (gym-then-league draw).
+## Without a league = the first `count` types. Fewer than `count` if impossible.
+func _gym_types_leaving_league(pool: Array[String], count: int) -> Array[String]:
+	var league: Array = _league_cfg.get("member_type_pool", [])
+	var free_league: int = league.size()
+	var needed: int = int(_league_cfg.get("member_count", 0))
+	var result: Array[String] = []
+	for t: String in pool:
+		if result.size() >= count:
+			break
+		if league.has(t):
+			if free_league - 1 < needed:
+				continue
+			free_league -= 1
+		result.append(t)
+	return result
 
 
 func _modifiers_of(m: Dictionary) -> Dictionary:
@@ -544,12 +663,18 @@ func _load_zones(root: Dictionary) -> bool:
 				push_error("GameData: %s: badge_id '%s' is already used" % [label, g["badge_id"]])
 				ok = false
 			badge_ids[g["badge_id"]] = true
-		for key: String in ["wild_pool", "elite_pool"]:
-			if not (g.get(key, null) is String) or not pools.has(g[key]):
+		for key: String in ["wild_pool", "elite_pool"]:  # story 013b: optional (missing = typed fights from the roster)
+			if g.has(key) and (not (g[key] is String) or not pools.has(g[key])):
 				push_error("GameData: %s: '%s' must name an encounter pool of the act file" % [label, key])
 				ok = false
+		if (not g.has("encounter") or not g.has("wild_pool") or not g.has("elite_pool")) \
+				and get_roster_wild_count(type_id) < maxi(team_size, Battle.MAX_ENEMIES):
+			push_error("GameData: %s has no fixed team / pools but fewer than %d roster Pokémon of that type" % [label, maxi(team_size, Battle.MAX_ENEMIES)])
+			ok = false
 		var team_v: Variant = _encounters.get(g.get("encounter", null), null) if g.get("encounter", null) is String else null
-		if not (team_v is Array) or (team_v as Array).size() != team_size:
+		if not g.has("encounter"):
+			pass  # auto team drawn by draw_zones
+		elif not (team_v is Array) or (team_v as Array).size() != team_size:
 			push_error("GameData: %s: 'encounter' must name an encounter of exactly %d Pokémon" % [label, team_size])
 			ok = false
 		else:
@@ -593,6 +718,8 @@ func _load_zones(root: Dictionary) -> bool:
 		if not (tier.get("early_pool", null) is bool):
 			push_error("GameData: %s.early_pool must be a boolean" % label)
 			tier_ok = false
+		if tier.has("roster") or root.has("roster_encounters"):
+			tier_ok = _check_tier_roster(label, tier.get("roster", null), team_size) and tier_ok
 		if tier_ok:
 			var gm: Dictionary = tier["gym_modifiers"]
 			if float(gm["hp_multiplier"]) < prev_hp or int(gm["strength_bonus"]) < prev_str:
@@ -601,6 +728,11 @@ func _load_zones(root: Dictionary) -> bool:
 			prev_hp = float(gm["hp_multiplier"])
 			prev_str = int(gm["strength_bonus"])
 		ok = ok and tier_ok
+	var re_v: Variant = root.get("roster_encounters", {})
+	if not (re_v is Dictionary) or not (_is_number((re_v as Dictionary).get("elite_tier_bonus", 0)) and (re_v as Dictionary).get("elite_tier_bonus", 0) >= 0) \
+			or ((re_v as Dictionary).has("early_size_weights") and not _check_size_weights((re_v as Dictionary)["early_size_weights"])):
+		push_error("GameData: zones 'roster_encounters' needs elite_tier_bonus >= 0 and valid early_size_weights")
+		ok = false
 	# Per-zone map overrides: the merged config must still describe a valid map.
 	var overrides_v: Variant = root.get("zone_overrides", {})
 	if not (overrides_v is Dictionary):
@@ -687,6 +819,52 @@ func _load_zones(root: Dictionary) -> bool:
 	if ok:
 		_zones_cfg = root
 	return ok
+
+
+## Story 013b: validates a tier's roster block (shares 0..1, tier / size weights, gym_team_tiers of gym_team_size tiers).
+func _check_tier_roster(label: String, r_v: Variant, team_size: int) -> bool:
+	if not (r_v is Dictionary):
+		push_error("GameData: %s needs a 'roster' object" % label)
+		return false
+	var r: Dictionary = r_v
+	var ok: bool = true
+	for key: String in ["wild_share", "elite_share"]:
+		if not (_is_number(r.get(key, null)) and r[key] >= 0 and r[key] <= 1):
+			push_error("GameData: %s.roster.%s must be between 0 and 1" % [label, key])
+			ok = false
+	if not _check_weights_by_int_key(r.get("tier_weights", null), 1, ROSTER_MAX_TIER):
+		push_error("GameData: %s.roster.tier_weights must map tiers '1'..'%d' to weights >= 0 (sum > 0)" % [label, ROSTER_MAX_TIER])
+		ok = false
+	for key: String in ["wild_size_weights", "elite_size_weights"]:
+		if not _check_size_weights(r.get(key, null)):
+			push_error("GameData: %s.roster.%s must map sizes %d..%d to weights >= 0 (sum > 0)" % [label, key, Battle.MIN_ENEMIES, Battle.MAX_ENEMIES])
+			ok = false
+	var gt: Variant = r.get("gym_team_tiers", null)
+	if not (gt is Array) or (gt as Array).size() != team_size:
+		push_error("GameData: %s.roster.gym_team_tiers must hold %d tiers" % [label, team_size])
+		ok = false
+	else:
+		for t: Variant in (gt as Array):
+			if not _is_positive_int(t) or int(t) > ROSTER_MAX_TIER:
+				push_error("GameData: %s.roster.gym_team_tiers has an invalid tier '%s'" % [label, str(t)])
+				ok = false
+	return ok
+
+
+func _check_size_weights(w: Variant) -> bool:
+	return _check_weights_by_int_key(w, Battle.MIN_ENEMIES, Battle.MAX_ENEMIES)
+
+
+func _check_weights_by_int_key(w_v: Variant, lo: int, hi: int) -> bool:
+	if not (w_v is Dictionary) or (w_v as Dictionary).is_empty():
+		return false
+	var total: float = 0.0
+	for k: Variant in (w_v as Dictionary).keys():
+		var v: Variant = (w_v as Dictionary)[k]
+		if not (k is String) or not String(k).is_valid_int() or int(k) < lo or int(k) > hi or not _is_number(v) or v < 0:
+			return false
+		total += float(v)
+	return total > 0
 
 
 # --- Conseil 4, Maître, boss final (story 013) -------------------------------------------------------
@@ -945,6 +1123,17 @@ func _load_league(root: Dictionary) -> bool:
 			if int(bp["hp"]) <= int(champ_power["hp"]) or int(bp["max_attack"]) <= int(champ_power["max_attack"]):
 				push_error("GameData: final_boss (%s) must be stronger than the champion's team (%s): HP and strongest attack" % [str(bp), str(champ_power)])
 				ok = false
+	if seen.size() >= count and not _zones_cfg.is_empty():  # story 013b: 8 gyms + member_count free league types
+		var non_league: int = 0
+		var league_in_gyms: int = 0
+		for gt: String in get_gym_type_ids():
+			if seen.has(gt):
+				league_in_gyms += 1
+			else:
+				non_league += 1
+		if non_league + mini(league_in_gyms, seen.size() - count) < get_zone_count():
+			push_error("GameData: the gym type pool cannot give %d gyms while leaving %d Conseil 4 types free" % [get_zone_count(), count])
+			ok = false
 	for pid: String in _starter_candidates:
 		if is_boss_pokemon(pid):
 			push_error("GameData: boss Pokémon '%s' cannot be a starter candidate" % pid)
@@ -1221,32 +1410,50 @@ func build_starter_deck(pokemon_id: String) -> Array[CardData]:
 
 ## `count` starter candidates with pairwise DIFFERENT primary types, drawn with the injected rng
 ## (deterministic for a seeded rng). Fewer (push_error) if there are not enough distinct types.
+## Story 013b: each slot comes from the roster candidates (roles.candidate_start) with probability
+## pokemon.json starter_choice.roster_share, else from starter_candidates; a pool with no free type left yields to the other.
 func draw_starter_choices(rng: RandomNumberGenerator, count: int = 3) -> Array[String]:
-	var pool: Array[String] = _starter_candidates.duplicate()
-	for i: int in range(pool.size() - 1, 0, -1):  # Fisher-Yates
-		var j: int = rng.randi_range(0, i)
-		var tmp: String = pool[i]
-		pool[i] = pool[j]
-		pool[j] = tmp
+	var classic: Array[String] = _starter_candidates.duplicate()
+	var roster: Array[String] = _roster_candidates.duplicate()
+	_shuffle(classic, rng)
+	_shuffle(roster, rng)
 	var result: Array[String] = []
 	var used_types: Dictionary = {}
-	for pid: String in pool:
-		var t: String = get_primary_type(pid)
-		if used_types.has(t):
-			continue
-		used_types[t] = true
-		result.append(pid)
-		if result.size() >= count:
+	while result.size() < count:
+		var use_roster: bool = not roster.is_empty() and rng.randf() < _starter_roster_share
+		var pid: String = _next_starter(roster if use_roster else classic, used_types)
+		if pid.is_empty():
+			pid = _next_starter(classic if use_roster else roster, used_types)
+		if pid.is_empty():
 			break
+		used_types[get_primary_type(pid)] = true
+		result.append(pid)
 	if result.size() < count:
 		push_error("GameData: only %d distinct starter types available, %d requested" % [result.size(), count])
 	return result
 
 
-## Roster Pokémon (players + enemies) whose types include `type_id`, in file order.
+## Pops (from the front of `pool`) the first candidate whose primary type is not in `used_types`; "" if none.
+func _next_starter(pool: Array[String], used_types: Dictionary) -> String:
+	while not pool.is_empty():
+		var pid: String = pool.pop_front()
+		if not used_types.has(get_primary_type(pid)):
+			return pid
+	return ""
+
+
+## Roster candidates proposable at the start (roster.json roles.candidate_start, story 013b), file order.
+func get_roster_starter_candidates() -> Array[String]:
+	return _roster_candidates.duplicate()
+
+
+## Pokémon (players + pokemon.json enemies + roster.json entries with roles.carrier_ok, story 013b) whose types include
+## `type_id`, in file order. The final boss (boss: true) never carries a card.
 func get_carriers_for_type(type_id: String) -> Array[String]:
 	if _carriers_by_type.is_empty():
 		for pid: String in get_pokemon_ids():
+			if is_boss_pokemon(pid) or (_roster_ids.has(pid) and not bool(((_roster_ids[pid] as Dictionary).get("roles", {}) as Dictionary).get("carrier_ok", false))):
+				continue
 			for t: String in (get_pokemon_info(pid)["types"] as Array):
 				if not _carriers_by_type.has(t):
 					_carriers_by_type[t] = [] as Array[String]
@@ -1312,6 +1519,21 @@ func _load_starters(pokemon_root: Dictionary) -> bool:
 			push_error("GameData: starter candidate '%s' has primary type '%s' without starter_cards_by_type entry" % [pid, primary])
 			ok = false
 		_starter_candidates.append(pid)
+	var choice_v: Variant = pokemon_root.get("starter_choice", {})
+	var share_v: Variant = (choice_v as Dictionary).get("roster_share", 0.0) if choice_v is Dictionary else null
+	if not (_is_number(share_v) and share_v >= 0 and share_v <= 1):
+		push_error("GameData: pokemon file 'starter_choice.roster_share' must be between 0 and 1")
+		ok = false
+	else:
+		_starter_roster_share = float(share_v)
+	for pid: String in _roster_ids.keys():  # story 013b: roster candidates whose primary type has starter cards
+		var entry: Dictionary = _roster_ids[pid]
+		if bool((entry.get("roles", {}) as Dictionary).get("candidate_start", false)) and not is_boss_pokemon(pid):
+			if by_type.has(String((entry["types"] as Array)[0])):
+				_roster_candidates.append(pid)
+			else:
+				push_error("GameData: roster candidate '%s' has a primary type without starter_cards_by_type entry" % pid)
+				ok = false
 	if ok:
 		_starter_cards_by_type = by_type.duplicate(true)
 		_deck_template = tmpl.duplicate(true)
@@ -1535,11 +1757,17 @@ func _load_enemies(pokemon_root: Dictionary) -> bool:
 	_enemies = raw
 	var ok: bool = true
 	for eid: String in _enemies.keys():
-		var def_v: Variant = _enemies[eid]
+		ok = _check_enemy_def(eid, _enemies[eid]) and ok
+	return ok
+
+
+## Validates one enemy-format definition (pokemon.json enemies, roster.json entries). Reports every problem.
+func _check_enemy_def(eid: String, def_v: Variant) -> bool:
+	var ok: bool = true
+	if true:
 		if not (def_v is Dictionary):
 			push_error("GameData: enemy '%s' must be an object" % eid)
-			ok = false
-			continue
+			return false
 		var def: Dictionary = def_v
 		if not _check_types_ref("enemy '%s'" % eid, def.get("types", null)):
 			ok = false
@@ -1570,8 +1798,7 @@ func _load_enemies(pokemon_root: Dictionary) -> bool:
 		var actions_v: Variant = def.get("actions", null)
 		if not (actions_v is Array) or (actions_v as Array).is_empty():
 			push_error("GameData: enemy '%s' needs a non-empty 'actions' array" % eid)
-			ok = false
-			continue
+			return false
 		var actions: Array = actions_v
 		for i: int in actions.size():
 			var action_v: Variant = actions[i]
@@ -1586,6 +1813,109 @@ func _load_enemies(pokemon_root: Dictionary) -> bool:
 			if EnemyIntent.from_dict(action) == null:
 				push_error("GameData: enemy '%s' action #%d is invalid" % [eid, i])
 				ok = false
+	return ok
+
+
+## Story 013b: validates roster.json entries (enemy format + dex, generation, stage, tier 1..ROSTER_MAX_TIER, roles,
+## existing sprite, evolves_to known) and merges the valid ones into the enemies. A roster id that collides with a
+## pokemon.json id is rejected. Builds the wild pools by type / tier. Reports every problem, never crashes.
+func _load_roster(root: Dictionary) -> bool:
+	var raw: Variant = root.get("pokemon", null)
+	if not (raw is Dictionary):
+		push_error("GameData: roster file needs a 'pokemon' object")
+		return false
+	var ok: bool = true
+	var entries: Dictionary = raw
+	for rid: String in entries.keys():
+		var def_v: Variant = entries[rid]
+		var label: String = "roster '%s'" % rid
+		if _enemies.has(rid) or _players.has(rid):
+			push_error("GameData: %s collides with a pokemon.json id" % label)
+			ok = false
+			continue
+		if not _check_enemy_def(rid, def_v):
+			ok = false
+			continue
+		var def: Dictionary = def_v
+		var entry_ok: bool = true
+		for key: String in ["dex", "generation", "stage", "tier"]:
+			if not _is_positive_int(def.get(key, null)):
+				push_error("GameData: %s needs a positive integer '%s'" % [label, key])
+				entry_ok = false
+		if entry_ok and int(def["tier"]) > ROSTER_MAX_TIER:
+			push_error("GameData: %s tier must be 1..%d" % [label, ROSTER_MAX_TIER])
+			entry_ok = false
+		var roles_v: Variant = def.get("roles", null)
+		if not (roles_v is Dictionary):
+			push_error("GameData: %s needs a 'roles' object" % label)
+			entry_ok = false
+		else:
+			for key: String in ["wild_ok", "carrier_ok", "candidate_start"]:
+				if not ((roles_v as Dictionary).get(key, null) is bool):
+					push_error("GameData: %s roles.%s must be a boolean" % [label, key])
+					entry_ok = false
+		if not ResourceLoader.exists(String(def["sprite"])):
+			push_error("GameData: %s: sprite '%s' does not exist" % [label, String(def["sprite"])])
+			entry_ok = false
+		var evo: Variant = def.get("evolves_to", null)
+		if evo != null and not (evo is String and (entries.has(evo) or _enemies.has(evo) or _players.has(evo))):
+			push_error("GameData: %s evolves_to unknown pokemon '%s'" % [label, str(evo)])
+			entry_ok = false
+		if not entry_ok:
+			ok = false
+			continue
+		_enemies[rid] = def
+		_roster_ids[rid] = def
+		if bool(def["roles"]["wild_ok"]):
+			var tier: int = int(def["tier"])
+			for t: String in [""] + Array(def["types"]):
+				if not _roster_wild.has(t):
+					_roster_wild[t] = {}
+				if not (_roster_wild[t] as Dictionary).has(tier):
+					_roster_wild[t][tier] = [] as Array[String]
+				(_roster_wild[t][tier] as Array[String]).append(rid)
+	_carriers_by_type = {}  # rebuilt lazily with the roster
+	return ok
+
+
+## Story 013b: evolution entries (get_evolution format) for every roster Pokémon with an `evolves_to`, built from the
+## evolved form: name, types, sprite, teaches; max_hp_bonus = roster_evolution.hp_bonus_per_tier x max(1, tier
+## difference) + final_bonus when the evolved form does not evolve further. pokemon.json evolutions win on conflicts.
+func _load_roster_evolutions(pokemon_root: Dictionary) -> bool:
+	if _roster_ids.is_empty():
+		return true
+	var cfg_v: Variant = pokemon_root.get("roster_evolution", null)
+	if not (cfg_v is Dictionary) or not _is_positive_int((cfg_v as Dictionary).get("hp_bonus_per_tier", null)) \
+			or not (_is_number((cfg_v as Dictionary).get("final_bonus", null)) and (cfg_v as Dictionary)["final_bonus"] >= 0):
+		push_error("GameData: pokemon file needs 'roster_evolution' {hp_bonus_per_tier > 0, final_bonus >= 0}")
+		return false
+	var per_tier: int = int(cfg_v["hp_bonus_per_tier"])
+	var final_bonus: int = int(cfg_v["final_bonus"])
+	var ok: bool = true
+	for rid: String in _roster_ids.keys():
+		var base: Dictionary = _roster_ids[rid]
+		if base.get("evolves_to", null) == null or _evolutions.has(rid):
+			continue
+		var evo_id: String = String(base["evolves_to"])
+		var evo: Dictionary = _enemies.get(evo_id, _players.get(evo_id, {}))
+		var evo_tier: int = int(evo.get("tier", int(base["tier"]) + 1))
+		var bonus: int = per_tier * maxi(1, evo_tier - int(base["tier"]))
+		if evo.get("evolves_to", null) == null:
+			bonus += final_bonus
+		var teaches: Array = []
+		for cid: Variant in evo.get("teaches", []):
+			var card: CardData = _cards.get(cid, null)
+			if card != null and card.kind == CardData.KIND_ATTACK and card.rarity != CardData.RARITY_STARTER:
+				teaches.append(cid)
+		if teaches.is_empty():
+			push_error("GameData: roster evolution '%s' -> '%s' has no non-starter attack card to teach" % [rid, evo_id])
+			ok = false
+			continue
+		var entry: Dictionary = {"id": evo_id, "name": String(evo.get("name", "")), "types": (evo.get("types", []) as Array).duplicate(),
+				"max_hp_bonus": bonus, "sprite": String(evo.get("sprite", "")), "teaches": teaches}
+		_evolutions[rid] = entry
+		if not _evolved_forms.has(evo_id):
+			_evolved_forms[evo_id] = entry
 	return ok
 
 
