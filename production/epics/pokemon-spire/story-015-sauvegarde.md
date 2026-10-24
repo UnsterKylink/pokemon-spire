@@ -1,7 +1,7 @@
 # Story 015: Sauvegarde en cours de partie
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -28,11 +28,11 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 2), scoped to this story:*
 
-- [ ] La partie est sauvegardée automatiquement à chaque retour sur la carte (après combat, salle ou événement).
-- [ ] Relancer le jeu propose de reprendre la partie en cours : même zone, carte, deck (cartes améliorées comprises), PV, argent, objets, potions, badges et équipe.
-- [ ] La reprise est déterministe : les mêmes choix donnent les mêmes résultats qu'avant la sauvegarde.
-- [ ] Une sauvegarde absente, corrompue ou d'une version incompatible est signalée sans planter ; on peut alors lancer une nouvelle partie.
-- [ ] La victoire finale ou la défaite efface la sauvegarde en cours.
+- [x] La partie est sauvegardée automatiquement à chaque retour sur la carte (après combat, salle ou événement).
+- [x] Relancer le jeu propose de reprendre la partie en cours : même zone, carte, deck (cartes améliorées comprises), PV, argent, objets, potions, badges et équipe.
+- [x] La reprise est déterministe : les mêmes choix donnent les mêmes résultats qu'avant la sauvegarde.
+- [x] Une sauvegarde absente, corrompue ou d'une version incompatible est signalée sans planter ; on peut alors lancer une nouvelle partie.
+- [x] La victoire finale ou la défaite efface la sauvegarde en cours.
 
 ---
 
@@ -65,7 +65,7 @@
 **Required evidence**:
 - Integration : `tests/integration/run/sauvegarde_test.gd` OR playtest doc — advisory at `qa.level: minimal`, plus a retained screenshot in `production/qa/evidence/` when the story changes what the player sees.
 
-**Status**: [ ] Not yet created
+**Status**: [x] Retained screenshots in `production/qa/evidence/story-015-sauvegarde/`
 
 ---
 
@@ -73,3 +73,12 @@
 
 - Depends on: Story 014
 - Unlocks: Story 016
+
+---
+
+## Completion Notes
+**Completed**: 2026-10-24
+**Criteria**: 5/5 passing (confirmed by the user in play; 5 screenshots retained)
+**Deviations**: Advisory only — single save slot (`user://savegame.json`, version 1); saves only at safe points (map / league intermission), so quitting mid-room or on a badge/evolution screen resumes before that room (same result thanks to restored RNG states); save deleted as soon as a battle is lost; unreadable saves are moved to `.bak` when detected; the resume screen is a stand-in until the main menu (story 023); league resume and deletion on victory verified by scratch test t19, not by screenshot; autosave disabled for scripted/CLI runs (--seed/--starter/--encounter); QA hooks ship in the build
+**Test Evidence**: Integration — tests waived at qa.level minimal; screenshots at `production/qa/evidence/story-015-sauvegarde/`
+**Code Review**: Skipped — Solo mode
