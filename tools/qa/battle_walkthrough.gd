@@ -17,6 +17,8 @@ extends SceneTree
 ## Éthernatos intro / fight, final victory, league defeat; see _league_shots; filter `story-013`).
 ## 013b (roster diversity shots: roster starter in the choice, roster wild fights in zones 1 and 6, reward carriers, a
 ## newly possible gym type, a roster starter's deck; see _diversity_shots; filter `story-013b`).
+## Story 014 (in-run evolutions: starter stage 1->2 at badge 1 with its card choice, 2->3 at badge 4, a Pokémon
+## without a next form, the team evolution summary, the deck afterwards; see _evolution_shots; filter `story-014`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
@@ -600,6 +602,7 @@ func _clear_gym(shoot_badge: bool = false) -> void:
 		_main.qa_skip_to_gym()  # enters the gym room (counted in the floors), then the cheat win
 	_main.qa_win_gym()
 	_main.reward_skip()
+	_drain_team_evolution()
 	if shoot_badge:
 		var bs: BadgeScreen = _main.get_badge_screen()
 		print("badge screen: title=\"%s\" leader=\"%s\" bonus=\"%s\" unlock=\"%s\" progress=\"%s\" button=%s" % [
@@ -684,6 +687,69 @@ func _league_fight() -> void:
 	_main.qa_win_league_fight()
 	if _main.get_current_screen_name() == "reward":
 		_main.reward_skip()
+	_drain_team_evolution()
+
+
+## Story 014: leaves a team evolution summary if one popped up after a reward.
+func _drain_team_evolution() -> void:
+	var es: EvolutionScreen = _main.get_evolution_screen()
+	if es != null and es.is_team_mode():
+		_main.evolution_continue()
+
+
+## Story 014: the evolution screens. Salamèche run: badge 1 (stage 1->2 + card choice), badges 2..4 through the real gym
+## flow (stage 2->3 at badge 4). Pikachu run: Raichu has no next form at badge 4; then 3 team carriers evolve after 4
+## won battles; the deck afterwards.
+func _evolution_shots() -> void:
+	var dir: String = _out_dir
+	_main.start_new_run(LEAGUE_SEED, "salameche")
+	_main.qa_win_gym()
+	_main.reward_skip()
+	_drain_team_evolution()
+	_main.badge_continue()
+	print("014 evo1: ", _main.get_evolution_summary())
+	await _shot("01-evolution-1")
+	_main.evolution_continue()
+	print("014 offers: ", _main.get_evolution_screen().get_offers().map(func(c: CardData) -> String: return c.deck_key()))
+	await _shot("02-evolution-cartes")
+	_main.evolution_pick(0)
+	_main.evolution_continue()
+	for i: int in 3:  # badges 2, 3, 4 through the real gym flow
+		_main.qa_skip_to_gym()
+		_main.qa_win_gym()
+		_main.reward_skip()
+		_drain_team_evolution()
+		_main.badge_continue()
+		if _main.get_current_screen_name() == "evolution" and i < 2:
+			push_error("unexpected evolution at badge %d" % (i + 2))
+	print("014 evo2: ", _main.get_evolution_summary())
+	await _shot("03-evolution-2")
+	_main.evolution_continue()
+	_main.evolution_pick(0)
+	_main.evolution_continue()
+	_main.start_new_run(LEAGUE_SEED, "pikachu")
+	_main.qa_set_evolution_stage(1)
+	_main.qa_show_starter_evolution(4)
+	print("014 no evo: ", _main.get_evolution_summary(), " bonus=", _main.get_evolution_screen().get_bonus_text())
+	await _shot("04-sans-evolution")
+	_main.evolution_continue()
+	print("014 no evo result: ", _main.get_evolution_screen().get_result_text())
+	_main.evolution_continue()
+	var run: RunState = _main.get_run_state()
+	var base: CardData = run.deck[0]
+	for pid: String in ["pidgey", "nidoran-m", "machop"]:
+		run.add_card(base.with_pokemon(pid))
+		run.add_card(base.with_pokemon(pid))
+	_main.qa_win_battles(4)
+	_main.qa_check_team_evolution()
+	print("014 team rows: ", _main.get_team_evolution_rows().map(func(r: Dictionary) -> String: return "%s->%s" % [r["from_id"], r["to_id"]]))
+	await _shot("05-evolutions-equipe")
+	_main.evolution_continue()
+	_main.map_open_deck()
+	print("014 deck: ", run.deck.map(func(c: CardData) -> String: return c.deck_key()))
+	await _shot("06-deck-apres")
+	_main.map_close_deck()
+	_out_dir = dir
 
 
 func _league_shots() -> void:
@@ -838,6 +904,10 @@ func _diversity_shots() -> void:
 
 
 func _run() -> void:
+	if _filter == "story-014":
+		await _evolution_shots()
+		quit(0)
+		return
 	if _filter == "story-013b":
 		await _diversity_shots()
 		quit(0)

@@ -6,6 +6,9 @@ extends Control
 ## Step DONE: what joined the deck, "Continuer" -> finished (Main then shows the victory screen).
 ## Display only: the evolution is already applied by Main (RunState.evolve_starter); the picked card is
 ## emitted with card_chosen and Main adds it, then calls show_result(). Mouse only, fits 1280x720 under the HUD.
+## Story 014: also the starter's 2nd step (stage 2 -> 3, same flow); a Pokémon without a next form shows its +PV and
+## the card it upgraded (no card choice); setup_team() shows the compact "Évolutions" summary of the team Pokémon
+## (one before -> after row each, no card choice, "Continuer" -> finished).
 
 ## Emitted when the player picks offer `index` (Main adds the card, then calls show_result).
 signal card_chosen(index: int)
@@ -38,11 +41,19 @@ const TEXT_CHOOSE_TITLE: String = "%s peut apprendre une attaque"
 const TEXT_CHOOSE_INFO: String = "Choisis 1 carte à ajouter à ton deck (ou passe)."
 const TEXT_SKIPPED: String = "Tu n'as pris aucune nouvelle carte."
 const TEXT_NONE: String = "Aucune carte à apprendre."
+const TEXT_UPGRADED: String = "%s s'améliore : %s+ !"
+const TEXT_UPGRADED_INFO: String = "Une de ses cartes est améliorée."
+const TEXT_TEAM_TITLE: String = "Évolutions"
+const TEXT_TEAM_INFO: String = "Tes Pokémon d'équipe ont gagné en expérience : leurs cartes passent à la forme évoluée."
+const TEXT_TEAM_ROW_HP: String = "+%d PV max"
+const TEAM_SPRITE_SIZE: Vector2 = Vector2(88, 88)
+const TEAM_ROW_SIZE: Vector2 = Vector2(760, 100)
 
 var _data: GameData
 var _summary: Dictionary = {}
 var _offers: Array[CardData] = []
 var _step: Step = Step.REVEAL
+var _team_mode: bool = false
 var _built: bool = false
 var _title: Label
 var _info: Label
@@ -93,7 +104,41 @@ func setup(data: GameData, run: RunState, summary: Dictionary, offers: Array[Car
 		child.queue_free()
 	for i: int in offers.size():
 		_cards_box.add_child(_make_offer_widget(offers[i], i))
+	var upgraded: String = String(summary.get("upgraded_card", ""))
+	if not evolved and not upgraded.is_empty():
+		_bonus_label.text += "\n" + TEXT_UPGRADED % [String(summary.get("to_name", "")), upgraded.trim_suffix("+")]
 	_set_step(Step.REVEAL)
+
+
+## Story 014: the team evolution summary. `rows` = RunState.evolve_team() (already applied by Main); `run` is read for
+## the HP line. One row per Pokémon: small sprites, "Avant -> Après" names, its +PV. "Continuer" emits finished.
+func setup_team(data: GameData, run: RunState, rows: Array[Dictionary]) -> void:
+	_build_ui()
+	_data = data
+	_team_mode = true
+	_offers = []
+	_summary = {}
+	for child: Node in _forms_row.get_children():
+		_forms_row.remove_child(child)
+		child.queue_free()
+	var list := VBoxContainer.new()
+	list.name = "TeamRows"
+	list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	list.add_theme_constant_override("separation", 10)
+	_forms_row.add_child(list)
+	var total: int = 0
+	for row: Dictionary in rows:
+		list.add_child(_team_row(row))
+		total += int(row.get("hp_bonus", 0))
+	_bonus_label.text = TEXT_HP_BONUS % [total, run.hp, run.max_hp] if total > 0 else ""
+	_set_step(Step.REVEAL)
+	_title.text = TEXT_TEAM_TITLE
+	_info.text = TEXT_TEAM_INFO
+
+
+## True while the screen shows the team summary (setup_team).
+func is_team_mode() -> bool:
+	return _team_mode
 
 
 ## Current step (REVEAL, CHOOSE or DONE).
@@ -125,8 +170,12 @@ func get_result_text() -> String:
 func press_continue() -> void:
 	match _step:
 		Step.REVEAL:
-			if _offers.is_empty():
-				show_result(TEXT_NONE)
+			if _team_mode:
+				_step = Step.DONE
+				finished.emit()
+			elif _offers.is_empty():
+				var up: String = String(_summary.get("upgraded_card", ""))
+				show_result(TEXT_NONE if up.is_empty() else TEXT_UPGRADED % [String(_summary.get("to_name", "")), up.trim_suffix("+")])
 			else:
 				_set_step(Step.CHOOSE)
 		Step.DONE:
@@ -166,6 +215,8 @@ func _set_step(step: Step) -> void:
 	var to_name: String = String(_summary.get("to_name", ""))
 	match step:
 		Step.REVEAL:
+			if _team_mode:
+				return
 			_title.text = (TEXT_TITLE_EVOLVED if bool(_summary.get("evolved", false)) else TEXT_TITLE_STRONGER) \
 					% String(_summary.get("from_name", ""))
 		Step.CHOOSE:
@@ -292,6 +343,50 @@ func _form_panel(caption: String, pokemon_name: String, sprite_path: String, typ
 			types.append(String(t))
 	CardView.set_badge_row(row, types, _data.get_type_chart())
 	box.add_child(row)
+	return panel
+
+
+## One team row: before sprite + name -> after sprite + name, then the row's +PV.
+func _team_row(row: Dictionary) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = "Row_%s" % String(row.get("to_id", ""))
+	panel.custom_minimum_size = TEAM_ROW_SIZE
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = COLOR_PANEL
+	sb.set_border_width_all(2)
+	sb.border_color = COLOR_AFTER_BORDER
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(6)
+	panel.add_theme_stylebox_override("panel", sb)
+	var h := HBoxContainer.new()
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 14)
+	panel.add_child(h)
+	for side: String in ["from", "to"]:
+		var sprite := TextureRect.new()
+		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sprite.texture = CardView.cropped_sprite(String(row.get(side + "_sprite", "")))
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		sprite.custom_minimum_size = TEAM_SPRITE_SIZE
+		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		sprite.modulate.a = 0.75 if side == "from" else 1.0
+		h.add_child(sprite)
+		var name_label: Label = CardView.make_label(26)
+		name_label.text = String(row.get(side + "_name", ""))
+		name_label.custom_minimum_size = Vector2(190, 0)
+		h.add_child(name_label)
+		if side == "from":
+			var arrow: Label = CardView.make_label(40)
+			arrow.text = "→"
+			arrow.add_theme_color_override("font_color", COLOR_AFTER_BORDER)
+			h.add_child(arrow)
+	var hp: Label = CardView.make_label(22)
+	hp.text = TEXT_TEAM_ROW_HP % int(row.get("hp_bonus", 0)) if int(row.get("hp_bonus", 0)) > 0 else ""
+	hp.add_theme_color_override("font_color", COLOR_BONUS)
+	h.add_child(hp)
 	return panel
 
 
