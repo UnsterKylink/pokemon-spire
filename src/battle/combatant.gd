@@ -33,6 +33,9 @@ var statuses: Dictionary = {}
 ## Player only (story 016 anti-lock rule): turns of aftermath immunity left (StatusBook.aftermath_statuses), 0 = none.
 ## Managed by Battle; shown as a chip by StatusChipRow.
 var aftermath_turns: int = 0
+## Story 017: false for a final boss (`boss: true`) or a Pokémon that teaches no card: balls never work on it.
+## Set from the data by from_dict; the room type rule (wild only) is Battle.capture_allowed.
+var capturable: bool = true
 
 
 ## Creates a combatant from a JSON definition. Returns null if invalid.
@@ -48,6 +51,8 @@ static func from_dict(combatant_id: String, d: Dictionary, current_hp: int = -1)
 	c.max_hp = int(d["max_hp"])
 	c.hp = c.max_hp if current_hp < 0 else clampi(current_hp, 0, c.max_hp)
 	c.sprite_path = String(d["sprite"])
+	var teaches_v: Variant = d.get("teaches", [])
+	c.capturable = not bool(d.get("boss", false)) and teaches_v is Array and not (teaches_v as Array).is_empty()
 	var raw_types: Variant = d.get("types", null)
 	if raw_types is Array:
 		for t: Variant in (raw_types as Array):

@@ -21,6 +21,7 @@ const DEFAULT_ZONES_PATH: String = "res://assets/data/zones.json"
 const DEFAULT_LEAGUE_PATH: String = "res://assets/data/league.json"
 ## Story 013b: large roster (720 Pokémon, all generations) merged into the enemies; "" = no roster.
 const DEFAULT_STATUSES_PATH: String = "res://assets/data/statuses.json"
+const DEFAULT_BALLS_PATH: String = "res://assets/data/balls.json"
 const DEFAULT_ROSTER_PATH: String = "res://assets/data/roster.json"
 ## Prefix of an encounter id GENERATED from the roster: "roster:<id>,<id>,..." (wild / elite fights, auto gym teams).
 ## create_enemies / get_encounter_enemy_ids decode it; it is never stored in pokemon.json.
@@ -31,7 +32,7 @@ const ROSTER_MAX_TIER: int = 3
 const ZONE_TYPED_ROOMS: Array[String] = ["wild", "elite"]
 ## The room type that holds the zone's gym fight.
 const ROOM_GYM: String = "boss"
-const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "nothing"]
+const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "add_ball", "nothing"]
 const NO_FLOOR_LIMIT: int = 1000000
 ## Minimum number of types the type table must define (story 003).
 const MIN_TYPES: int = 18
@@ -58,6 +59,10 @@ var _carriers_by_type: Dictionary = {}  # type id -> Array[String] (roster Poké
 var _items: Dictionary = {}    # String -> ItemData (story 006)
 var _potions: Dictionary = {}  # String -> PotionData
 var _max_potions: int = 0
+var _balls: Dictionary = {}    # String -> BallData (story 017)
+var _max_balls: int = 0
+var _capture_rules: CaptureRules = null
+var _balls_cfg: Dictionary = {}  # validated balls.json (loot / shop sections)
 var _shop_cfg: Dictionary = {}  # validated shop.json
 var _evolutions: Dictionary = {}  # base pokemon id -> validated evolution entry (story 007)
 var _evolved_forms: Dictionary = {}  # evolved form id -> its evolution entry (for get_pokemon_info)
@@ -103,6 +108,10 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_items.clear()
 	_potions.clear()
 	_max_potions = 0
+	_balls.clear()
+	_max_balls = 0
+	_capture_rules = null
+	_balls_cfg = {}
 	_shop_cfg = {}
 	_evolutions = {}
 	_evolved_forms = {}
@@ -151,6 +160,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 			ok = false
 		else:
 			_status_book = book
+	if not balls_path.is_empty():  # after the statuses, before the events that may give balls
+		var balls_root: Dictionary = _read_json(balls_path)
+		ok = (not balls_root.is_empty() and _load_balls(balls_root)) and ok
 	ok = _load_cards(cards_root) and ok
 	ok = _load_players(pokemon_root) and ok
 	ok = _load_enemies(pokemon_root) and ok
@@ -1471,6 +1483,122 @@ func _load_shop(root: Dictionary) -> bool:
 	return ok
 
 
+# --- Balls and capture (story 017) --------------------------------------------------------------------
+
+## Ball by id, or null (with push_error) if unknown.
+func get_ball(ball_id: String) -> BallData:
+	if not _balls.has(ball_id):
+		push_error("GameData: unknown ball id '%s'" % ball_id)
+		return null
+	return _balls[ball_id]
+
+
+func has_ball(ball_id: String) -> bool:
+	return _balls.has(ball_id)
+
+
+## Every ball id, in file order.
+func get_ball_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for k: String in _balls.keys():
+		ids.append(k)
+	return ids
+
+
+## Balls a run may carry in total (balls.json max_carried; 0 without balls data).
+func get_max_balls() -> int:
+	return _max_balls
+
+
+## Capture rules (energy cost, formula, statuses, rooms); null without balls data.
+func get_capture_rules() -> CaptureRules:
+	return _capture_rules
+
+
+## True if balls can be used in fights of `room_type` (balls.json capture.allowed_room_types; "league" never).
+func capture_allowed_in(room_type: String) -> bool:
+	return _capture_rules != null and _capture_rules.allows_room(room_type)
+
+
+## id -> BallData of every ball (Battle's ball book).
+func get_ball_book() -> Dictionary:
+	return _balls.duplicate()
+
+
+## Ball loot rule of a fight room type {chance, weights}; {} = no ball loot there.
+func get_ball_loot_config(room_type: String) -> Dictionary:
+	return (((_balls_cfg.get("loot", {}) as Dictionary).get(room_type, {})) as Dictionary).duplicate(true)
+
+
+## Poké Mart ball offers {count_min, count_max, weights} ({} without balls data).
+func get_ball_shop_config() -> Dictionary:
+	return (_balls_cfg.get("shop", {}) as Dictionary).duplicate(true)
+
+
+func _load_balls(root: Dictionary) -> bool:
+	if not _is_positive_int(root.get("max_carried", null)):
+		push_error("GameData: balls file needs a positive integer 'max_carried'")
+		return false
+	var raw: Variant = root.get("balls", null)
+	if not (raw is Dictionary) or (raw as Dictionary).is_empty():
+		push_error("GameData: balls file needs a non-empty 'balls' object")
+		return false
+	var ok: bool = true
+	for ball_id: String in (raw as Dictionary).keys():
+		var def: Variant = (raw as Dictionary)[ball_id]
+		var ball: BallData = BallData.from_dict(ball_id, def) if def is Dictionary else null
+		if ball == null:
+			push_error("GameData: ball '%s' is invalid" % ball_id)
+			ok = false
+		else:
+			_balls[ball_id] = ball
+	var cap_v: Variant = root.get("capture", null)
+	var rules: CaptureRules = null
+	if cap_v is Dictionary:
+		rules = CaptureRules.from_dict(cap_v, _status_book.ids(), FIGHT_ROOM_TYPES)
+	if rules == null:
+		push_error("GameData: balls file needs a valid 'capture' object")
+		ok = false
+	# Loot: room -> {chance 0..1, weights {ball id: > 0}}; shop: {count_min <= count_max, weights}.
+	var loot_v: Variant = root.get("loot", null)
+	if not (loot_v is Dictionary):
+		push_error("GameData: balls file needs a 'loot' object")
+		return false
+	for room: String in (loot_v as Dictionary).keys():
+		var l: Variant = (loot_v as Dictionary)[room]
+		if room not in FIGHT_ROOM_TYPES or not (l is Dictionary) or not (_is_number(l.get("chance", null)) and l["chance"] >= 0 and l["chance"] <= 1) \
+				or not _check_ball_weights("loot['%s']" % room, l.get("weights", null)):
+			push_error("GameData: balls loot['%s'] needs a fight room type, a chance between 0 and 1 and valid weights" % room)
+			ok = false
+	var sh: Variant = root.get("shop", null)
+	if not (sh is Dictionary):
+		push_error("GameData: balls file needs a 'shop' object")
+		return false
+	var cmin: Variant = sh.get("count_min", null)
+	var cmax: Variant = sh.get("count_max", null)
+	if not (_is_number(cmin) and _is_number(cmax) and cmin >= 0 and cmax >= cmin and cmin == floorf(cmin) and cmax == floorf(cmax)):
+		push_error("GameData: balls shop needs integers 0 <= count_min <= count_max")
+		ok = false
+	ok = _check_ball_weights("shop", sh.get("weights", null)) and ok
+	if ok:
+		_max_balls = int(root["max_carried"])
+		_capture_rules = rules
+		_balls_cfg = root.duplicate(true)
+	return ok
+
+
+## `weights` must be a non-empty {known ball id: number > 0}.
+func _check_ball_weights(label: String, w: Variant) -> bool:
+	if not (w is Dictionary) or (w as Dictionary).is_empty():
+		push_error("GameData: balls %s needs a non-empty 'weights' object" % label)
+		return false
+	for bid: String in (w as Dictionary).keys():
+		if not _balls.has(bid) or not (_is_number((w as Dictionary)[bid]) and (w as Dictionary)[bid] > 0):
+			push_error("GameData: balls %s weights['%s'] needs a known ball and a weight > 0" % [label, bid])
+			return false
+	return true
+
+
 # --- Starter choice (story 010) ---------------------------------------------------------------------
 
 ## Id of the shared player-config entry (max HP, energy, hand size, reward pool) used by every starter.
@@ -2311,6 +2439,9 @@ func _check_effect(event_id: String, eff_v: Variant) -> bool:
 			good = eff.get("card", null) is String and _cards.has(eff["card"])
 		"add_random_card":
 			good = eff.get("rarity", null) is String and _rarity_weights.has(eff["rarity"])
+		"add_ball":
+			good = eff.get("ball", null) is String and _balls.has(eff["ball"]) \
+					and (not eff.has("count") or _is_positive_int(eff["count"]))
 	if not good:
 		push_error("GameData: event '%s' effect '%s' has invalid or unknown parameters" % [event_id, t])
 	return good

@@ -12,7 +12,7 @@ static func pick_event(data: GameData, rng: RandomNumberGenerator) -> Dictionary
 	return data.get_event(ids[rng.randi_range(0, ids.size() - 1)])
 
 
-## Applies the effects in order. Returns a short French summary ("+5 PV max, -5 PV"), "" if nothing changed.
+## Applies the effects in order (story 017: add_ball gives balls up to the bag limit). Returns a short French summary ("+5 PV max, -5 PV"), "" if nothing changed.
 static func apply_effects(effects: Array, run: RunState, data: GameData, rng: RandomNumberGenerator) -> String:
 	var parts: Array[String] = []
 	for e_v: Variant in effects:
@@ -47,6 +47,16 @@ static func apply_effects(effects: Array, run: RunState, data: GameData, rng: Ra
 				var removed: CardData = data.get_card(card_id)
 				if removed != null and run.remove_card(card_id):
 					parts.append("Carte perdue : %s" % removed.display_name)
+			"add_ball":
+				var ball: BallData = data.get_ball(String(e.get("ball", "")))
+				var added: int = 0
+				for i: int in int(e.get("count", 1)):
+					if ball != null and run.add_ball(ball.id):
+						added += 1
+				if added == 1:
+					parts.append("Ball obtenue : %s" % ball.display_name)
+				elif added > 1:
+					parts.append("%d Balls obtenues : %s" % [added, ball.display_name])
 			_:
 				pass  # "nothing" (unknown types are rejected by GameData validation)
 	return ", ".join(parts)

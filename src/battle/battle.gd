@@ -39,6 +39,12 @@ signal status_unchanged(target: Combatant, status_id: String)
 signal status_removed(target: Combatant, status_id: String)
 ## Emitted after a potion of `potions` was drunk (already removed from `potions`). Story 006.
 signal potion_used(potion: PotionData)
+## Story 017 (capture). A ball was thrown at `target` (energy and the ball are already spent) with this success `chance` (0..1).
+signal ball_thrown(target: Combatant, ball: BallData, chance: float)
+## The throw succeeded: `target` was already removed from `enemies` (see captured / captured_ids); a possible win follows.
+signal capture_succeeded(target: Combatant)
+## The throw failed: the enemy stays and keeps acting normally (a captured Pokémon never flees).
+signal capture_failed(target: Combatant)
 
 var player: Combatant
 ## Id of the Pokémon currently on the field (shared HP/block; story 009). Read-only for the UI.
@@ -60,6 +66,15 @@ var turn_damage_bonus: int = 0
 ## Energy the player lost at the start of the CURRENT turn because of a status (sleep / freeze); 0 on a normal turn.
 var energy_lost: int = 0
 var _attacks_played: int = 0
+## Story 017: true when balls may be used in this fight (Main sets it for wild fights only, via RunState.create_battle).
+var capture_allowed: bool = false
+## Balls carried: ball id -> count left (copy; decremented by use_ball). Order = insertion order = index for can_use_ball.
+var ball_counts: Dictionary = {}
+## Enemies captured so far (removed from `enemies`), in capture order; captured_ids = their Pokémon ids.
+var captured: Array[Combatant] = []
+var captured_ids: Array[String] = []
+var _capture_rules: CaptureRules = null
+var _ball_book: Dictionary = {}  # ball id -> BallData
 
 var _rng: RandomNumberGenerator
 var _type_chart: TypeChart
@@ -269,6 +284,92 @@ func use_potion(index: int) -> bool:
 	potion_used.emit(potion)
 	state_changed.emit()
 	return true
+
+
+# --- Capture (story 017) ---------------------------------------------------------------------------
+# Balls are consumables like potions but cost `capture.energy_cost` energy. A throw always spends the ball; on success the
+# enemy leaves the battle (not killed: no defeated id, no stolen card); the fight is won as usual when none is left.
+
+## Ids of the balls still carried (count > 0), in order: the index form of can_use_ball / use_ball.
+func ball_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for bid: String in ball_counts.keys():
+		if int(ball_counts[bid]) > 0:
+			ids.append(bid)
+	return ids
+
+
+## Balls left of that id (0 if none / unknown).
+func ball_count(ball_id: String) -> int:
+	return int(ball_counts.get(ball_id, 0))
+
+
+## Energy a throw costs (0 without capture rules).
+func ball_energy_cost() -> int:
+	return _capture_rules.energy_cost if _capture_rules != null else 0
+
+
+## True if the target can be captured at all in this fight (capture_allowed, living enemy, Combatant.capturable).
+func is_capturable(enemy_index: int) -> bool:
+	return capture_allowed and _capture_rules != null and is_valid_target(enemy_index) and enemies[enemy_index].capturable
+
+
+## Success chance (0..1) of `ball` (index into ball_ids() or ball id) on enemies[enemy_index] NOW (HP and statuses);
+## 0.0 if the ball / enemy is invalid or not capturable. Pure observation (no RNG).
+func capture_chance(ball: Variant, enemy_index: int) -> float:
+	var bid: String = _resolve_ball(ball)
+	if bid.is_empty() or not is_capturable(enemy_index):
+		return 0.0
+	var e: Combatant = enemies[enemy_index]
+	return _capture_rules.chance(_ball_book[bid], e.hp, e.max_hp, e.status_ids())
+
+
+## True if a ball can be thrown now: player's turn, ball carried, enough energy, capturable living target.
+func can_use_ball(ball: Variant, enemy_index: int) -> bool:
+	if state != State.PLAYER_TURN or _resolve_ball(ball).is_empty() or not is_capturable(enemy_index):
+		return false
+	return energy >= _capture_rules.energy_cost
+
+
+## Throws a ball (id or index into ball_ids()) at enemies[enemy_index]. Costs the ball and the energy whether it succeeds or not.
+## Returns {used: bool, success: bool, chance: float, roll: float (rng draw, success if roll < chance), ball: BallData,
+## target: Combatant}; {used: false, success: false, chance: 0.0, roll: 1.0} (nothing changed, no RNG drawn) if invalid.
+## Signals: ball_thrown, then capture_succeeded (target removed from `enemies`, added to captured / captured_ids; battle_won
+## if no enemy is left) or capture_failed.
+func use_ball(ball: Variant, enemy_index: int) -> Dictionary:
+	if not can_use_ball(ball, enemy_index):
+		return {"used": false, "success": false, "chance": 0.0, "roll": 1.0}
+	var bid: String = _resolve_ball(ball)
+	var def: BallData = _ball_book[bid]
+	var target: Combatant = enemies[enemy_index]
+	var chance: float = capture_chance(bid, enemy_index)
+	energy -= _capture_rules.energy_cost
+	ball_counts[bid] = int(ball_counts[bid]) - 1
+	var roll: float = _rng.randf()
+	var success: bool = roll < chance
+	ball_thrown.emit(target, def, chance)
+	if success:
+		enemies.remove_at(enemy_index)
+		target.intent = null
+		captured.append(target)
+		captured_ids.append(target.id)
+		capture_succeeded.emit(target)
+		if first_living_enemy() < 0:
+			_win()
+		else:
+			state_changed.emit()
+	else:
+		capture_failed.emit(target)
+		state_changed.emit()
+	return {"used": true, "success": success, "chance": chance, "roll": roll, "ball": def, "target": target}
+
+
+func _resolve_ball(ball: Variant) -> String:
+	if ball is int:
+		var ids: Array[String] = ball_ids()
+		return ids[ball] if ball >= 0 and ball < ids.size() else ""
+	var bid: String = String(ball)
+	return bid if bid in ball_counts and int(ball_counts[bid]) > 0 and _ball_book.has(bid) else ""
 
 
 ## Recomputes the final value of every living enemy's already-chosen attack against the CURRENT

@@ -42,6 +42,10 @@ var money: int = 0
 var items: Array[ItemData] = []
 ## Potions carried (single use, at most max_potions()).
 var potions: Array[PotionData] = []
+## Story 017: Poké Balls carried: ball id -> count (> 0), total at most max_balls(); separate from potions.
+var balls: Dictionary = {}
+## Story 017: ids of the Pokémon captured so far this run (unique, first capture order); feeds the Pokédex (story 025).
+var captured: Array[String] = []
 ## Cards removed at the Poké Mart so far this run (drives the rising removal price).
 var card_removals: int = 0
 var _data: GameData
@@ -166,7 +170,10 @@ func get_pokemon_info(pokemon_id: String) -> Dictionary:
 ## Builds a battle from the persisted state; the battle gets a COPY of the deck.
 ## Held items and potions are handed to the battle; passive items raise the energy / hand size it is built with.
 ## Drinking a potion in the battle also removes it from `potions` (kept in sync through potion_used).
-func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: RandomNumberGenerator) -> Battle:
+## Story 017: `capture_allowed` (Main: _data.capture_allowed_in(room type), wild fights only) lets the player throw the balls;
+## each thrown ball leaves `balls` at once (kept in sync through ball_thrown); apply the captures after the win with apply_captures.
+func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: RandomNumberGenerator,
+		capture_allowed: bool = false) -> Battle:
 	var battle := Battle.new(build_player_combatant(), enemies, deck.duplicate(), effective_energy_per_turn(),
 			effective_hand_size(), rng, type_chart, get_pokemon_info, starter_pokemon_id, items, potions,
 			_data.get_status_book() if _data != null else null)
@@ -189,6 +196,10 @@ func _on_battle_potion_used(potion: PotionData) -> void:
 		if potions[i].id == potion.id:
 			potions.remove_at(i)
 			return
+
+
+func _on_battle_ball_thrown(_target: Combatant, ball: BallData, _chance: float) -> void:
+	remove_ball(ball.id)
 
 
 ## Copies the player's HP back after a battle (clamped 0..max_hp). A surviving player = a battle won, and
@@ -662,9 +673,9 @@ func add_potion(potion: PotionData) -> bool:
 
 
 ## Applies Main's loot dict (LootGenerator.generate) and reports what the player actually got:
-## {"money": int, "item": ItemData or null, "potion": PotionData or null} (null = none, or no room for the potion).
+## {"money": int, "item": ItemData or null, "potion": PotionData or null, "ball": BallData or null} (null = none, or no room).
 func apply_loot(loot: Dictionary) -> Dictionary:
-	var result: Dictionary = {"money": int(loot.get("money", 0)), "item": null, "potion": null}
+	var result: Dictionary = {"money": int(loot.get("money", 0)), "item": null, "potion": null, "ball": null}
 	add_money(result["money"])
 	var item_id: String = String(loot.get("item_id", ""))
 	if not item_id.is_empty():
@@ -676,7 +687,76 @@ func apply_loot(loot: Dictionary) -> Dictionary:
 		var potion: PotionData = _data.get_potion(potion_id)
 		if add_potion(potion):
 			result["potion"] = potion
+	var ball_id: String = String(loot.get("ball_id", ""))
+	if not ball_id.is_empty() and add_ball(ball_id):
+		result["ball"] = _data.get_ball(ball_id)
 	return result
+
+
+# --- Poké Balls and captures (story 017) -----------------------------------------------------------
+
+## Max total number of balls carried (balls.json max_carried).
+func max_balls() -> int:
+	return _data.get_max_balls() if _data != null else 0
+
+
+## Balls carried, all kinds together.
+func ball_total() -> int:
+	var total: int = 0
+	for bid: String in balls.keys():
+		total += int(balls[bid])
+	return total
+
+
+## Balls of one kind carried.
+func ball_count(ball_id: String) -> int:
+	return int(balls.get(ball_id, 0))
+
+
+## Stores one ball. False (nothing changes) for an unknown ball or a full bag.
+func add_ball(ball_id: String) -> bool:
+	if _data == null or not _data.has_ball(ball_id) or ball_total() >= max_balls():
+		return false
+	balls[ball_id] = ball_count(ball_id) + 1
+	return true
+
+
+## Removes one ball of that kind (the key disappears at 0). False if there is none.
+func remove_ball(ball_id: String) -> bool:
+	if ball_count(ball_id) <= 0:
+		return false
+	if ball_count(ball_id) == 1:
+		balls.erase(ball_id)
+	else:
+		balls[ball_id] = ball_count(ball_id) - 1
+	return true
+
+
+## After a won battle: the captured Pokémon (Battle.captured_ids) join the team. Each one adds ALL the cards it teaches
+## (pokemon.json / roster.json `teaches`, 1-2) to the deck, carried by it (card.pokemon_id = its id), so team_carriers /
+## team_progress / evolve_team treat it like any other team Pokémon (its battles count from the NEXT won battle: call this
+## after record_battle_result). Capturing a Pokémon already in the team stacks the cards. captured gets the id (unique).
+## Returns one row per capture: {id, name, sprite, types, cards: Array[CardData], first_time: bool}.
+func apply_captures(captured_ids: Array[String]) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	if _data == null:
+		return rows
+	for pid: String in captured_ids:
+		var info: Dictionary = _data.get_pokemon_info(pid)
+		if info.is_empty():
+			continue
+		var cards: Array[CardData] = []
+		for card: CardData in _data.get_enemy_teaches(pid):
+			var carried: CardData = card.with_pokemon(pid)
+			add_card(carried)
+			cards.append(carried)
+		_pokemon_infos[pid] = info
+		var first: bool = not captured.has(pid)
+		if first:
+			captured.append(pid)
+		rows.append({"id": pid, "name": String(info["name"]), "sprite": String(info["sprite_path"]), "types": info["types"],
+				"cards": cards, "first_time": first})
+	return rows
 
 
 # --- Centre Pokémon / Poké Mart services (story 006) ------------------------------------------------

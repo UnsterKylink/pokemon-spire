@@ -3,7 +3,7 @@ extends RefCounted
 ## Story 015 (story-015-sauvegarde): autosave / resume of a run. Pure logic, no Node access, no autoload.
 ## One slot (DEFAULT_PATH, JSON). The file holds everything needed to rebuild the run EXACTLY at a SAFE point (the act map or
 ## a league intermission; never mid-battle): RunState (identity, form/evolution state, HP, deck as card id + carrier +
-## upgraded flag, money, items, potions, badges, zones, league draw...), the current zone's map graph + ActProgress, and
+## upgraded flag, money, items, potions, balls, captured (story 017, optional on load), badges, zones, league draw...), the current zone's map graph + ActProgress, and
 ## `extras` (Main's RNG seeds AND states, screen, CLI seed...). Ids are rebuilt through GameData, so a save that
 ## references unknown data is refused with a clear reason instead of crashing.
 ## Big integers (RNG seeds / states, map seed) are stored as STRINGS: JSON numbers are doubles and would lose bits.
@@ -63,6 +63,7 @@ static func to_dict(run: RunState, extras: Dictionary = {}) -> Dictionary:
 			"evolution_applied": run.evolution_applied, "evolved": run.evolved, "evolution_stage": run.evolution_stage,
 			"evolution_history": _enc(run.evolution_history), "team_progress": _enc(run.team_progress),
 			"evolved_badges": run._evolved_badges.duplicate(), "money": run.money, "items": items, "potions": potions,
+				"balls": run.balls.duplicate(), "captured": run.captured.duplicate(),
 			"card_removals": run.card_removals, "zones": _enc(run.zones), "zone_index": run.zone_index,
 			"badges": _enc(badges), "base_map_seed": str(run._base_map_seed), "floors_done": run._floors_done,
 			"league": _enc(run.league), "league_stage": run.league_stage,
@@ -152,6 +153,20 @@ static func _check_fields(rd: Dictionary) -> String:
 		for e: Variant in rd[k]:
 			if not (e is Dictionary):
 				return "liste invalide : %s" % k
+	# Story 017: balls / captured are optional (a save from before the capture keeps loading: empty).
+	if rd.has("balls"):
+		if not (rd["balls"] is Dictionary):
+			return "champ manquant ou invalide : balls"
+		for bid: Variant in (rd["balls"] as Dictionary).keys():
+			var n: Variant = (rd["balls"] as Dictionary)[bid]
+			if not (bid is String) or not _is_num(n) or int(n) < 1:
+				return "balls invalides"
+	if rd.has("captured"):
+		if not (rd["captured"] is Array):
+			return "champ manquant ou invalide : captured"
+		for e: Variant in rd["captured"]:
+			if not (e is String):
+				return "liste invalide : captured"
 	for k: Variant in (rd["team_progress"] as Dictionary).keys():
 		var p: Variant = rd["team_progress"][k]
 		if not (p is Dictionary) or not _is_num(p.get("battles")) or not _is_num(p.get("stage")):
@@ -184,6 +199,12 @@ static func _check_references(rd: Dictionary, game: GameData) -> String:
 	for id: String in (rd["team_progress"] as Dictionary).keys():
 		if game.get_pokemon_info(id).is_empty():
 			return "Pokémon inconnu : %s" % id
+	for bid: String in (rd.get("balls", {}) as Dictionary).keys():
+		if not game.has_ball(bid):
+			return "Ball inconnue : %s" % bid
+	for id: String in rd.get("captured", []):
+		if game.get_pokemon_info(id).is_empty():
+			return "Pokémon capturé inconnu : %s" % id
 	var zones: Array = rd["zones"]
 	if zones.size() != game.get_zone_count():
 		return "zones incompatibles (%d au lieu de %d)" % [zones.size(), game.get_zone_count()]
@@ -285,6 +306,10 @@ static func _build_run(rd: Dictionary, game: GameData) -> RunState:
 	for id: String in rd["potions"]:
 		r.potions.append(game.get_potion(id))
 	r.card_removals = int(rd["card_removals"])
+	for bid: String in (rd.get("balls", {}) as Dictionary).keys():
+		r.balls[bid] = int(rd["balls"][bid])
+	for id: String in rd.get("captured", []):
+		r.captured.append(id)
 	r.zones.assign(rd["zones"])
 	r.zone_index = int(rd["zone_index"])
 	var badges: Array = (rd["badges"] as Array).duplicate(true)

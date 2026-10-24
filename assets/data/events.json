@@ -1,5 +1,5 @@
 {
-	"_doc": "Evenements (story 005). events: liste de {id, title, text (FR), options: exactement 2 x {label, result_text, effects}}. Effets: heal {percent 1..100}, lose_hp {value > 0; un evenement ne tue jamais: PV >= 1}, gain_max_hp {value > 0; augmente aussi les PV actuels}, add_card {card}, add_random_card {rarity: common|uncommon|rare}, remove_card {card; retire un exemplaire si le deck en a un}, nothing. Les evenements tirables sont listes dans act1.json (event_pool).",
+	"_doc": "Evenements (story 005). events: liste de {id, title, text (FR), options: exactement 2 x {label, result_text, effects}}. Effets: heal {percent 1..100}, lose_hp {value > 0; un evenement ne tue jamais: PV >= 1}, gain_max_hp {value > 0; augmente aussi les PV actuels}, add_card {card}, add_random_card {rarity: common|uncommon|rare}, remove_card {card; retire un exemplaire si le deck en a un}, add_ball {ball: id de balls.json, count: entier >= 1 (defaut 1); donne des Balls dans la limite de max_carried}, nothing. Les evenements tirables sont listes dans act1.json (event_pool).",
 	"events": [
 		{"id": "rattata_affame", "title": "Un Rattata affamé",
 			"text": "Un Rattata maigrichon te fixe, les yeux brillants, devant ton sac de baies. Son ventre gargouille.",
@@ -28,6 +28,20 @@
 				{"label": "Y plonger", "result_text": "Tu déniches une technique, mais tu es griffé par des ronces.",
 					"effects": [{"type": "add_random_card", "rarity": "common"}, {"type": "lose_hp", "value": 4}]},
 				{"label": "Contourner", "result_text": "Tu fais une pause à l'écart du chemin et reprends des forces.", "effects": [{"type": "heal", "percent": 10}]}
+			]},
+		{"id": "sac_abandonne", "title": "Un sac abandonné",
+			"text": "Au pied d'un arbre, un sac de Dresseur est resté ouvert. Quelques Balls dépassent du rabat, et un Nidoran rôde à proximité.",
+			"options": [
+				{"label": "Prendre les Balls", "result_text": "Tu empoches les Balls, mais le Nidoran te pique au passage.",
+					"effects": [{"type": "add_ball", "ball": "poke_ball", "count": 2}, {"type": "lose_hp", "value": 4}]},
+				{"label": "Laisser le sac", "result_text": "Tu respectes le bien d'autrui et te reposes un instant.", "effects": [{"type": "heal", "percent": 8}]}
+			]},
+		{"id": "chercheur_pokemon", "title": "Un chercheur passionné",
+			"text": "Un chercheur te fait signe : il étudie la capture des Pokémon sauvages et cherche un volontaire pour tester son matériel.",
+			"options": [
+				{"label": "Servir de cobaye", "result_text": "L'expérience est éprouvante, mais il te remercie avec une Super Ball.",
+					"effects": [{"type": "add_ball", "ball": "super_ball"}, {"type": "lose_hp", "value": 6}]},
+				{"label": "Poursuivre ta route", "result_text": "Le chercheur retourne à ses notes.", "effects": [{"type": "nothing"}]}
 			]}
 	]
 }

@@ -534,6 +534,8 @@
 		"rattata_affame",
 		"source_chaude",
 		"dresseur_curieux",
-		"herbes_hautes"
+		"herbes_hautes",
+		"sac_abandonne",
+		"chercheur_pokemon"
 	]
 }

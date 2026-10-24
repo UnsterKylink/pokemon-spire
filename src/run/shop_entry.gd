@@ -5,11 +5,14 @@ extends RefCounted
 const KIND_CARD: String = "card"
 const KIND_ITEM: String = "item"
 const KIND_POTION: String = "potion"
+const KIND_BALL: String = "ball"
 
 var kind: String = KIND_CARD
 var card: CardData = null
 var item: ItemData = null
 var potion: PotionData = null
+## Story 017 (kind "ball").
+var ball: BallData = null
 ## Pokédollars.
 var price: int = 0
 ## True once bought (the slot stays visible, greyed out).

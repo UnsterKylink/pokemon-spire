@@ -8,6 +8,8 @@ extends RefCounted
 var cards: Array[ShopEntry] = []
 var items: Array[ShopEntry] = []
 var potions: Array[ShopEntry] = []
+## Story 017: 1-2 Poké Ball offers (balls.json shop), kind ShopEntry.KIND_BALL.
+var balls: Array[ShopEntry] = []
 var _run: RunState
 var _min_deck_size: int = 1
 
@@ -38,6 +40,15 @@ static func generate(data: GameData, run: RunState, rng: RandomNumberGenerator) 
 		e.potion = potion
 		e.price = potion.price
 		inv.potions.append(e)
+	var ball_cfg: Dictionary = data.get_ball_shop_config()
+	if not ball_cfg.is_empty():
+		var ball_count: int = rng.randi_range(int(ball_cfg["count_min"]), int(ball_cfg["count_max"]))
+		for ball: BallData in LootGenerator.pick_balls(data, run.zone_index + 1, ball_count, ball_cfg["weights"], rng):
+			var e := ShopEntry.new()
+			e.kind = ShopEntry.KIND_BALL
+			e.ball = ball
+			e.price = ball.price
+			inv.balls.append(e)
 	return inv
 
 
@@ -54,6 +65,21 @@ func can_buy_item(index: int) -> bool:
 ## True if potions[index] can be bought now (also requires a free potion slot).
 func can_buy_potion(index: int) -> bool:
 	return _can_buy(potions, index) and _run.potions.size() < _run.max_potions()
+
+
+## True if balls[index] can be bought now (also requires room: total balls < max_carried).
+func can_buy_ball(index: int) -> bool:
+	return _can_buy(balls, index) and _run.ball_total() < _run.max_balls()
+
+
+## Buys balls[index]: pays and stores one ball. False (nothing changes) if not purchasable (money / bag full).
+func buy_ball(index: int) -> bool:
+	if not can_buy_ball(index):
+		return false
+	_run.spend_money(balls[index].price)
+	_run.add_ball(balls[index].ball.id)
+	balls[index].sold = true
+	return true
 
 
 ## Buys cards[index]: pays and adds the card to the deck. False (nothing changes) if not purchasable.
