@@ -65,6 +65,27 @@ const COLOR_ITEM: Color = Color(1.0, 0.72, 0.35)
 const COLOR_POTION: Color = Color(0.55, 0.85, 1.0)
 const ITEM_FLOAT_Y: float = 0.42
 const POTION_FLOAT_Y: float = 0.7
+## Story 016: status feedback (own float per target, so it never hides "Super efficace !"), start height in the sprite.
+const STATUS_FLOAT_Y: float = 0.3
+## Added value of a stackable status ("Brûlure +3") / a non-stackable status applied ("Paralysie !").
+const TEXT_STATUS_ADDED: String = "%s +%d"
+const TEXT_STATUS_APPLIED: String = "%s !"
+## Status damage at the end of the turn: amount, status name.
+const TEXT_STATUS_TICK: String = "-%d PV (%s)"
+const TEXT_STATUS_IMMUNE: String = "Immunisé !"
+## Paralysis: an enemy action / a card of the player fails (status name).
+const TEXT_STATUS_FAILED: String = "Raté ! (%s)"
+## Lost turn (sleep / freeze) by status id; other ids fall back to TEXT_STATUS_APPLIED with the skip_label.
+const TEXT_SKIPPED: Dictionary = {"sleep": "Dort…", "freeze": "Gelé !"}
+const TEXT_WOKE: String = "Réveillé !"
+const TEXT_THAWED: String = "Dégelé !"
+## Info row when the player's turn is lost (by status id, fallback for other ids).
+const TEXT_PLAYER_LOST_TURN: Dictionary = {"sleep": "Ton équipe dort : 0 énergie ce tour",
+		"freeze": "Ton équipe est gelée : 0 énergie ce tour"}
+const TEXT_PLAYER_LOST_TURN_OTHER: String = "Ton équipe perd son tour : 0 énergie ce tour"
+const COLOR_LOST_TURN: Color = Color(0.75, 0.7, 1.0)
+const INTENT_FONT_SIZE: int = 22
+const INTENT_FONT_MIN: int = 14
 
 
 ## A floating feedback label and its running tween (one per target, reused).
@@ -73,6 +94,9 @@ class FloatText extends RefCounted:
 	var tween: Tween
 	## Bumped on every show/hide so a deferred show that was superseded does nothing.
 	var serial: int = 0
+	## Story 016: messages gathered during one frame (several statuses can change at once), shown together.
+	var pending: PackedStringArray = PackedStringArray()
+	var pending_color: Color = Color.WHITE
 
 
 ## Widgets of one enemy slot (typed refs, no find_child).
@@ -86,6 +110,8 @@ class EnemyView extends RefCounted:
 	var block_label: Label
 	var type_badge: HBoxContainer
 	var float_text: FloatText
+	var status_chips: StatusChipRow
+	var status_float: FloatText
 
 
 ## Story 013: league trainer header colours.
@@ -110,6 +136,11 @@ var _player_float: FloatText
 var _switch_float: FloatText
 var _item_float: FloatText
 var _potion_float: FloatText
+var _player_status_float: FloatText
+var _player_chips: StatusChipRow
+## Story 016: status that made the player lose the current turn ("" = normal turn); _pending_lost_turn waits for turn_started.
+var _lost_turn_status: String = ""
+var _pending_lost_turn: String = ""
 var _pending_items: Array[String] = []
 var _player_caption: Label
 var _float_layer: Control
@@ -179,6 +210,35 @@ func get_potion_float_text() -> String:
 	return _visible_float_text(_potion_float)
 
 
+## Story 016: status feedback text currently shown over enemy enemy_index ("" if none).
+func get_enemy_status_float_text(enemy_index: int) -> String:
+	if enemy_index < 0 or enemy_index >= _enemy_views.size():
+		return ""
+	return _visible_float_text(_enemy_views[enemy_index].status_float)
+
+
+## Story 016: status feedback text currently shown over the active Pokémon ("" if none).
+func get_player_status_float_text() -> String:
+	return _visible_float_text(_player_status_float)
+
+
+## Story 016: status chip texts under enemy enemy_index (empty if none / bad index).
+func get_enemy_status_chips(enemy_index: int) -> PackedStringArray:
+	if enemy_index < 0 or enemy_index >= _enemy_views.size():
+		return PackedStringArray()
+	return _enemy_views[enemy_index].status_chips.get_chip_texts()
+
+
+## Story 016: status chip texts under the player's panel.
+func get_player_status_chips() -> PackedStringArray:
+	return _player_chips.get_chip_texts()
+
+
+## Story 016: text of the info-row hint ("Choisissez une cible", lost turn message, turn bonus or "").
+func get_hint_text() -> String:
+	return _hint_label.text
+
+
 ## Drinks potion `index` of the battle (player's turn only, no energy cost). False if not possible.
 func use_potion(index: int) -> bool:
 	if _battle == null or not _battle.can_use_potion(index):
@@ -201,7 +261,11 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_hide_float(_switch_float)
 	_hide_float(_item_float)
 	_hide_float(_potion_float)
+	_hide_float(_player_status_float)
 	_pending_items.clear()
+	_lost_turn_status = ""
+	_pending_lost_turn = ""
+	_player_chips.bind(player, _data.get_status_book())
 	_end_box.visible = false
 	_end_dim.visible = false
 	_battle.state_changed.connect(_refresh)
@@ -210,6 +274,12 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.active_pokemon_changed.connect(_on_active_pokemon_changed)
 	_battle.item_triggered.connect(_on_item_triggered)
 	_battle.potion_used.connect(_on_potion_used)
+	_battle.status_applied.connect(_on_status_applied)
+	_battle.status_ticked.connect(_on_status_ticked)
+	_battle.status_blocked.connect(_on_status_blocked)
+	_battle.turn_skipped.connect(_on_turn_skipped)
+	_battle.status_removed.connect(_on_status_removed)
+	_battle.turn_started.connect(_on_turn_started)
 	_battle.start()
 	_refresh_active_pokemon(player)
 	_refresh()
@@ -279,6 +349,21 @@ func play_card_direct(index: int, enemy_index: int = -1) -> bool:
 		return false
 	var target: int = enemy_index if enemy_index >= 0 else _battle.first_living_enemy()
 	return _battle.play_card(index, target)
+
+
+## QA-ONLY CHEAT: applies `value` of status `status_id` through Battle.apply_status (immunities and feedback
+## included) to enemy `target_index`, or to the player when -1. Returns false when refused. Never called by the game.
+func qa_apply_status(target_index: int, status_id: String, value: int) -> bool:
+	if _battle == null:
+		return false
+	var target: Combatant = _battle.player
+	if target_index >= 0:
+		if target_index >= _battle.enemies.size():
+			return false
+		target = _battle.enemies[target_index]
+	var ok: bool = _battle.apply_status(target, status_id, value)
+	_refresh()
+	return ok
 
 
 ## QA-ONLY: replaces the hand with the given card ids (and refills energy) so a walkthrough
@@ -360,6 +445,8 @@ func _build_ui() -> void:
 	_player_block = _make_label(20)
 	_player_block.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
 	player_box.add_child(_player_block)
+	_player_chips = StatusChipRow.new()
+	player_box.add_child(_player_chips)
 
 	_enemies_box = HBoxContainer.new()
 	_enemies_box.name = "EnemiesBox"
@@ -466,6 +553,7 @@ func _build_ui() -> void:
 	_switch_float = _make_float_text()
 	_item_float = _make_float_text()
 	_potion_float = _make_float_text()
+	_player_status_float = _make_float_text()
 
 
 func _make_label(font_size: int) -> Label:
@@ -526,6 +614,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		child.queue_free()
 	for old: EnemyView in _enemy_views:
 		_free_float(old.float_text)
+		_free_float(old.status_float)
 	_enemy_views.clear()
 	var scale_index: int = clampi(enemies.size(), 1, ENEMY_SPRITE_SCALES.size()) - 1
 	var sprite_scale: float = ENEMY_SPRITE_SCALES[scale_index]
@@ -544,7 +633,8 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.type_badge = CardView.make_type_badge_row()
 		_set_badge_row(v.type_badge, enemies[i].type_ids)
 		v.panel.add_child(v.type_badge)
-		v.intent_label = _make_label(22)
+		v.intent_label = _make_label(INTENT_FONT_SIZE)
+		v.intent_label.clip_text = true  # never widens the slot; the font shrinks to fit first (_fit_intent_font)
 		v.panel.add_child(v.intent_label)
 		v.sprite = _make_sprite_holder("EnemySprite%d" % i, sprite_scale)
 		v.sprite.texture = _load_texture(enemies[i].sprite_path)
@@ -556,7 +646,11 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.block_label = _make_label(18)
 		v.block_label.add_theme_color_override("font_color", COLOR_INTENT_BLOCK)
 		v.panel.add_child(v.block_label)
+		v.status_chips = StatusChipRow.new()
+		v.panel.add_child(v.status_chips)
+		v.status_chips.bind(enemies[i], _data.get_status_book())
 		v.float_text = _make_float_text()
+		v.status_float = _make_float_text()
 		_enemy_views.append(v)
 
 
@@ -600,6 +694,95 @@ func _flush_item_float() -> void:
 
 func _on_potion_used(potion: PotionData) -> void:
 	_show_float(_potion_float, _player_sprite, TEXT_POTION % potion.display_name, COLOR_POTION, POTION_FLOAT_Y)
+
+
+# --- Status feedback (story 016) --------------------------------------------------
+
+func _on_status_applied(target: Combatant, status_id: String, value: int) -> void:
+	var def: StatusData = _data.get_status(status_id)
+	if def == null:
+		return
+	var text: String = TEXT_STATUS_ADDED % [def.display_name, value] if def.stackable else TEXT_STATUS_APPLIED % def.display_name
+	_queue_status_float(target, text, def.color)
+
+
+func _on_status_ticked(target: Combatant, status_id: String, amount: int) -> void:
+	var def: StatusData = _data.get_status(status_id)
+	if def != null:
+		_queue_status_float(target, TEXT_STATUS_TICK % [amount, def.display_name], def.color)
+
+
+## Immunity, or (player only) a card that fizzled because of paralysis: the player still has the status and is not immune.
+func _on_status_blocked(target: Combatant, status_id: String) -> void:
+	var def: StatusData = _data.get_status(status_id)
+	if def == null:
+		return
+	if target == _battle.player and def.skip_chance > 0.0 and target.has_status(status_id) and not _battle.is_immune(target, status_id):
+		_queue_status_float(target, TEXT_STATUS_FAILED % def.display_name, def.color)
+	else:
+		_queue_status_float(target, TEXT_STATUS_IMMUNE, COLOR_IMMUNE)
+
+
+func _on_turn_skipped(target: Combatant, status_id: String) -> void:
+	var def: StatusData = _data.get_status(status_id)
+	if def == null:
+		return
+	var text: String = TEXT_STATUS_FAILED % def.display_name
+	if def.skip_turns > 0:
+		text = String(TEXT_SKIPPED.get(status_id, TEXT_STATUS_APPLIED % def.skip_label))
+	# The lost turn is shown before the "Réveillé !" of the same frame (the sleep is consumed first).
+	_queue_status_float(target, text, def.color, true)
+	if target == _battle.player:
+		_pending_lost_turn = status_id
+
+
+## Only waking up and thawing get a message; expiries and cures just remove the chip.
+func _on_status_removed(target: Combatant, status_id: String) -> void:
+	var def: StatusData = _data.get_status(status_id)
+	if def == null or _battle.state != Battle.State.PLAYER_TURN:
+		return
+	if def.wake_on_damage:
+		_queue_status_float(target, TEXT_WOKE, def.color)
+	elif not def.thaw_types.is_empty():
+		_queue_status_float(target, TEXT_THAWED, def.color)
+
+
+func _on_turn_started() -> void:
+	_lost_turn_status = _pending_lost_turn
+	_pending_lost_turn = ""
+
+
+## Gathers the status messages of `target` for this frame; they are shown together (one line each) at the end of it.
+func _queue_status_float(target: Combatant, text: String, color: Color, first: bool = false) -> void:
+	var f: FloatText = _player_status_float
+	if target != _battle.player:
+		var idx: int = _battle.enemies.find(target)
+		if idx < 0 or idx >= _enemy_views.size():
+			return
+		f = _enemy_views[idx].status_float
+	if f.pending.is_empty():
+		f.pending_color = color
+		_flush_status_float.call_deferred(f, target)
+	elif first:
+		f.pending_color = color
+	if first:
+		f.pending.insert(0, text)
+	else:
+		f.pending.append(text)
+
+
+func _flush_status_float(f: FloatText, target: Combatant) -> void:
+	if f.pending.is_empty() or not is_inside_tree() or _battle == null:
+		return
+	var text: String = "\n".join(f.pending)
+	f.pending.clear()
+	var anchor: Control = _player_sprite
+	if target != _battle.player:
+		var idx: int = _battle.enemies.find(target)
+		if idx < 0 or idx >= _enemy_views.size():
+			return
+		anchor = _enemy_views[idx].sprite
+	_show_float(f, anchor, text, f.pending_color, STATUS_FLOAT_Y)
 
 
 # --- Effectiveness feedback ------------------------------------------------
@@ -665,6 +848,7 @@ func _hide_float(f: FloatText) -> void:
 	if f == null:
 		return
 	f.serial += 1
+	f.pending.clear()
 	if f.tween != null and f.tween.is_valid():
 		f.tween.kill()
 	f.label.visible = false
@@ -719,10 +903,15 @@ func _refresh() -> void:
 	var over: bool = _battle.state != Battle.State.PLAYER_TURN
 	_end_turn_button.disabled = over
 	_hint_label.text = "Choisissez une cible" if _selected_index >= 0 else ""
-	if _selected_index < 0 and _battle.turn_damage_bonus > 0 and not over:
+	_hint_label.remove_theme_color_override("font_color")
+	if _selected_index < 0 and not over and not _lost_turn_status.is_empty():
+		_hint_label.text = String(TEXT_PLAYER_LOST_TURN.get(_lost_turn_status, TEXT_PLAYER_LOST_TURN_OTHER))
+		_hint_label.add_theme_color_override("font_color", COLOR_LOST_TURN)
+	elif _selected_index < 0 and _battle.turn_damage_bonus > 0 and not over:
 		_hint_label.text = TEXT_TURN_BONUS % _battle.turn_damage_bonus
 	for i: int in _enemy_views.size():
 		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
+	_player_chips.refresh()
 	_rebuild_hand()
 	# Victory goes straight to the reward screen (Main); the overlay is for defeat only.
 	if _battle.state == Battle.State.LOST:
@@ -739,6 +928,7 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 	if e.is_alive() and e.intent != null and _battle.state == Battle.State.PLAYER_TURN:
 		v.intent_label.text = e.intent.display_text()
 		v.intent_label.add_theme_color_override("font_color", _intent_color(e.intent))
+		_fit_intent_font(v.intent_label)
 	elif e.is_alive():
 		v.intent_label.text = ""
 	else:
@@ -750,6 +940,21 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 		v.panel.modulate = MODULATE_TARGETABLE
 	else:
 		v.panel.modulate = Color.WHITE
+
+
+## Story 016: long intents ("Attaque 13 + Brûlure 4") shrink their font so they fit the enemy slot (3 enemies at 1280).
+func _fit_intent_font(label: Label) -> void:
+	var n: int = maxi(_enemy_views.size(), 1)
+	var sep: int = _enemies_box.get_theme_constant("separation")
+	var box_w: float = _enemies_box.size.x
+	if box_w <= 0.0:
+		box_w = get_viewport_rect().size.x * 2.0 / 3.0  # before the first layout: the arena gives the enemies 2/3
+	var max_w: float = (box_w - sep * (n - 1)) / float(n) - 4.0
+	var font: Font = label.get_theme_font("font")
+	var font_size: int = INTENT_FONT_SIZE
+	while font_size > INTENT_FONT_MIN and font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_w:
+		font_size -= 1
+	label.add_theme_font_size_override("font_size", font_size)
 
 
 func _rebuild_hand() -> void:
