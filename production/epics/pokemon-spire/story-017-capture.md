@@ -1,12 +1,12 @@
 # Story 017: Capture avec Poké Balls
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-10-25
 
 ## Context
 
@@ -72,5 +72,5 @@
 
 ## Dependencies
 
-- Depends on: Story 016
+- Depends on: Story 016 (done), 019 (done: balance first, simulator to re-run after this story)
 - Unlocks: Story 018
