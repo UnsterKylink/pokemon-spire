@@ -407,6 +407,20 @@ func set_trainer_header(text: String, accent: Color, boss: bool = false) -> void
 	_trainer_header.visible = not text.is_empty()
 
 
+## Story 018: shows the rival intro banner over the battle (info: see RivalIntroBanner.setup). Display only.
+func show_rival_intro(info: Dictionary) -> RivalIntroBanner:
+	var banner := RivalIntroBanner.new()
+	add_child(banner)
+	banner.setup(info)
+	return banner
+
+
+## Story 018: the rival intro banner while shown (null otherwise).
+func get_rival_intro() -> RivalIntroBanner:
+	var n: Node = get_node_or_null("RivalIntroBanner")
+	return n as RivalIntroBanner if n != null and not n.is_queued_for_deletion() else null
+
+
 ## Story 013: the trainer header text ("" when hidden).
 func get_trainer_header_text() -> String:
 	return _trainer_label.text if _trainer_header.visible else ""

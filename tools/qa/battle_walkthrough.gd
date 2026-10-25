@@ -25,6 +25,8 @@ extends SceneTree
 ## Story 019 (dual-type intent "(Type)", zone-1 gym after balancing; see _balance_shots; filter `story-019`). Uses a scratch save file (SAVE_QA_PATH,
 ## Story 017 (capture: HUD balls, capture mode with chances, success / failure feedback, reward with the capture, Mart
 ## balls, team tab with a captured Pokémon, trainer fight without capture; see _capture_shots; filter `story-017`).
+## Story 018 (rival room on the zone-2 map, rival intro / fight / reward, event with a greyed option, card removal picker,
+## legendary event / solo fight / legendary card, pre-league rival; see _rival_shots; filter `story-018`).
 ## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
@@ -90,6 +92,8 @@ const CAPTURE_SEED: int = 1701
 const CAPTURE_TRIO: String = "trio_r2"
 ## Story 019 shots: run seed (any seed works; fixed for reproducible shots).
 const STORY_019_SEED: int = 1907
+## Story 018 shots: run seed.
+const RIVAL_SEED: int = 1801
 var _main: Main
 var _out_dir: String = "user://qa"
 var _filter: String = ""
@@ -1233,7 +1237,146 @@ func _capture_shots() -> void:
 	await _shot("08-dresseur-sans-capture")
 
 
+## Story 018: one line of rival / event state for the shot log.
+func _rival_line(tag: String) -> void:
+	var line: String = "018 %s: screen=%s rival=%s fight=%s special=%s pending=%d" % [tag, _main.get_current_screen_name(),
+			_main.get_rival_info(), {"room": _main.get_current_fight().get("room", ""), "title": _main.get_current_fight().get("title", "")},
+			_main.get_last_special_reward(), _main.get_pending_card_removals()]
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null and _main.get_current_screen_name() == "battle":
+		var b: Battle = bs.get_battle()
+		var caps := PackedStringArray()
+		for i: int in b.enemies.size():
+			caps.append("%s" % [bs.get_enemy_capture_texts(i)])
+		var intro: RivalIntroBanner = bs.get_rival_intro()
+		line += " header=\"%s\" enemies=%s capture=%s intro=\"%s\" taunt=\"%s\"" % [bs.get_trainer_header_text(), _enemy_summary(b), caps,
+				intro.get_title_text() if intro != null else "", intro.get_taunt_text() if intro != null else ""]
+	var es: EventScreen = _main.get_event_screen()
+	if es != null:
+		var opts := PackedStringArray()
+		for i: int in (es.get_event().get("options", []) as Array).size():
+			opts.append("%s[%s]" % [es.get_option_text(i), "ok" if es.is_option_available(i) else "grisée"])
+		line += " event=%s options=%s picker_open=%s" % [es.get_event().get("id", ""), opts, es.get_picker().is_open()]
+	var rs: RewardScreen = _main.get_reward_screen()
+	if rs != null:
+		line += " reward_title=\"%s\" loot=%s captures=%s" % [rs.get_title_text(), rs.get_loot_texts(), rs.get_capture_texts()]
+	print(line)
+
+
+## Story 018: resolves the non-rival rooms of the current map until a rival fight is on screen (false if none).
+func _walk_to_rival() -> bool:
+	for step: int in 40:
+		var scr: String = _main.get_current_screen_name()
+		if scr == "map":
+			var reach: Array[String] = _main.map_reachable_ids()
+			if reach.is_empty():
+				return false
+			var pick: String = reach[0]
+			for id: String in reach:
+				if _main.get_run_state().act.graph.get_node(id).room_type == "rival":
+					pick = id
+			_main.map_choose(pick)
+		elif scr == "battle":
+			if String(_main.get_current_fight().get("room", "")) == "rival":
+				return true
+			_main.qa_win_current_fight()
+		elif scr == "reward":
+			_main.reward_skip()
+		elif scr == "event":
+			_main.event_choose(1 if _main.event_option_available(1) else 0)
+			_main.event_continue()
+			while _main.get_pending_card_removals() > 0:
+				_main.event_remove_card(0)
+		elif scr == "evolution":
+			if _main.get_evolution_screen().get_step() == EvolutionScreen.Step.CHOOSE:
+				_main.evolution_skip()
+			else:
+				_main.evolution_continue()
+		elif scr == "center":
+			_main.center_continue()
+		elif scr == "mart":
+			_main.shop_leave()
+		else:
+			_main.room_continue()
+	return false
+
+
+## Story 018: rival / events / legendary shots (filter `story-018`).
+func _rival_shots() -> void:
+	_main.start_new_run(RIVAL_SEED, "salameche")
+	_main.qa_set_zone(1)
+	_rival_line("01")
+	await _shot("01-carte-salle-rival")
+	if not _walk_to_rival():
+		print("018 ERROR: no rival room reached")
+	_rival_line("02")
+	await _shot("02-rival-intro")
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null and bs.get_rival_intro() != null:
+		bs.get_rival_intro().dismiss()
+	await create_timer(FLOAT_WAIT).timeout
+	_rival_line("03")
+	await _shot("03-combat-rival")
+	_main.qa_win_current_fight()
+	_rival_line("04")
+	await _shot("04-recompense-rival")
+	_main.reward_skip()
+	# 05: the travelling merchant with too little money: the 110 P$ option is greyed with its reason.
+	_main.qa_set_money(30)
+	_main.qa_show_event("marchand_ambulant")
+	_rival_line("05")
+	await _shot("05-evenement-choix")
+	# 06: the trading trainer: accept, "Continuer" -> the deck picker to forget a card.
+	_main.qa_show_event("dresseur_echange")
+	_main.event_choose(0)
+	_main.event_continue()
+	_rival_line("06")
+	await _shot("06-oubli-carte")
+	var picker: DeckPicker = _main.get_event_screen().get_picker()
+	if picker.is_open() and not picker.get_offered_indices().is_empty():
+		picker.pick(picker.get_offered_indices()[0])
+	_rival_line("06b")
+	# 07: Darkrai's legendary event (zone 3+).
+	_main.qa_set_zone(2)
+	_main.qa_show_event("legendaire_darkrai")
+	_rival_line("07")
+	await _shot("07-legendaire-evenement")
+	_main.event_choose(1)
+	_main.event_continue()
+	for bid: String in ["poke_ball", "super_ball", "hyper_ball"]:
+		_main.qa_give_ball(bid)
+	bs = _main.get_battle_screen()
+	if bs != null:
+		await create_timer(FLOAT_WAIT).timeout
+		bs.toggle_capture_mode()
+	_rival_line("08")
+	await _shot("08-combat-legendaire")
+	if bs != null and bs.is_capture_mode():
+		bs.toggle_capture_mode()
+	_main.qa_win_current_fight()
+	_rival_line("09")
+	await _shot("09-carte-legendaire")
+	_main.reward_skip()
+	# 10: the pre-league rival after badge 8.
+	_main.qa_set_zone(7)
+	_main.qa_win_gym()
+	_main.reward_skip()
+	_main.badge_continue()
+	for _e: int in 6:
+		if _main.get_current_screen_name() == "evolution":
+			if _main.get_evolution_screen().get_step() == EvolutionScreen.Step.CHOOSE:
+				_main.evolution_skip()
+			else:
+				_main.evolution_continue()
+	_rival_line("10")
+	await _shot("10-rival-final")
+
+
 func _run() -> void:
+	if _filter == "story-018":
+		await _rival_shots()
+		quit(0)
+		return
 	if _filter == "story-017":
 		await _capture_shots()
 		quit(0)

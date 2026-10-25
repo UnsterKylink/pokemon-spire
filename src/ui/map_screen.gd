@@ -26,7 +26,9 @@ const TEXT_BANNER: String = "Zone %d — Arène %s"
 const TEXT_BANNER_SUB_FIRST: String = "Le Champion %s t'attend au sommet de la carte."
 const TEXT_BANNER_SUB_NEXT: String = "Le Champion %s t'attend au sommet. Ton deck, tes PV, tes objets et ton argent te suivent."
 ## Legend order of the room types.
-const LEGEND_ORDER: Array[String] = ["wild", "elite", "event", "center", "mart", "boss"]
+const LEGEND_ORDER: Array[String] = ["wild", "elite", "rival", "event", "center", "mart", "boss"]
+## Story 018: tooltip line of the rival rooms.
+const TEXT_RIVAL_TIP: String = "%s et son %s t'attendent"
 const LEGEND_SWATCH: Vector2 = Vector2(18, 18)
 ## Where the "next floor" row sits in the visible map area when scrolling to it (0 = top, 1 = bottom).
 const FOCUS_RATIO: float = 0.5
@@ -68,8 +70,12 @@ func setup(data: GameData, run: RunState) -> void:
 	_floor.text = TEXT_START if floor_now == 0 else TEXT_FLOOR % [floor_now, progress.graph.floors]
 	_info.text = "PV %d/%d   |   Deck : %d cartes   |   Graine : %d" % [run.hp, run.max_hp, run.deck.size(), progress.graph.seed]
 	var names: Dictionary = {}
+	var has_rival: bool = false
+	for n: MapNode in progress.graph.nodes.values():
+		has_rival = has_rival or n.room_type == "rival"
 	for rt: String in LEGEND_ORDER:
-		names[rt] = data.get_room_name(rt)
+		if rt != "rival" or has_rival:  # story 018: the rival entry only on maps with a rival room
+			names[rt] = data.get_room_name(rt)
 	var gym_label: String = ""
 	if not zone.is_empty():
 		gym_label = TEXT_GYM % String(zone["type_name"])
@@ -81,7 +87,10 @@ func setup(data: GameData, run: RunState) -> void:
 		_banner_title.text = TEXT_BANNER % [int(zone["number"]), String(zone["type_name"])]
 		_banner_title.add_theme_color_override("font_color", zone_color.lightened(0.3))
 		_banner_sub.text = (TEXT_BANNER_SUB_FIRST if int(zone["index"]) == 0 else TEXT_BANNER_SUB_NEXT) % String(zone["leader"])
-	_canvas.setup(progress, names, gym_label)
+	var rival_tip: String = ""
+	if not run.rival_name.is_empty():
+		rival_tip = TEXT_RIVAL_TIP % [run.rival_name, String(data.get_pokemon_info(run.rival_current_form(data)).get("name", ""))]
+	_canvas.setup(progress, names, gym_label, rival_tip)
 	_scroll_to_focus()
 
 
@@ -222,6 +231,8 @@ func _build_legend(names: Dictionary) -> void:
 		_legend.remove_child(child)
 		child.queue_free()
 	for rt: String in LEGEND_ORDER:
+		if not names.has(rt):
+			continue
 		var item := HBoxContainer.new()
 		item.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		item.add_theme_constant_override("separation", 6)

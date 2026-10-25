@@ -17,11 +17,15 @@ const NODE_FONT_SIZE: int = 16
 const BOSS_FONT_SIZE: int = 20
 ## Short label shown on each room button (UI text, not gameplay data).
 const ROOM_SHORT: Dictionary = {"wild": "Combat", "elite": "Élite", "center": "Centre", "mart": "Mart",
-		"event": "?", "boss": "Champion"}
+		"event": "?", "boss": "Champion", "rival": "Rival"}
 ## Colour per room type (also used by the legend).
 const ROOM_COLORS: Dictionary = {
 	"wild": Color(0.85, 0.36, 0.3), "elite": Color(0.68, 0.36, 0.9), "center": Color(0.95, 0.5, 0.7),
-	"mart": Color(0.3, 0.6, 0.95), "event": Color(0.35, 0.75, 0.42), "boss": Color(1.0, 0.76, 0.22)}
+	"mart": Color(0.3, 0.6, 0.95), "event": Color(0.35, 0.75, 0.42), "boss": Color(1.0, 0.76, 0.22),
+	"rival": Color(0.56, 0.18, 0.78)}  # story 018: deep purple, light text (ROOM_LIGHT_TEXT)
+## Story 018: room types whose button text is light (dark background).
+const ROOM_LIGHT_TEXT: Array[String] = ["rival"]
+const COLOR_TEXT_LIGHT: Color = Color(0.97, 0.94, 1.0)
 const COLOR_UNKNOWN_ROOM: Color = Color(0.6, 0.6, 0.6)
 const COLOR_TEXT_DARK: Color = Color(0.08, 0.08, 0.1)
 const COLOR_TEXT_VISITED: Color = Color(0.62, 0.62, 0.66)
@@ -43,7 +47,8 @@ var _reachable: Array[String] = []
 
 ## Builds the buttons for `progress.graph`. `room_names`: room type -> display name (tooltips). `boss_label`
 ## (story 012, optional): text of the gym room button ("Arène Roche"); ROOM_SHORT's "Champion" when empty.
-func setup(progress: ActProgress, room_names: Dictionary, boss_label: String = "") -> void:
+## `rival_tip` (story 018, optional): extra tooltip line of the rival rooms (e.g. "Régis et Carapuce").
+func setup(progress: ActProgress, room_names: Dictionary, boss_label: String = "", rival_tip: String = "") -> void:
 	_progress = progress
 	_graph = progress.graph
 	_room_names = room_names
@@ -61,6 +66,8 @@ func setup(progress: ActProgress, room_names: Dictionary, boss_label: String = "
 		if node.room_type == "boss" and not boss_label.is_empty():
 			b.text = boss_label
 		b.tooltip_text = "%s — étage %d" % [String(_room_names.get(node.room_type, node.room_type)), node.floor]
+		if node.room_type == "rival" and not rival_tip.is_empty():
+			b.tooltip_text += "\n" + rival_tip
 		b.focus_mode = Control.FOCUS_NONE
 		b.add_theme_font_size_override("font_size", BOSS_FONT_SIZE if node.room_type == "boss" else NODE_FONT_SIZE)
 		_style_button(b, node)
@@ -144,7 +151,7 @@ func _style_button(b: Button, node: MapNode) -> void:
 	var bg: Color = base.darkened(0.3)
 	var border: Color = Color(0, 0, 0, 0)
 	var border_w: int = 0
-	var text: Color = COLOR_TEXT_DARK
+	var text: Color = COLOR_TEXT_LIGHT if ROOM_LIGHT_TEXT.has(node.room_type) else COLOR_TEXT_DARK
 	var clickable: bool = false
 	if node.id == _progress.current_node_id:
 		bg = base

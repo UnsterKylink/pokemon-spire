@@ -15,6 +15,11 @@ const TEXT_TEAM: String = "Équipe"
 const COLOR_TEAM: Color = Color(0.6, 0.75, 0.95)
 const COLOR_POKEMON_NAME: Color = Color(1.0, 0.92, 0.7)
 
+## Story 018: legendary card look (gold double frame, gold name, "Légendaire" tab on the bottom border).
+const TEXT_LEGENDARY: String = "Légendaire"
+const COLOR_LEGENDARY: Color = Color(1.0, 0.8, 0.25)
+const COLOR_LEGENDARY_INNER: Color = Color(0.95, 0.45, 0.85)
+
 ## Cache of cropped card icons (path -> Texture2D): pure display cache, no game state.
 static var _cropped_cache: Dictionary = {}
 
@@ -123,6 +128,55 @@ static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokem
 	desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	box.add_child(desc)
+	if card.legendary:
+		_add_legendary_look(b, name_label)
+
+
+## Story 018: gold outer + pink inner frame over the caller's border, gold name, "Légendaire" tab (all ignore the mouse).
+static func _add_legendary_look(b: Button, name_label: Label) -> void:
+	name_label.add_theme_color_override("font_color", COLOR_LEGENDARY)
+	var frame := Panel.new()
+	frame.name = "LegendaryFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var sb := StyleBoxFlat.new()
+	sb.draw_center = false
+	sb.set_border_width_all(4)
+	sb.border_color = COLOR_LEGENDARY
+	sb.set_corner_radius_all(8)
+	sb.shadow_color = Color(COLOR_LEGENDARY, 0.45)
+	sb.shadow_size = 6
+	frame.add_theme_stylebox_override("panel", sb)
+	b.add_child(frame)
+	var inner := Panel.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side: String in ["left", "top"]:
+		inner.set("offset_" + side, 5.0)
+	for side: String in ["right", "bottom"]:
+		inner.set("offset_" + side, -5.0)
+	var isb := StyleBoxFlat.new()
+	isb.draw_center = false
+	isb.set_border_width_all(2)
+	isb.border_color = COLOR_LEGENDARY_INNER
+	isb.set_corner_radius_all(6)
+	inner.add_theme_stylebox_override("panel", isb)
+	b.add_child(inner)
+	var tab: Label = make_label(11)
+	tab.name = "LegendaryTab"
+	tab.text = TEXT_LEGENDARY
+	tab.add_theme_color_override("font_color", COLOR_TEXT_DARK)
+	var tsb := StyleBoxFlat.new()
+	tsb.bg_color = COLOR_LEGENDARY
+	tsb.set_corner_radius_all(5)
+	tsb.content_margin_left = 6.0
+	tsb.content_margin_right = 6.0
+	tab.add_theme_stylebox_override("normal", tsb)
+	tab.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	tab.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	tab.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	tab.offset_bottom = 2.0
+	b.add_child(tab)
 
 
 ## Name of the Pokémon carrying `card` via `pokemon_lookup` ("" for skills / no lookup; falls back to the id).
@@ -192,6 +246,11 @@ static func _lookup(pokemon_id: String, pokemon_lookup: Callable) -> Dictionary:
 		return {}
 	var v: Variant = pokemon_lookup.call(pokemon_id)
 	return v if v is Dictionary else {}
+
+
+## Story 018: rarity label of a card ("Légendaire" for legendary cards, else rarity_name).
+static func card_rarity_name(card: CardData) -> String:
+	return TEXT_LEGENDARY if card.legendary else rarity_name(card.rarity)
 
 
 ## French rarity label ("Commune", "Peu commune", "Rare").

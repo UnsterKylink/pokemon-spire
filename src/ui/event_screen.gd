@@ -3,11 +3,16 @@ extends Control
 ## Event room (mouse only, fits 1280x720): title, text, 2 option buttons; after a choice, the option's
 ## result text + the effects summary and "Continuer". Holds no game state: it emits option_chosen,
 ## Main applies the effects and calls show_result. Implements: story-005-carte-acte-1 (events, 2 options).
+## Story 018: options Main reports unavailable are greyed with their reason ("Il te faut 50 P$"), money hints
+## (+40 P$ / -20 P$) are appended to labels without a price, legendary events get a dark/gold frame with the
+## legendary's sprite, and a pending card removal opens a DeckPicker (open_removal) that never lets play block.
 
 ## Emitted once when the player picks option `index`.
 signal option_chosen(index: int)
 ## Emitted by "Continuer" once the result is shown.
 signal finished
+## Story 018: emitted when the player picks the card to forget (index into RunState.deck); Main applies it.
+signal removal_picked(deck_index: int)
 
 const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
 const COLOR_PANEL: Color = Color(0.14, 0.15, 0.2)
@@ -17,6 +22,16 @@ const COLOR_SUMMARY: Color = Color(0.55, 1.0, 0.6)
 const COLOR_CHOSEN: Color = Color(1.0, 0.86, 0.3)
 const PANEL_WIDTH: float = 940.0
 const OPTION_SIZE: Vector2 = Vector2(640, 54)
+## Story 018: unavailable option reason, money hints, removal picker texts, legendary frame.
+const TEXT_NEED_MONEY: String = "Il te faut %s"
+const TEXT_REMOVE_TITLE: String = "Choisis une carte à oublier (%d restante%s)"
+const TEXT_REMOVE_HINT: String = "Cette carte quitte définitivement ton deck."
+const TEXT_LEGENDARY: String = "Pokémon légendaire"
+const COLOR_LEG_BG: Color = Color(0.06, 0.05, 0.1)
+const COLOR_LEG_PANEL: Color = Color(0.1, 0.08, 0.14)
+const COLOR_LEG_BORDER: Color = Color(0.95, 0.75, 0.25)
+const COLOR_UNAVAILABLE: Color = Color(0.55, 0.55, 0.6)
+const LEG_SPRITE_SIZE: Vector2 = Vector2(150, 150)
 
 var _event: Dictionary = {}
 var _info: Label
@@ -31,6 +46,12 @@ var _chosen: int = -1
 var _result_shown: bool = false
 var _done: bool = false
 var _built: bool = false
+var _available: Array[bool] = []
+var _bg: ColorRect
+var _panel_style: StyleBoxFlat
+var _leg_caption: Label
+var _leg_sprite: TextureRect
+var _picker: DeckPicker
 
 
 func _ready() -> void:
@@ -38,28 +59,40 @@ func _ready() -> void:
 
 
 ## Displays `event` ({id, title, text, options:[{label, ...}]}); `run` is only read for the HP line.
-func setup(event: Dictionary, run: RunState) -> void:
+## Story 018: `data` (optional) gives the legendary's sprite; `availability(index) -> bool` (optional, e.g.
+## Main.event_option_available) greys out the options that cannot be chosen.
+func setup(event: Dictionary, run: RunState, data: GameData = null, availability: Callable = Callable()) -> void:
 	_build_ui()
 	_event = event
 	_chosen = -1
 	_result_shown = false
 	_done = false
+	_picker.close()
 	_title.text = String(event.get("title", ""))
 	_text.text = String(event.get("text", ""))
 	_set_info(run)
+	_apply_legendary_style(event, data)
 	for b: Button in _option_buttons:
 		_options_box.remove_child(b)
 		b.queue_free()
 	_option_buttons.clear()
+	_available.clear()
 	var options: Array = event.get("options", [])
 	for i: int in options.size():
+		var option: Dictionary = options[i]
+		var ok: bool = bool(availability.call(i)) if availability.is_valid() else true
+		_available.append(ok)
 		var b := Button.new()
 		b.name = "Option%d" % i
-		b.text = String((options[i] as Dictionary).get("label", ""))
+		b.text = option_text(option, ok)
 		b.custom_minimum_size = OPTION_SIZE
 		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		b.add_theme_font_size_override("font_size", 22)
 		b.focus_mode = Control.FOCUS_NONE
+		b.disabled = not ok
+		if not ok:
+			b.add_theme_color_override("font_disabled_color", COLOR_UNAVAILABLE)
+			b.tooltip_text = TEXT_NEED_MONEY % RunHud.format_money(int(option.get("requires_money", 0)))
 		b.pressed.connect(choose.bind(i))
 		_options_box.add_child(b)
 		_option_buttons.append(b)
@@ -71,6 +104,8 @@ func setup(event: Dictionary, run: RunState) -> void:
 ## Picks option `index` (same path as a click). Ignored after the first choice.
 func choose(index: int) -> void:
 	if _chosen >= 0 or index < 0 or index >= _option_buttons.size():
+		return
+	if index < _available.size() and not _available[index]:
 		return
 	_chosen = index
 	for i: int in _option_buttons.size():
@@ -97,6 +132,57 @@ func press_continue() -> void:
 		return
 	_done = true
 	finished.emit()
+
+
+## Story 018: opens the deck picker for a pending event card removal (`remaining` cards still to forget). No cancel:
+## the removal was part of the chosen option. Main calls it again after each pick while some remain.
+func open_removal(run: RunState, data: GameData, remaining: int) -> void:
+	_set_info(run)
+	_picker.open(TEXT_REMOVE_TITLE % [remaining, "s" if remaining > 1 else ""], TEXT_REMOVE_HINT, run, data,
+			func(_i: int) -> bool: return true)
+	_picker.set_cancel_visible(false)
+
+
+## Story 018: closes the removal picker.
+func close_removal() -> void:
+	_picker.close()
+
+
+## Story 018: the removal deck picker (QA).
+func get_picker() -> DeckPicker:
+	return _picker
+
+
+## Story 018: true if option `index` was offered as available.
+func is_option_available(index: int) -> bool:
+	return index >= 0 and index < _available.size() and _available[index]
+
+
+## Story 018: displayed button text of option `index` ("" if none).
+func get_option_text(index: int) -> String:
+	return _option_buttons[index].text if index >= 0 and index < _option_buttons.size() else ""
+
+
+## Story 018: the button label of `option`: its label, plus the money hint when the label shows no price, plus the
+## reason when it is unavailable.
+static func option_text(option: Dictionary, available: bool) -> String:
+	var text: String = String(option.get("label", ""))
+	var has_price: bool = text.contains(RunHud.CURRENCY) or text.contains("₽")
+	if not has_price:
+		var delta: int = 0
+		for e: Variant in option.get("effects", []):
+			if not (e is Dictionary):
+				continue
+			match String((e as Dictionary).get("type", "")):
+				"gain_money":
+					delta += int((e as Dictionary).get("value", 0))
+				"lose_money":
+					delta -= int((e as Dictionary).get("value", 0))
+		if delta != 0:
+			text += "  (%s%s)" % ["+" if delta > 0 else "−", RunHud.format_money(absi(delta))]
+	if not available:
+		text += "  — " + TEXT_NEED_MONEY % RunHud.format_money(int(option.get("requires_money", 0)))
+	return text
 
 
 ## The displayed event definition.
@@ -128,6 +214,7 @@ func _build_ui() -> void:
 		return
 	_built = true
 	var bg := ColorRect.new()
+	_bg = bg
 	bg.color = COLOR_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -145,6 +232,7 @@ func _build_ui() -> void:
 	sb.set_corner_radius_all(12)
 	sb.set_content_margin_all(28)
 	panel.add_theme_stylebox_override("panel", sb)
+	_panel_style = sb
 	center.add_child(panel)
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -152,6 +240,21 @@ func _build_ui() -> void:
 	panel.add_child(box)
 	_info = CardView.make_label(18)
 	box.add_child(_info)
+	_leg_caption = CardView.make_label(20)
+	_leg_caption.name = "LegendaryCaption"
+	_leg_caption.text = TEXT_LEGENDARY
+	_leg_caption.add_theme_color_override("font_color", COLOR_LEG_BORDER)
+	_leg_caption.visible = false
+	box.add_child(_leg_caption)
+	_leg_sprite = TextureRect.new()
+	_leg_sprite.name = "LegendarySprite"
+	_leg_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_leg_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_leg_sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_leg_sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_leg_sprite.custom_minimum_size = LEG_SPRITE_SIZE
+	_leg_sprite.visible = false
+	box.add_child(_leg_sprite)
 	_title = CardView.make_label(40)
 	_title.add_theme_color_override("font_color", COLOR_TITLE)
 	box.add_child(_title)
@@ -176,6 +279,42 @@ func _build_ui() -> void:
 	_continue_button.focus_mode = Control.FOCUS_NONE
 	_continue_button.pressed.connect(press_continue)
 	box.add_child(_continue_button)
+	_picker = DeckPicker.new()
+	_picker.card_picked.connect(_on_removal_picked)
+	add_child(_picker)
+
+
+func _on_removal_picked(deck_index: int) -> void:
+	removal_picked.emit(deck_index)
+
+
+## Story 018: dark/gold frame, caption and large sprite for legendary events; the normal look otherwise.
+func _apply_legendary_style(event: Dictionary, data: GameData) -> void:
+	var legendary: bool = bool(event.get("legendary", false))
+	_bg.color = COLOR_LEG_BG if legendary else COLOR_BG
+	_panel_style.bg_color = COLOR_LEG_PANEL if legendary else COLOR_PANEL
+	_panel_style.border_color = COLOR_LEG_BORDER if legendary else COLOR_BORDER
+	_panel_style.set_border_width_all(5 if legendary else 3)
+	_leg_caption.visible = legendary
+	_leg_sprite.texture = null
+	if legendary and data != null:
+		var path: String = String(data.get_pokemon_info(_legendary_pokemon_id(event, data)).get("sprite_path", ""))
+		if not path.is_empty() and ResourceLoader.exists(path):
+			_leg_sprite.texture = CardView.cropped_sprite(path)
+	_leg_sprite.visible = _leg_sprite.texture != null
+	# The sprite costs ~160 px: tighter text keeps the result + "Continuer" inside 720 px.
+	_text.add_theme_font_size_override("font_size", 20 if legendary else 22)
+
+
+## The legendary Pokémon of a legendary event: the first enemy of its start_fight encounter ("" if none).
+static func _legendary_pokemon_id(event: Dictionary, data: GameData) -> String:
+	for option: Variant in event.get("options", []):
+		for e: Variant in (option as Dictionary).get("effects", []):
+			if e is Dictionary and String((e as Dictionary).get("type", "")) == "start_fight":
+				var ids: Array[String] = data.get_encounter_enemy_ids(String((e as Dictionary).get("encounter", "")))
+				if not ids.is_empty():
+					return ids[0]
+	return ""
 
 
 func _make_wrapped_label(font_size: int) -> Label:

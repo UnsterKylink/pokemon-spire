@@ -93,6 +93,7 @@ func open(title: String, hint: String, run: RunState, data: GameData, eligible: 
 	_title.text = title
 	_hint.text = hint
 	_cancel.text = cancel_text
+	_cancel.visible = true
 	for child: Node in _grid.get_children():
 		_grid.remove_child(child)
 		child.queue_free()
@@ -115,6 +116,12 @@ func open(title: String, hint: String, run: RunState, data: GameData, eligible: 
 	_empty.text = empty_text if order.is_empty() else ""
 	_empty.visible = order.is_empty()
 	visible = true
+
+
+## Story 018: shows / hides the cancel button (hidden for a mandatory pick, e.g. an event card removal).
+## open() shows it again.
+func set_cancel_visible(shown: bool) -> void:
+	_cancel.visible = shown
 
 
 ## Picks the card group starting at `deck_index` (same path as a click). Ignored if not offered.

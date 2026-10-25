@@ -27,6 +27,15 @@ const TEXT_CAPTURED_AGAIN: String = "Capturé : %s (déjà dans l'équipe) — +
 const TEXT_BALL_LOOT: String = "Ball : %s"
 const COLOR_CAPTURED: Color = Color(0.45, 1.0, 0.55)
 const CAPTURE_SPRITE_SIDE: float = 40.0
+## Story 018: special win titles / legendary card column / rival heal chip.
+const TEXT_RIVAL_WIN: String = "Tu as battu %s ! Choisis une carte"
+const TEXT_LEGENDARY_WIN: String = "Tu as vaincu %s !"
+const TEXT_LEGENDARY_CAUGHT: String = "Capturé : %s"
+const TEXT_LEGENDARY_RIBBON: String = "Carte légendaire"
+const TEXT_LEGENDARY_ADDED: String = "Ajoutée au deck"
+const TEXT_HEALED: String = "+%d PV"
+const COLOR_LEGENDARY: Color = Color(1.0, 0.8, 0.25)
+const COLOR_HEAL: Color = Color(0.45, 1.0, 0.55)
 
 var _data: GameData
 var _run: RunState
@@ -97,6 +106,40 @@ func set_loot(loot: Dictionary) -> void:
 		chip.get_child(0).add_child(row)
 		chip.get_child(0).move_child(row, 0)
 		_loot_box.add_child(chip)
+
+
+## Story 018: what a special win gave (Main.get_last_special_reward()): rival -> title "Tu as battu {rival} !" and a
+## "+N PV" chip when it healed; legendary -> "Tu as vaincu <Nom> !" with its card (already in the deck) shown first in
+## the card row, not pickable; or "Capturé : <Nom>" (the captures row lists its cards). {} = nothing. Call after set_loot.
+func set_special(reward: Dictionary, rival_name: String = "") -> void:
+	_build_ui()
+	var kind: String = String(reward.get("kind", ""))
+	if kind in [GameData.ROOM_RIVAL, GameData.ROOM_RIVAL_FINAL]:
+		_title.text = TEXT_RIVAL_WIN % rival_name
+		var healed: int = int(reward.get("healed", 0))
+		if healed > 0:
+			_loot_box.visible = true
+			_loot_box.add_child(_loot_chip(TEXT_HEALED % healed, "PV rendus après la victoire", COLOR_HEAL))
+	elif kind == GameData.ROOM_LEGENDARY:
+		var poke_name: String = String(reward.get("name", ""))
+		if bool(reward.get("captured", false)):
+			_title.text = TEXT_LEGENDARY_CAUGHT % poke_name
+			return
+		_title.text = TEXT_LEGENDARY_WIN % poke_name
+		var cards: Array = reward.get("cards", [])
+		for i: int in range(cards.size() - 1, -1, -1):
+			var sep := VSeparator.new()
+			sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_cards_box.add_child(sep)
+			_cards_box.move_child(sep, 0)
+			var col: Control = _make_legendary_widget(cards[i] as CardData)
+			_cards_box.add_child(col)
+			_cards_box.move_child(col, 0)
+
+
+## Story 018: the title line (QA).
+func get_title_text() -> String:
+	return _title.text
 
 
 ## Story 017: shows the Pokémon captured in the fight (Main.get_last_captures() rows: id, name, sprite, types, cards,
@@ -287,9 +330,47 @@ func _make_offer_widget(offer: RewardOffer, index: int) -> Control:
 	col.add_child(b)
 	var rarity: Label = CardView.make_label(20)
 	rarity.name = "Rarity"
-	rarity.text = CardView.rarity_name(card.rarity)
+	rarity.text = CardView.card_rarity_name(card)
 	rarity.add_theme_color_override("font_color", CardView.rarity_color(card.rarity))
 	col.add_child(rarity)
+	return col
+
+
+## Story 018: the legendary card won (already in the deck): gold ribbon, card (not pickable), "Ajoutée au deck".
+func _make_legendary_widget(card: CardData) -> Control:
+	var col := VBoxContainer.new()
+	col.name = "LegendaryCard"
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 6)
+	var ribbon: Label = CardView.make_label(18)
+	ribbon.text = TEXT_LEGENDARY_RIBBON
+	ribbon.custom_minimum_size = Vector2(CARD_SIZE.x, 30)
+	ribbon.add_theme_color_override("font_color", Color(0.1, 0.1, 0.12))
+	var rsb := StyleBoxFlat.new()
+	rsb.bg_color = COLOR_LEGENDARY
+	rsb.set_corner_radius_all(6)
+	ribbon.add_theme_stylebox_override("normal", rsb)
+	col.add_child(ribbon)
+	var b := Button.new()
+	b.name = "Card"
+	b.custom_minimum_size = CARD_SIZE
+	b.focus_mode = Control.FOCUS_NONE
+	CardView.fill_card_content(b, card, _data.get_type_chart(), _data.get_pokemon_info)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = COLOR_ATTACK_BG
+	sb.set_border_width_all(5)
+	sb.border_color = COLOR_LEGENDARY
+	sb.set_corner_radius_all(8)
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		b.add_theme_stylebox_override(state, sb)
+	b.disabled = true
+	b.add_theme_color_override("font_disabled_color", Color.WHITE)
+	col.add_child(b)
+	var added: Label = CardView.make_label(20)
+	added.text = TEXT_LEGENDARY_ADDED
+	added.add_theme_color_override("font_color", COLOR_LEGENDARY)
+	col.add_child(added)
 	return col
 
 

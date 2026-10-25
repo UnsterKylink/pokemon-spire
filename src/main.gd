@@ -1015,8 +1015,8 @@ func event_remove_card(deck_index: int) -> bool:
 	if _run == null or not _run.remove_card_at(deck_index):
 		return false
 	_refresh_hud()
-	if _run.pending_card_removals <= 0 and _screen_name == SCREEN_EVENT:
-		_after_event()
+	if _screen_name == SCREEN_EVENT:
+		_after_event()  # story 018 UI: re-opens the picker while removals remain, else continues the flow
 	return true
 
 
@@ -1224,6 +1224,24 @@ func _start_special_fight(fight: Dictionary) -> void:
 		var lead_types: Array[String] = enemies[0].type_ids
 		_battle_screen.set_trainer_header(String(fight["title"]), _data.get_type_color(lead_types[0] if not lead_types.is_empty() else "normal"),
 				String(fight["room"]) in [GameData.ROOM_RIVAL_FINAL, GameData.ROOM_LEGENDARY])
+	if _battle_screen != null and String(fight["room"]) in [GameData.ROOM_RIVAL, GameData.ROOM_RIVAL_FINAL]:
+		_battle_screen.show_rival_intro(_rival_intro_info(fight, enemies))  # story 018 UI: "{name} te défie !"
+
+
+## Story 018 UI: what the rival intro banner shows (RivalIntroBanner.setup).
+func _rival_intro_info(fight: Dictionary, enemies: Array[Combatant]) -> Dictionary:
+	var rival: Dictionary = get_rival_info()
+	var def_id: String = String((fight.get("rival_def", {}) as Dictionary).get("id", ""))
+	var number: int = 1
+	var all_defs: Array[Dictionary] = _data.get_rival_encounters()
+	for i: int in all_defs.size():
+		if String(all_defs[i].get("id", "")) == def_id:
+			number = i + 1
+	var team: Array[String] = []
+	for e: Combatant in enemies:
+		team.append(String(_data.get_pokemon_info(e.id).get("sprite_path", "")))
+	return {"name": String(rival.get("name", "")), "sprite": String(rival.get("sprite", "")), "current_name": String(rival.get("current_name", "")),
+			"number": number, "total": all_defs.size(), "final": String(fight["room"]) == GameData.ROOM_RIVAL_FINAL, "team": team}
 
 
 func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: String) -> void:
@@ -1297,6 +1315,7 @@ func _show_reward_screen(offers: Array[RewardOffer], loot: Dictionary) -> void:
 	_reward_screen.setup(_data, _run, _offers)
 	_reward_screen.set_loot(loot)
 	_reward_screen.set_captures(_last_captures)
+	_reward_screen.set_special(_last_special_reward, _run.rival_name)  # story 018 UI: rival / legendary titles
 
 
 func _on_card_chosen(card: CardData) -> void:
@@ -1461,13 +1480,26 @@ func _show_event() -> void:
 		push_error("Main: empty event pool")
 		_show_map()
 		return
+	_show_event_def(event)
+
+
+## QA-ONLY (story 018 UI shots): shows event `event_id` of events.json ({rival} substituted), no draw. Ignored if unknown.
+func qa_show_event(event_id: String) -> void:
+	var event: Dictionary = _data.get_event(event_id)
+	if _run == null or event.is_empty():
+		return
+	_show_event_def(EventResolver._personalise(event, _run))
+
+
+func _show_event_def(event: Dictionary) -> void:
 	_clear_screens()
 	_current_event = event
 	_event_screen = EVENT_SCENE.instantiate() as EventScreen
 	_event_screen.option_chosen.connect(_on_event_option_chosen)
 	_event_screen.finished.connect(_after_event)
+	_event_screen.removal_picked.connect(event_remove_card)
 	_set_screen(_event_screen, SCREEN_EVENT)
-	_event_screen.setup(event, _run)
+	_event_screen.setup(event, _run, _data, event_option_available)
 
 
 func _on_event_option_chosen(index: int) -> void:
@@ -1484,6 +1516,8 @@ func _on_event_option_chosen(index: int) -> void:
 ## the deck picker while get_pending_card_removals() > 0), then a queued fight starts, else the map.
 func _after_event() -> void:
 	if _run.pending_card_removals > 0 and _run.deck.size() > 1:
+		if _event_screen != null:  # story 018 UI: the deck picker resolves it (event_remove_card), never a dead end
+			_event_screen.open_removal(_run, _data, _run.pending_card_removals)
 		return
 	_run.pending_card_removals = 0
 	if not _run.pending_fight.is_empty():
