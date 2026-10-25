@@ -1341,13 +1341,15 @@ func _rival_shots() -> void:
 	_main.qa_show_event("legendaire_darkrai")
 	_rival_line("07")
 	await _shot("07-legendaire-evenement")
+	for bid: String in ["poke_ball", "super_ball", "hyper_ball"]:
+		_main.qa_give_ball(bid)  # before the fight: a battle takes the run's balls at its start
 	_main.event_choose(1)
 	_main.event_continue()
-	for bid: String in ["poke_ball", "super_ball", "hyper_ball"]:
-		_main.qa_give_ball(bid)
 	bs = _main.get_battle_screen()
 	if bs != null:
 		await create_timer(FLOAT_WAIT).timeout
+		bs.get_battle().energy = maxi(bs.get_battle().energy, bs.get_battle().ball_energy_cost())  # staging: the sleep cost energy
+		bs.get_battle().state_changed.emit()
 		bs.toggle_capture_mode()
 	_rival_line("08")
 	await _shot("08-combat-legendaire")

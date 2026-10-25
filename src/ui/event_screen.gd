@@ -166,8 +166,8 @@ func get_option_text(index: int) -> String:
 ## Story 018: the button label of `option`: its label, plus the money hint when the label shows no price, plus the
 ## reason when it is unavailable.
 static func option_text(option: Dictionary, available: bool) -> String:
-	var text: String = String(option.get("label", ""))
-	var has_price: bool = text.contains(RunHud.CURRENCY) or text.contains("₽")
+	var text: String = String(option.get("label", "")).replace("₽", RunHud.CURRENCY)  # one currency sign on screen
+	var has_price: bool = text.contains(RunHud.CURRENCY)
 	if not has_price:
 		var delta: int = 0
 		for e: Variant in option.get("effects", []):

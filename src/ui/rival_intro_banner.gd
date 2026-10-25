@@ -13,6 +13,7 @@ const TEXT_TITLE: String = "%s te défie !"
 const TEXT_TITLE_FINAL: String = "Dernier combat contre %s avant le Conseil 4"
 const TEXT_ENCOUNTER: String = "Rencontre %d/%d"
 const TEXT_TEAM: String = "%s mène son équipe"
+const TEXT_SOLO: String = "Son starter : %s"
 const TEXT_FIGHT: String = "Combattre !"
 ## Taunt lines (no rival text in rival.json): picked by encounter number, the last one for the pre-league fight.
 const TAUNTS: Array[String] = [
@@ -118,7 +119,8 @@ func setup(info: Dictionary) -> void:
 	_encounter.text = TEXT_ENCOUNTER % [number, total]
 	_sprite.texture = _load(String(info.get("sprite", "")))
 	_sprite.visible = _sprite.texture != null
-	_team_label.text = TEXT_TEAM % String(info.get("current_name", ""))
+	var team_size: int = (info.get("team", []) as Array).size()
+	_team_label.text = (TEXT_TEAM if team_size > 1 else TEXT_SOLO) % String(info.get("current_name", ""))
 	for child: Node in _team_row.get_children():
 		_team_row.remove_child(child)
 		child.queue_free()
