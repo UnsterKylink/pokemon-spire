@@ -1,12 +1,12 @@
 # Story 018: Rival et nouveaux événements
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Feature
 > **Type**: Integration
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-10-25
 
 ## Context
 
@@ -32,6 +32,7 @@
 - [ ] Le rival a un starter dont le type a l'avantage sur celui du Pokémon de départ du joueur.
 - [ ] Au moins 10 nouveaux événements en données (dont certains liés aux statuts, à la capture et au rival), avec choix et conséquences.
 - [ ] Battre le rival donne une récompense spéciale définie en données.
+- [ ] **Ajout du joueur (2026-10-25) — événements légendaires** : rares (au plus 1 par partie, à partir de la zone 3), 4 à 6 légendaires (ex. Darkrai « Cauchemar », Ho-Oh, Lugia, Mewtwo, Rayquaza, Celebi), chacun avec son récit, un choix (l'affronter seul dans un combat spécial difficile, ou s'éloigner avec un coût) ; le battre donne une carte légendaire unique portée par lui ; il est **capturable avec une très faible chance** (règles de capture de la story 017).
 
 ---
 
