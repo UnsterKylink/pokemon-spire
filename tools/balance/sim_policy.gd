@@ -28,7 +28,7 @@ const DEFAULTS: Dictionary = {
 	## Map: a Mart is preferred when the run holds at least this much money.
 	"mart_min_money": 150,
 	## Map: base preference of each room type (higher = preferred), before the HP / money rules above.
-	"map_scores": {"wild": 30.0, "event": 20.0, "elite": 25.0, "center": 5.0, "mart": 3.0, "boss": 100.0},
+	"map_scores": {"wild": 30.0, "event": 20.0, "elite": 25.0, "center": 5.0, "mart": 3.0, "boss": 100.0, "rival": 100.0},
 	## Battle: block first when the total of shown attacks >= this fraction of (current HP + block).
 	"block_first_fraction": 0.4,
 	## Battle: a pure status skill is played only on a target with at least this much HP + block (not about to die).
@@ -40,7 +40,7 @@ const DEFAULTS: Dictionary = {
 	## Battle: drink a heal potion below this HP fraction.
 	"potion_heal_hp_frac": 0.4,
 	## Battle: use "booster" potions (damage +, energy +, draw) in these room types only.
-	"booster_rooms": ["boss", "league", "elite"],
+	"booster_rooms": ["boss", "league", "elite", "rival", "rival_final", "legendary"],
 	## Battle: safety cap on player turns / actions per turn (a stalled fight counts as a defeat).
 	"max_turns": 80,
 	"max_actions_per_turn": 40,

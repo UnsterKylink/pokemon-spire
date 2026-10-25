@@ -20,6 +20,10 @@ extends Control
 ## delete the save. Autosave is ON only for the real game (this scene is the project's current scene) and OFF when a CLI flag
 ## forces a fresh run (--seed / --starter / --encounter) or when Main is instantiated by a QA script: such scripts opt in
 ## with qa_set_save_path(<scratch path>), so they never touch the real save.
+## story-018-rival-et-evenements: the rival (drawn at the start: RunState.init_rival with the zone rng) is fought in the
+## 'rival' map rooms (zones of rival.json) and automatically after the last badge, before the league screen; events are
+## filtered by zone, may be legendary (rare), may queue a fight (started after the event's "Continuer") or a card removal.
+## API: get_rival_info(), get_current_fight(), get_last_special_reward(), event_option_available(), event_remove_card().
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -90,6 +94,11 @@ var _last_badge: Dictionary = {}
 var _last_loot: Dictionary = {}
 ## Story 017: RunState.apply_captures rows of the last won battle (empty if nothing was captured).
 var _last_captures: Array[Dictionary] = []
+## Story 018: the special fight being played (SpecialFights dict: rival / rival_final / event fight; {} for map fights).
+var _current_fight: Dictionary = {}
+## Story 018: what the last special win gave: {} or {kind: "rival" | "rival_final", encounter_id, money, item} /
+## {kind: "legendary", pokemon_id, name, captured, cards: Array[CardData]}.
+var _last_special_reward: Dictionary = {}
 ## Non-empty = every new run starts with this Pokémon without showing the choice (QA / `--starter=`).
 var forced_starter_id: String = ""
 ## `--seed=` value (0 = none): every "Nouvelle partie" reuses it so a QA run stays reproducible; else random.
@@ -188,6 +197,8 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_last_captures = []
 	_last_badge = {}
 	_last_league_heal = -1
+	_current_fight = {}
+	_last_special_reward = {}
 	_encounter_id = ""
 	_fight_room_type = ""
 	_evolution_summary = {}
@@ -223,6 +234,7 @@ func _begin_run(starter_id: String, act_seed: int) -> void:
 	for z: Dictionary in run.zones:
 		gym_types.append(String(z["type_id"]))
 	run.set_league(_data.draw_league(_league_rng, gym_types))  # story 013: 4 member types not used by the gyms
+	run.init_rival(_data, _zone_rng)  # story 018: rival name + starter countering the player's primary type
 	if not run.start_act(_data, act_seed):
 		push_error("Main: could not start the act")
 		return
@@ -961,6 +973,64 @@ func qa_win_league_fight() -> void:
 	_on_battle_won(ids)
 
 
+# --- Rival, legendary, event queues (story 018) ----------------------------------------------------
+
+## The rival of this run: {name, starter_id (stage 1), current_id (form after the badges earned), current_name, sprite, types,
+## encounters_done: Array[String], encounters_total}. {} without a run / rival.
+func get_rival_info() -> Dictionary:
+	if _run == null or _run.rival_starter_id.is_empty():
+		return {}
+	var cur: String = _run.rival_current_form(_data)
+	var info: Dictionary = _data.get_pokemon_info(cur)
+	return {"name": _run.rival_name, "starter_id": _run.rival_starter_id, "current_id": cur, "current_name": String(info.get("name", "")),
+			"sprite": String(info.get("sprite_path", "")), "types": info.get("types", []),
+			"encounters_done": _run.rival_encounters_done.duplicate(), "encounters_total": _data.get_rival_encounters().size()}
+
+
+## The special fight being played (SpecialFights dict, see special_fights.gd): kind, room, title, rival_def, legendary_id,
+## capture... {} during a normal fight / outside battles.
+func get_current_fight() -> Dictionary:
+	return _current_fight
+
+
+## What the last special win gave (rival: {kind, encounter_id, money, item}; legendary: {kind, pokemon_id, name, captured,
+## cards}); {} after any other fight. Read it on the reward screen.
+func get_last_special_reward() -> Dictionary:
+	return _last_special_reward
+
+
+## True if option `index` of the current event can be chosen (requires_money). The event screen greys out the others.
+func event_option_available(index: int) -> bool:
+	var opts: Array = _current_event.get("options", [])
+	return index >= 0 and index < opts.size() and EventResolver.option_available(opts[index], _run)
+
+
+## Cards the player must still pick to forget (event remove_card_choice); the UI shows a deck picker while > 0.
+func get_pending_card_removals() -> int:
+	return _run.pending_card_removals if _run != null else 0
+
+
+## Forgets deck[deck_index] for a pending event removal; when none is left the event flow continues (fight / map). False if refused.
+func event_remove_card(deck_index: int) -> bool:
+	if _run == null or not _run.remove_card_at(deck_index):
+		return false
+	_refresh_hud()
+	if _run.pending_card_removals <= 0 and _screen_name == SCREEN_EVENT:
+		_after_event()
+	return true
+
+
+## QA-ONLY CHEAT (story 018): wins the battle on screen (any kind: rival, pre-league rival, event / legendary fight...)
+## through the real win path (_on_battle_won with every enemy as defeated). Ignored outside a battle.
+func qa_win_current_fight() -> void:
+	if _battle_screen == null:
+		return
+	var ids: Array[String] = []
+	for e: Combatant in _battle_screen.get_battle().enemies:
+		ids.append(e.id)
+	_on_battle_won(ids)
+
+
 # --- Save / resume (story 015) ---------------------------------------------------------------------
 
 ## QA: the live ResumeScreen (null elsewhere).
@@ -1113,7 +1183,9 @@ func _on_node_chosen(node_id: String) -> void:
 		push_error("Main: room '%s' is not reachable" % node_id)
 		return
 	var node: MapNode = _run.act.current_node()
-	if _data.get_room_type(node.room_type).has("encounter_pool"):
+	if node.room_type == GameData.ROOM_RIVAL:  # story 018
+		_start_special_fight(SpecialFights.rival_room_fight(_data, _run, _encounter_rng))
+	elif _data.get_room_type(node.room_type).has("encounter_pool"):
 		_start_room_fight(node)
 	elif node.room_type == "event":
 		_show_event()
@@ -1137,10 +1209,28 @@ func _start_room_fight(node: MapNode) -> void:
 	_launch_battle(encounter_id, enemies, node.room_type)
 
 
+## Story 018: starts a SpecialFights fight dict (rival / event fight) with its header; an empty dict (nothing to fight,
+## e.g. a rival room whose encounter is already won) goes back to the map.
+func _start_special_fight(fight: Dictionary) -> void:
+	if fight.is_empty() or (fight["enemies"] as Array).is_empty():
+		_current_fight = {}
+		_show_map()
+		return
+	var enemies: Array[Combatant] = []
+	enemies.assign(fight["enemies"])
+	_launch_battle(String(fight["encounter"]), enemies, String(fight["room"]))
+	_current_fight = fight
+	if _battle_screen != null and not String(fight["title"]).is_empty():
+		var lead_types: Array[String] = enemies[0].type_ids
+		_battle_screen.set_trainer_header(String(fight["title"]), _data.get_type_color(lead_types[0] if not lead_types.is_empty() else "normal"),
+				String(fight["room"]) in [GameData.ROOM_RIVAL_FINAL, GameData.ROOM_LEGENDARY])
+
+
 func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: String) -> void:
 	if enemies.is_empty():
 		return
 	_clear_screens()
+	_current_fight = {}
 	_encounter_id = encounter_id
 	_fight_room_type = room_type
 	# Story 017: balls only in the room types of balls.json capture.allowed_room_types (wild); never gyms / league / QA "".
@@ -1162,6 +1252,23 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	# Story 017: captured Pokémon left the battle (not in defeated_ids: no xp / stolen card); they join the team now.
 	_last_captures = _run.apply_captures(won_battle.captured_ids)
 	var weights: Dictionary = {}
+	_last_special_reward = {}
+	var room: String = _fight_room_type
+	if room in [GameData.ROOM_RIVAL, GameData.ROOM_RIVAL_FINAL] and not _current_fight.is_empty():  # story 018
+		var def: Dictionary = _current_fight["rival_def"]
+		_last_loot = SpecialFights.apply_rival_win(_data, _run, def, _loot_rng)
+		_last_special_reward = {"kind": room, "encounter_id": String(def["id"]), "money": int(_last_loot["money"]),
+				"item": _last_loot["item"]}
+		_show_reward_screen(SpecialFights.rival_reward_offers(_data, _run, def, defeated_ids, _reward_rng), _last_loot)
+		return
+	if room == GameData.ROOM_LEGENDARY and not _current_fight.is_empty():  # story 018
+		_last_special_reward = SpecialFights.apply_legendary_win(_data, _run, String(_current_fight["legendary_id"]),
+				won_battle.captured_ids)
+		_last_special_reward["kind"] = room
+		_last_loot = {}
+		_show_reward_screen(RewardGenerator.generate(_data, _run.player_id, [] as Array[String], _reward_rng,
+				_data.get_room_rarity_weights("elite")), {})
+		return
 	if _fight_room_type == ROOM_LEAGUE:  # story 013: no loot; the final boss ends the run with the victory
 		_run.win_league_fight()
 		if _run.final_boss_defeated:
@@ -1173,7 +1280,14 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 		_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
 		weights = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
 	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
+	_show_reward_screen(offers, _last_loot if not _fight_room_type.is_empty() and _fight_room_type != ROOM_LEAGUE else {})
+
+
+## The reward screen with `offers` and `loot` (apply_loot format; {} = none) plus the captures of the last win.
+func _show_reward_screen(offers: Array[RewardOffer], loot: Dictionary) -> void:
+	var keep_fight: Dictionary = _current_fight
 	_clear_screens()
+	_current_fight = keep_fight
 	_offers = offers
 	_reward_screen = REWARD_SCENE.instantiate() as RewardScreen
 	_reward_screen.card_chosen.connect(_on_card_chosen)
@@ -1181,7 +1295,7 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	_reward_screen.deck_requested.connect(open_deck)
 	_set_screen(_reward_screen, SCREEN_REWARD)
 	_reward_screen.setup(_data, _run, _offers)
-	_reward_screen.set_loot(_last_loot if not _fight_room_type.is_empty() and _fight_room_type != ROOM_LEAGUE else {})
+	_reward_screen.set_loot(loot)
 	_reward_screen.set_captures(_last_captures)
 
 
@@ -1203,6 +1317,8 @@ func _after_team_evolution() -> void:
 		_show_league_screen()
 	elif _fight_room_type == ROOM_BOSS:
 		_show_badge()
+	elif _fight_room_type == GameData.ROOM_RIVAL_FINAL:  # story 018: the pre-league rival is beaten -> the league
+		_enter_league()
 	else:
 		_show_map()
 
@@ -1225,17 +1341,27 @@ func _show_badge() -> void:
 ## once the last zone's gym is beaten (the victory directly only without league data).
 func _next_zone_or_victory() -> void:
 	if _run.is_final_zone() or not _run.advance_zone():
-		if _run.start_league():
-			_last_league_heal = -1
-			_show_league_screen()
-		else:
-			_show_victory()
+		# Story 018: the rival waits right before the Route Victoire (automatic fight, once).
+		var rival: Dictionary = SpecialFights.rival_final_fight(_data, _run, _encounter_rng)
+		if not rival.is_empty():
+			_start_special_fight(rival)
+			return
+		_enter_league()
 		return
 	if not _run.start_act(_data, 0):
 		push_error("Main: could not start zone %d" % (_run.zone_index + 1))
 		_show_victory()
 		return
 	_show_map()
+
+
+## Story 013: league intro after the last badge (story 018: after the pre-league rival); the victory without league data.
+func _enter_league() -> void:
+	if _run.start_league():
+		_last_league_heal = -1
+		_show_league_screen()
+	else:
+		_show_victory()
 
 
 ## The battle is lost: HP 0 is written to the run now (the HUD / summary read it); the overlay's "Continuer"
@@ -1330,7 +1456,7 @@ func _check_defeat_outside_battle() -> bool:
 
 
 func _show_event() -> void:
-	var event: Dictionary = EventResolver.pick_event(_data, _event_rng)
+	var event: Dictionary = EventResolver.pick_event(_data, _event_rng, _run)  # story 018: zone filter, legendary, {rival}
 	if event.is_empty():
 		push_error("Main: empty event pool")
 		_show_map()
@@ -1339,17 +1465,31 @@ func _show_event() -> void:
 	_current_event = event
 	_event_screen = EVENT_SCENE.instantiate() as EventScreen
 	_event_screen.option_chosen.connect(_on_event_option_chosen)
-	_event_screen.finished.connect(_show_map)
+	_event_screen.finished.connect(_after_event)
 	_set_screen(_event_screen, SCREEN_EVENT)
 	_event_screen.setup(event, _run)
 
 
 func _on_event_option_chosen(index: int) -> void:
 	var option: Dictionary = (_current_event.get("options", []) as Array)[index]
+	if not EventResolver.option_available(option, _run):  # story 018: requires_money
+		return
 	var summary: String = EventResolver.apply_effects(option.get("effects", []), _run, _data, _event_rng)
 	if _check_defeat_outside_battle():
 		return
 	_event_screen.show_result(String(option.get("result_text", "")), summary, _run)
+
+
+## Story 018: after the event's "Continuer": a queued card removal must be resolved first (event_remove_card; the UI shows
+## the deck picker while get_pending_card_removals() > 0), then a queued fight starts, else the map.
+func _after_event() -> void:
+	if _run.pending_card_removals > 0 and _run.deck.size() > 1:
+		return
+	_run.pending_card_removals = 0
+	if not _run.pending_fight.is_empty():
+		_start_special_fight(SpecialFights.event_fight(_data, _run, _encounter_rng))
+		return
+	_show_map()
 
 
 func _on_item_triggered(item: ItemData) -> void:
@@ -1478,3 +1618,4 @@ func _clear_screens() -> void:
 	_shop = null
 	_offers = []
 	_current_event = {}
+	_current_fight = {}

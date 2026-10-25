@@ -2039,6 +2039,9 @@ func _check_pokemon_refs(pokemon_root: Dictionary) -> bool:
 	if not (starter is String) or (not _players.has(starter) and not _enemies.has(starter)):
 		push_error("GameData: pokemon file needs a 'starter_pokemon' naming a known pokemon")
 		ok = false
+	elif is_legendary_pokemon(starter) or is_boss_pokemon(starter):  # story 018
+		push_error("GameData: 'starter_pokemon' cannot be a legendary / boss Pokémon")
+		ok = false
 	else:
 		_starter_pokemon = starter
 	return ok
@@ -3085,10 +3088,11 @@ func _load_rival(root: Dictionary) -> bool:
 		push_error("GameData: at most one pre_league rival encounter")
 		ok = false
 	if ok:
+		_rival_cfg = root.duplicate(true)  # rival_starter_candidates reads it
 		for t: String in _type_chart.get_type_ids():
 			if rival_starter_candidates(t).is_empty() and not _roster_candidates.is_empty():
 				push_error("GameData: no rival starter candidate counters type '%s'" % t)
 				ok = false
-	if ok:
-		_rival_cfg = root.duplicate(true)
+		if not ok:
+			_rival_cfg = {}
 	return ok

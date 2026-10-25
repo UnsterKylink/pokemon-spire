@@ -1,6 +1,9 @@
 extends RefCounted
 ## Plays ONE complete run headlessly (story 019 balance simulator): starter choice -> 8 zones (map walk, fights, rewards, loot,
 ## Centre, Mart, events, gym + badge, starter evolution, team evolution) -> Conseil 4 -> Maître -> Éthernatos.
+## Story 018: rival rooms + the pre-league rival (SpecialFights, same calls as Main), events filtered by zone / legendary
+## events / requires_money (an unaffordable option falls back to the other), queued card removals (the policy forgets its
+## lowest-value card) and queued event fights (wild / elite / rival starter / legendary; no capture in the sim).
 ## It mirrors src/main.gd's flow call for call (same classes: GameData, RunState, ActProgress/MapGenerator, RewardGenerator,
 ## LootGenerator, ShopInventory, EvolutionOffer, EventResolver, Battle) with the same RNG seeding (act_seed + index + 1 in
 ## Main.RNG_NAMES order) -- only the screens are replaced by SimPolicy decisions. Deterministic for (game_seed, policy cfg).
@@ -60,6 +63,7 @@ func _play(data: GameData, game_seed: int, policy_cfg: Dictionary) -> Dictionary
 	for z: Dictionary in _run.zones:
 		gym_types.append(String(z["type_id"]))
 	_run.set_league(data.draw_league(_league_rng, gym_types))
+	_run.init_rival(data, _zone_rng)
 	_run.start_act(data, game_seed)
 	var won: bool = _play_zones() and _play_league()
 	if won:
@@ -95,11 +99,15 @@ func _play_zones() -> bool:
 				_policy.illegal_moves += 1
 				return false
 			var node: MapNode = _run.act.current_node()
-			if _data.get_room_type(node.room_type).has("encounter_pool"):
+			if node.room_type == GameData.ROOM_RIVAL:
+				if not _special_fight(SpecialFights.rival_room_fight(_data, _run, _encounter_rng)):
+					return false
+			elif _data.get_room_type(node.room_type).has("encounter_pool"):
 				if not _room_fight(node):
 					return false
 			elif node.room_type == "event":
-				_room_event()
+				if not _room_event():
+					return false
 			elif node.room_type == "center":
 				_policy.play_center(_run)
 			elif node.room_type == "mart":
@@ -119,6 +127,9 @@ func _play_zones() -> bool:
 				if pick >= 0:
 					_run.add_card(offers[pick])
 		if _run.is_final_zone() or not _run.advance_zone():
+			# Main._next_zone_or_victory: the pre-league rival first.
+			if not _special_fight(SpecialFights.rival_final_fight(_data, _run, _encounter_rng)):
+				return false
 			break
 		_run.start_act(_data, 0)
 	return true
@@ -209,9 +220,65 @@ func _reward(weights: Dictionary, defeated_ids: Array[String]) -> void:
 	_run.evolve_team(_data)
 
 
-func _room_event() -> void:
-	var event: Dictionary = EventResolver.pick_event(_data, _event_rng)
+## Main._show_event / _on_event_option_chosen / _after_event. False = the run was lost in a queued fight.
+func _room_event() -> bool:
+	var event: Dictionary = EventResolver.pick_event(_data, _event_rng, _run)
 	if event.is_empty():
-		return
-	var option: Dictionary = (event.get("options", []) as Array)[_policy.choose_event_option(event)]
-	EventResolver.apply_effects(option.get("effects", []), _run, _data, _event_rng)
+		return true
+	if EventResolver.is_legendary(event):
+		_fights_by_room["legendary_seen"] = int(_fights_by_room.get("legendary_seen", 0)) + 1
+	var options: Array = event.get("options", [])
+	var index: int = _policy.choose_event_option(event)
+	if not EventResolver.option_available(options[index], _run):
+		index = 1 - index if options.size() == 2 else index
+	if not EventResolver.option_available(options[index], _run):
+		return true
+	EventResolver.apply_effects((options[index] as Dictionary).get("effects", []), _run, _data, _event_rng)
+	while _run.pending_card_removals > 0 and _run.deck.size() > 1:
+		var worst: int = 0
+		for i: int in _run.deck.size():
+			if _policy.card_value(_run.deck[i]) < _policy.card_value(_run.deck[worst]):
+				worst = i
+		_run.remove_card_at(worst)
+	_run.pending_card_removals = 0
+	if _run.pending_fight.is_empty():
+		return true
+	return _special_fight(SpecialFights.event_fight(_data, _run, _encounter_rng))
+
+
+## A SpecialFights fight (rival / event fight) with its reward, like Main._on_battle_won. True if won or nothing to fight.
+func _special_fight(fight: Dictionary) -> bool:
+	if fight.is_empty() or (fight["enemies"] as Array).is_empty():
+		return true
+	var enemies: Array[Combatant] = []
+	enemies.assign(fight["enemies"])
+	var room: String = String(fight["room"])
+	var stage_name: String = "rival_final" if room == GameData.ROOM_RIVAL_FINAL else "zone%d_%s" % [_run.zone_index + 1, room]
+	if String(fight["kind"]) == "event":
+		stage_name = "zone%d_event_%s" % [_run.zone_index + 1, room]
+	if not _fight(String(fight["encounter"]), enemies, room, stage_name):
+		return false
+	if room in [GameData.ROOM_RIVAL, GameData.ROOM_RIVAL_FINAL]:
+		var def: Dictionary = fight["rival_def"]
+		SpecialFights.apply_rival_win(_data, _run, def, _loot_rng)
+		var offers: Array[RewardOffer] = SpecialFights.rival_reward_offers(_data, _run, def, _last_defeated, _reward_rng)
+		_reward_offers(offers)
+	elif room == GameData.ROOM_LEGENDARY:
+		SpecialFights.apply_legendary_win(_data, _run, String(fight["legendary_id"]), [] as Array[String])
+		_fights_by_room["legendary_won"] = int(_fights_by_room.get("legendary_won", 0)) + 1
+		_reward_offers(RewardGenerator.generate(_data, _run.player_id, [] as Array[String], _reward_rng,
+				_data.get_room_rarity_weights("elite")))
+	else:
+		_run.apply_loot(LootGenerator.generate(_data, _run, room, _loot_rng))
+		_reward(_data.get_room_rarity_weights(room), _last_defeated)
+	return true
+
+
+func _reward_offers(offers: Array[RewardOffer]) -> void:
+	var cards: Array[CardData] = []
+	for o: RewardOffer in offers:
+		cards.append(o.card)
+	var pick: int = _policy.choose_reward(_run, cards)
+	if pick >= 0:
+		_run.add_card(cards[pick])
+	_run.evolve_team(_data)
