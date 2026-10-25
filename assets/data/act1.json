@@ -1,5 +1,5 @@
 {
-	"_doc": "Modele d'une carte de zone (story 005, reutilise par story 012 : chaque zone = une carte generee avec ce modele, les valeurs de map/placement sont les valeurs PAR DEFAUT, zones.json peut les surcharger par zone ; le champion de la zone est choisi par zones.json, le pool 'boss' ci-dessous n'est qu'un repli sans zone ; les modifiers de chaque salle de combat sont MULTIPLIES (pv) / ADDITIONNES (force) a ceux de la zone, voir zones.json ; pools 'type_<type>', 'elite_<type>', 'wild_duos', 'wild_trios', 'wild_trios_hard' : story 012). Ancien texte : Acte 1 (story 005). map: floors (nb d'etages, le dernier = boss), width (colonnes), start_nodes (salles de depart distinctes a l'etage 1), paths (marches aleatoires vers le haut qui construisent le graphe), boss_floor_nodes (doit valoir 1). placement: forced_floors (etage -> type de salle impose; l'etage 'floors' doit etre 'boss', et seul lui), no_consecutive (types qui ne peuvent pas se suivre sur deux salles reliees). room_types: id (wild|elite|center|mart|event|boss) -> name (FR), weight (>= 0, tirage aleatoire; au moins un > 0; boss = 0), min_floor, max_floor (optionnel), encounter_pool (cle de encounter_pools, salles de combat), encounter_pool_overrides (optionnel: [{pool, min_floor, max_floor}], le premier qui correspond a l'etage gagne), modifiers {hp_multiplier > 0, strength_bonus >= 0} (salles de combat), reward {rarity_weights: null ou {rarete: poids > 0} qui remplace rewards.json}, heal_percent (optionnel, Centre: % des PV max rendus en entrant; provisoire en attendant la tache 006). encounter_pools: cle -> [{encounter (id de pokemon.json), weight > 0}]. event_pool: ids de events.json.",
+	"_doc": "Modele d'une carte de zone (story 005, reutilise par story 012 : chaque zone = une carte generee avec ce modele, les valeurs de map/placement sont les valeurs PAR DEFAUT, zones.json peut les surcharger par zone ; le champion de la zone est choisi par zones.json, le pool 'boss' ci-dessous n'est qu'un repli sans zone ; les modifiers de chaque salle de combat sont MULTIPLIES (pv) / ADDITIONNES (force) a ceux de la zone, voir zones.json ; pools 'type_<type>', 'elite_<type>', 'wild_duos', 'wild_trios', 'wild_trios_hard' : story 012). Ancien texte : Acte 1 (story 005). map: floors (nb d'etages, le dernier = boss), width (colonnes), start_nodes (salles de depart distinctes a l'etage 1), paths (marches aleatoires vers le haut qui construisent le graphe), boss_floor_nodes (doit valoir 1). placement: forced_floors (etage -> type de salle impose; l'etage 'floors' doit etre 'boss', et seul lui), no_consecutive (types qui ne peuvent pas se suivre sur deux salles reliees). room_types: id (wild|elite|center|mart|event|boss|rival ; rival optionnel, story 018 : poids 0, place uniquement par zones.json zone_overrides forced_floors ; le combat et sa recompense viennent de rival.json) -> name (FR), weight (>= 0, tirage aleatoire; au moins un > 0; boss = 0), min_floor, max_floor (optionnel), encounter_pool (cle de encounter_pools, salles de combat), encounter_pool_overrides (optionnel: [{pool, min_floor, max_floor}], le premier qui correspond a l'etage gagne), modifiers {hp_multiplier > 0, strength_bonus >= 0} (salles de combat), reward {rarity_weights: null ou {rarete: poids > 0} qui remplace rewards.json}, heal_percent (optionnel, Centre: % des PV max rendus en entrant; provisoire en attendant la tache 006). encounter_pools: cle -> [{encounter (id de pokemon.json), weight > 0}]. event_pool: ids de events.json.",
 	"map": {
 		"floors": 6,
 		"width": 6,
@@ -56,6 +56,11 @@
 					"rare": 35
 				}
 			}
+		},
+		"rival": {
+			"name": "Rival",
+			"weight": 0,
+			"min_floor": 2
 		},
 		"center": {
 			"name": "Centre Pokémon",
@@ -536,6 +541,20 @@
 		"dresseur_curieux",
 		"herbes_hautes",
 		"sac_abandonne",
-		"chercheur_pokemon"
+		"chercheur_pokemon",
+		"infirmiere_tournee",
+		"baie_mystere",
+		"piege_poison",
+		"pokemon_blesse",
+		"oeuf_mystere",
+		"dresseur_echange",
+		"pierre_evolution",
+		"marchand_ambulant",
+		"pari_croupier",
+		"coffre_piege",
+		"bricoleur",
+		"rival_provocation",
+		"vieux_dresseur",
+		"pont_suspendu"
 	]
 }

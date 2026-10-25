@@ -7,6 +7,8 @@ extends RefCounted
 ## Story 012 (story-012-structure-8-arenes): the run is `zones` (drawn at the start, zone_index = the current one);
 ## each zone has its own act map; beating a gym awards a badge (permanent bonuses, data: zones.json badge_rewards).
 ## Story 013 (story-013-conseil-4-ethernatos): after the last badge, the league (4 members, Maître, final boss), see set_league.
+## Story 018 (story-018-rival-et-evenements): the rival (name, starter drawn at the start, encounters won), legendary events
+## seen, statuses queued for the next fight, event fights / card removals queued by EventResolver.
 
 var player_id: String = ""
 var display_name: String = ""
@@ -75,6 +77,20 @@ var league_stage: int = -1
 var league_fights_won: int = 0
 ## Story 013: true once the final boss (Éthernatos) is beaten: the real end of the run.
 var final_boss_defeated: bool = false
+## Story 018: the rival's name (rival.json default_name at the start; may be renamed later, saved).
+var rival_name: String = ""
+## Story 018: the rival's starter as drawn at the start (stage-1 id; GameData.rival_form_at gives its current form). "" = no rival.
+var rival_starter_id: String = ""
+## Story 018: ids (rival.json) of the rival encounters WON, in order.
+var rival_encounters_done: Array[String] = []
+## Story 018: ids of the legendary events already shown this run (events.json legendary.max_per_run caps it).
+var legendary_seen: Array[String] = []
+## Story 018: statuses the player starts the NEXT battle with ([{id, value}], event apply_status_next_fight); consumed by create_battle.
+var pending_statuses: Array[Dictionary] = []
+## Story 018: an event start_fight effect waiting to be launched by Main / the simulator ({} = none). Not saved (transient).
+var pending_fight: Dictionary = {}
+## Story 018: cards the player must still pick to forget (event remove_card_choice); see remove_card_at. Not saved (transient).
+var pending_card_removals: int = 0
 ## Added to the base map seed per zone index to derive a zone's map seed.
 const ZONE_SEED_STEP: int = 1000003
 
@@ -180,6 +196,10 @@ func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: Random
 			_data.get_ball_book() if _data != null else {}, balls, capture_allowed)
 	battle.potion_used.connect(_on_battle_potion_used)
 	battle.ball_thrown.connect(_on_battle_ball_thrown)
+	# Story 018: statuses queued by events hit the player before the first turn (they act on that turn), then are gone.
+	for st: Dictionary in pending_statuses:
+		battle.apply_status(battle.player, String(st["id"]), int(st["value"]))
+	pending_statuses.clear()
 	return battle
 
 
@@ -803,3 +823,85 @@ func preview_upgrade(deck_index: int) -> CardData:
 func removal_price() -> int:
 	var cfg: Dictionary = _data.get_removal_config()
 	return int(cfg["base_price"]) + int(cfg["price_step"]) * card_removals
+
+
+# --- Rival, legendary events, event queues (story 018) ----------------------------------------------
+
+## Sets up the rival at the start of a run: name = rival.json default_name, starter drawn against this run's primary
+## type (GameData.draw_rival_starter with the injected rng: Main uses the zone rng right after the zone draw).
+## Nothing happens without rival data.
+func init_rival(data: GameData, rng: RandomNumberGenerator) -> void:
+	if data == null or not data.has_rival():
+		return
+	rival_name = data.get_rival_default_name()
+	rival_starter_id = data.draw_rival_starter(type_ids[0] if not type_ids.is_empty() else "", rng)
+	rival_encounters_done.clear()
+
+
+## True if rival encounter `encounter_id` was already won.
+func rival_done(encounter_id: String) -> bool:
+	return rival_encounters_done.has(encounter_id)
+
+
+## Records a won rival encounter (once).
+func mark_rival_done(encounter_id: String) -> void:
+	if not rival_encounters_done.has(encounter_id):
+		rival_encounters_done.append(encounter_id)
+
+
+## The rival's starter form now (after the badges already earned), "" without rival.
+func rival_current_form(data: GameData) -> String:
+	if rival_starter_id.is_empty() or data == null:
+		return ""
+	return data.rival_form_at(rival_starter_id, badges.size())
+
+
+## Queues a status for the next battle (same id twice: values add up).
+func add_pending_status(status_id: String, value: int) -> void:
+	for st: Dictionary in pending_statuses:
+		if String(st["id"]) == status_id:
+			st["value"] = int(st["value"]) + maxi(value, 1)
+			return
+	pending_statuses.append({"id": status_id, "value": maxi(value, 1)})
+
+
+## Story 018 (event remove_card_choice): forgets deck[deck_index] if a removal is pending. False (no change) otherwise
+## or if it would empty the deck.
+func remove_card_at(deck_index: int) -> bool:
+	if pending_card_removals <= 0 or deck_index < 0 or deck_index >= deck.size() or deck.size() <= 1:
+		return false
+	deck.remove_at(deck_index)
+	pending_card_removals -= 1
+	return true
+
+
+## Story 018 (event evolve_team_member): one team carrier that has a next form (random with `rng` among them) evolves one
+## step at once: its deck cards are carried by the new form, its team progress keeps going one stage higher, max HP +
+## team_evolution.bonus_hp. Returns the evolve_team row format, {} if no carrier can evolve.
+func evolve_random_carrier(data: GameData, rng: RandomNumberGenerator) -> Dictionary:
+	var able: Array[String] = []
+	for c: String in team_carriers():
+		if not data.get_evolution(c).is_empty():
+			able.append(c)
+	if able.is_empty():
+		return {}
+	var from_id: String = able[rng.randi_range(0, able.size() - 1)]
+	var evo: Dictionary = data.get_evolution(from_id)
+	var to_id: String = String(evo["id"])
+	var from_info: Dictionary = data.get_pokemon_info(from_id)
+	_pokemon_infos[to_id] = data.get_pokemon_info(to_id)
+	_recarry(from_id, to_id)
+	var prog: Dictionary = (team_progress.get(from_id, {"battles": 0, "stage": 0}) as Dictionary).duplicate()
+	team_progress.erase(from_id)
+	prog["stage"] = int(prog["stage"]) + 1
+	if team_progress.has(to_id):
+		prog["battles"] = maxi(int(prog["battles"]), int(team_progress[to_id]["battles"]))
+		prog["stage"] = maxi(int(prog["stage"]), int(team_progress[to_id]["stage"]))
+	team_progress[to_id] = prog
+	var bonus: int = data.get_team_evolution_bonus_hp()
+	gain_max_hp(bonus)
+	var to_info: Dictionary = data.get_pokemon_info(to_id)
+	return {"from_id": from_id, "from_name": String(from_info.get("name", "")), "from_sprite": String(from_info.get("sprite_path", "")),
+			"from_types": from_info.get("types", []), "to_id": to_id, "to_name": String(to_info.get("name", "")),
+			"to_sprite": String(to_info.get("sprite_path", "")), "to_types": to_info.get("types", []), "hp_bonus": bonus,
+			"evolved": true, "stage": int(prog["stage"]), "badge": 0, "upgraded_card": ""}

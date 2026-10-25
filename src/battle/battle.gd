@@ -184,33 +184,48 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	energy -= card.cost
 	hand.remove_at(index)
 	discard_pile.append(card)
-	var hit_target: Combatant = null
-	var hit_amount: int = 0
-	var hit_mult: float = 1.0
-	if card.damage > 0:
-		hit_target = enemies[target_index]
-		# Bonuses (items, "Attaque +") are added BEFORE the type multiplier, like enemy strength.
-		var bonus: int = turn_damage_bonus - _attack_penalty(player)  # burn: weaker attacks (before the type multiplier)
-		for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
-			bonus += item.total("damage_bonus")
-			item_triggered.emit(item)
-		hit_mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
-		hit_amount = _type_chart.final_damage(card.damage + bonus, card.type_id, hit_target.type_ids)
-		hit_target.take_damage(hit_amount)  # block absorbs AFTER the type multiplier
-		if hit_amount > 0:
-			_on_damaged(hit_target, card.type_id)
-		if not hit_target.is_alive():
-			hit_target.intent = null  # a K.O. enemy no longer acts
+	# Story 018: a `target_all` card hits every living enemy (left to right), others only enemies[target_index].
+	var targets: Array[int] = []
+	if card.needs_target():
+		if card.target_all:
+			for i: int in enemies.size():
+				if enemies[i].is_alive():
+					targets.append(i)
+		else:
+			targets.append(target_index)
+	var hits: Array[Dictionary] = []  # {index, target, amount, mult}
+	for ti: int in targets:
+		var hit: Dictionary = {"index": ti, "target": enemies[ti], "amount": 0, "mult": 1.0}
+		if card.damage > 0:
+			var hit_target: Combatant = enemies[ti]
+			# Bonuses (items, "Attaque +") are added BEFORE the type multiplier, like enemy strength.
+			var bonus: int = turn_damage_bonus - _attack_penalty(player)  # burn: weaker attacks (before the type multiplier)
+			for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
+				bonus += item.total("damage_bonus")
+				item_triggered.emit(item)
+			hit["mult"] = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
+			hit["amount"] = _type_chart.final_damage(card.damage + bonus, card.type_id, hit_target.type_ids)
+			hit_target.take_damage(int(hit["amount"]))  # block absorbs AFTER the type multiplier
+			if int(hit["amount"]) > 0:
+				_on_damaged(hit_target, card.type_id)
+			if not hit_target.is_alive():
+				hit_target.intent = null  # a K.O. enemy no longer acts
+		hits.append(hit)
 	if card.block > 0:
 		player.add_block(card.block)
-	if hit_target != null:
-		hit_resolved.emit(hit_target, hit_amount, hit_mult)
+	if card.heal > 0:
+		player.heal(card.heal)
+	if card.damage > 0:
+		for hit: Dictionary in hits:
+			hit_resolved.emit(hit["target"], int(hit["amount"]), float(hit["mult"]))
 	if card.kind == CardData.KIND_ATTACK:
 		_attacks_played += 1
 	# Status of the card: applied AFTER the damage (a sleeping target is not woken by its own card). A hit that deals
 	# no damage because of a 0x type multiplier inflicts nothing; a status skill always applies.
-	if not card.status_id.is_empty() and is_valid_target(target_index) and (card.damage <= 0 or hit_mult > 0.0):
-		apply_status(enemies[target_index], card.status_id, card.status_value)
+	if not card.status_id.is_empty():
+		for hit: Dictionary in hits:
+			if is_valid_target(int(hit["index"])) and (card.damage <= 0 or float(hit["mult"]) > 0.0):
+				apply_status(enemies[int(hit["index"])], card.status_id, card.status_value)
 	card_played.emit(card)
 	if first_living_enemy() < 0:
 		_win()
@@ -329,7 +344,7 @@ func capture_chance(ball: Variant, enemy_index: int) -> float:
 	if bid.is_empty() or not is_capturable(enemy_index):
 		return 0.0
 	var e: Combatant = enemies[enemy_index]
-	return _capture_rules.chance(_ball_book[bid], e.hp, e.max_hp, e.status_ids())
+	return _capture_rules.chance(_ball_book[bid], e.hp, e.max_hp, e.status_ids(), e.legendary)
 
 
 ## True if a ball can be thrown now: player's turn, ball carried, enough energy, capturable living target.

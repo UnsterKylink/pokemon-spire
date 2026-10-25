@@ -1,5 +1,5 @@
 {
-	"_doc": "Poke Balls (story 017). max_carried: total de Balls portees (toutes sortes confondues, separe des potions). capture: energy_cost = energie par lancer (la Ball est consommee, reussite ou echec) ; chance = clamp(base_chance de la Ball x (1 - PV_restants/PV_max x hp_factor) x bonus_statut, min_chance, max_chance) ; status_bonus = id de statuses.json -> multiplicateur >= 1 (le meilleur des statuts de la cible compte) ; allowed_room_types = types de salles de combat (act1.json: wild|elite|boss) ou l'on peut capturer (jamais la Ligue ; un Pokemon 'boss: true' ou sans 'teaches' n'est jamais capturable). balls: id -> {name, description, price (Pokedollars au Mart), base_chance > 0 (peut depasser 1), min_zone (1re zone, 1..8, ou on la trouve en butin / au Mart)}. loot: par type de salle, chance (0..1) qu'une victoire donne UNE Ball, tiree parmi celles dont min_zone <= zone courante, ponderee par weights (id -> poids > 0). shop: la visite du Mart propose entre count_min et count_max Balls DISTINCTES (min_zone respecte), ponderees par weights ; les prix sont ceux de balls.",
+	"_doc": "Poke Balls (story 017). max_carried: total de Balls portees (toutes sortes confondues, separe des potions). capture: energy_cost = energie par lancer (la Ball est consommee, reussite ou echec) ; chance = clamp(base_chance de la Ball x (1 - PV_restants/PV_max x hp_factor) x bonus_statut, min_chance, max_chance) ; status_bonus = id de statuses.json -> multiplicateur >= 1 (le meilleur des statuts de la cible compte) ; allowed_room_types = types de salles de combat (act1.json: wild|elite|boss) ou l'on peut capturer (jamais la Ligue ; un Pokemon 'boss: true' ou sans 'teaches' n'est jamais capturable ; story 018 : 'legendary' = le combat d'un evenement legendaire). legendary_multiplier (story 018, ]0,1], defaut 1) : la chance finale (apres le clamp) contre un Pokemon 'legendary: true' est multipliee par cette valeur (Hyper Ball sur un legendaire a 1 PV endormi : 0.95 x 0.15 ~ 14 %). balls: id -> {name, description, price (Pokedollars au Mart), base_chance > 0 (peut depasser 1), min_zone (1re zone, 1..8, ou on la trouve en butin / au Mart)}. loot: par type de salle, chance (0..1) qu'une victoire donne UNE Ball, tiree parmi celles dont min_zone <= zone courante, ponderee par weights (id -> poids > 0). shop: la visite du Mart propose entre count_min et count_max Balls DISTINCTES (min_zone respecte), ponderees par weights ; les prix sont ceux de balls.",
 	"max_carried": 5,
 	"capture": {
 		"energy_cost": 1,
@@ -7,7 +7,8 @@
 		"min_chance": 0.05,
 		"max_chance": 0.95,
 		"status_bonus": {"sleep": 2.0, "freeze": 2.0, "paralysis": 1.5, "burn": 1.5, "poison": 1.5},
-		"allowed_room_types": ["wild"]
+		"allowed_room_types": ["wild", "legendary"],
+		"legendary_multiplier": 0.15
 	},
 	"balls": {
 		"poke_ball": {"name": "Poké Ball", "description": "Tente de capturer un Pokémon sauvage. Plus efficace s'il est blessé ou en statut.", "price": 30, "base_chance": 0.8, "min_zone": 1},

@@ -1,0 +1,38 @@
+{
+	"_doc": "Rival (story 018). default_name : nom du rival (FR), stocke dans la partie (RunState.rival_name). counter_types : type principal du starter du joueur -> liste ORDONNEE de types qui lui sont super efficaces (types.json, chaque type doit l'etre vraiment) ; au debut de la partie le starter du rival est tire (graine de Main) parmi les Pokemon du roster candidate_start (stade 1) dont le type PRINCIPAL est le premier type de la liste qui en a (sinon un candidat ayant ce type en second) ; jamais legendaire / boss. Le starter du rival evolue aux memes badges que celui du joueur (zones.json evolution_after_badges, evolutions de pokemon.json / roster.json). encounters : les combats contre le rival, dans l'ordre ; zone = numero de zone (1..zone_count) ; kind 'room' = salle 'rival' de la carte de cette zone (zones.json zone_overrides doit forcer un etage a 'rival' dans cette zone) ; kind 'pre_league' = combat automatique apres le dernier badge, avant la Route Victoire (zone = derniere zone, au plus un). team_size_weights : '1'..'3' -> poids du nombre de Pokemon (starter compris) ; teammate_tiers : tier roster de chaque coequipier (au moins team_size max - 1 valeurs) ; strongest_pool (optionnel, entier >= 1) : les coequipiers sont tires parmi les N Pokemon les plus forts (bst) de leur tier. modifiers {hp_multiplier > 0, strength_bonus >= 0} : MULTIPLIES / ADDITIONNES a ceux d'un elite de la meme zone (toujours plus dur, hp_multiplier >= 1). reward : money (Pokedollars >= 0), item_rarities (raretes items.json ; un objet tenu non possede de ces raretes, s'il en reste), card_rarity_weights (raretes cards.json -> poids : la recompense de cartes habituelle), card_count (optionnel, nombre de cartes proposees, defaut offer_count de rewards.json), offer_stolen_card (bool : la carte volee aux Pokemon battus peut etre proposee). Perdre contre le rival = defaite normale.",
+	"default_name": "Régis",
+	"counter_types": {
+		"normal": ["fighting"],
+		"fire": ["water", "ground", "rock"],
+		"water": ["grass", "electric"],
+		"electric": ["ground"],
+		"grass": ["fire", "flying", "ice", "bug", "poison"],
+		"ice": ["fire", "fighting", "rock", "steel"],
+		"fighting": ["psychic", "flying", "fairy"],
+		"poison": ["ground", "psychic"],
+		"ground": ["water", "grass", "ice"],
+		"flying": ["electric", "rock", "ice"],
+		"psychic": ["dark", "bug", "ghost"],
+		"bug": ["fire", "flying", "rock"],
+		"rock": ["water", "grass", "fighting", "ground", "steel"],
+		"ghost": ["ghost", "dark"],
+		"dragon": ["dragon", "ice", "fairy"],
+		"dark": ["fighting", "bug", "fairy"],
+		"steel": ["fire", "fighting", "ground"],
+		"fairy": ["poison", "steel"]
+	},
+	"encounters": [
+		{"id": "rival_1", "zone": 2, "kind": "room", "team_size_weights": {"1": 1, "2": 1}, "teammate_tiers": [1, 1],
+			"modifiers": {"hp_multiplier": 1.1, "strength_bonus": 0},
+			"reward": {"money": 60, "item_rarities": ["uncommon", "rare"], "card_rarity_weights": {"common": 15, "uncommon": 50, "rare": 35}, "offer_stolen_card": true}},
+		{"id": "rival_2", "zone": 4, "kind": "room", "team_size_weights": {"2": 1}, "teammate_tiers": [2, 2],
+			"modifiers": {"hp_multiplier": 1.1, "strength_bonus": 1},
+			"reward": {"money": 80, "item_rarities": ["uncommon", "rare"], "card_rarity_weights": {"common": 10, "uncommon": 50, "rare": 40}, "offer_stolen_card": true}},
+		{"id": "rival_3", "zone": 6, "kind": "room", "team_size_weights": {"3": 1}, "teammate_tiers": [2, 3],
+			"modifiers": {"hp_multiplier": 1.1, "strength_bonus": 1},
+			"reward": {"money": 100, "item_rarities": ["uncommon", "rare"], "card_rarity_weights": {"common": 5, "uncommon": 45, "rare": 50}, "offer_stolen_card": true}},
+		{"id": "rival_final", "zone": 8, "kind": "pre_league", "team_size_weights": {"3": 1}, "teammate_tiers": [3, 3], "strongest_pool": 12,
+			"modifiers": {"hp_multiplier": 1.1, "strength_bonus": 1},
+			"reward": {"money": 150, "item_rarities": ["uncommon", "rare"], "card_rarity_weights": {"rare": 1}, "card_count": 3, "offer_stolen_card": false}}
+	]
+}

@@ -14,6 +14,9 @@ var max_chance: float = 1.0
 var status_bonus: Dictionary = {}
 ## Fight room types where balls can be used (act1.json room ids, e.g. "wild"; the league is never listed).
 var allowed_room_types: Array[String] = []
+## Story 018: multiplier (0 < m <= 1) applied AFTER the clamp to a legendary target's chance (balls.json capture.legendary_multiplier,
+## optional, default 1): a legendary is never easier than min_chance x m nor above max_chance x m.
+var legendary_multiplier: float = 1.0
 
 
 ## Builds the rules from JSON; `status_ids` / `room_ids` are the valid ids (statuses.json, fight room types).
@@ -47,6 +50,11 @@ static func from_dict(d: Dictionary, status_ids: Array[String], room_ids: Array[
 			push_error("CaptureRules: capture.status_bonus['%s'] needs a known status id and a multiplier >= 1" % sid)
 			return null
 		r.status_bonus[sid] = float(m)
+	var lm: Variant = d.get("legendary_multiplier", 1.0)
+	if not ((lm is int or lm is float) and lm > 0 and lm <= 1):
+		push_error("CaptureRules: capture.legendary_multiplier must be in ]0, 1]")
+		return null
+	r.legendary_multiplier = float(lm)
 	var rooms: Variant = d.get("allowed_room_types", null)
 	if not (rooms is Array):
 		push_error("CaptureRules: capture.allowed_room_types must be an array of fight room types")
@@ -73,7 +81,8 @@ func status_multiplier(status_ids: Array[String]) -> float:
 
 
 ## Capture chance (0..1) of `ball` against a target with hp/max_hp and the given status ids.
-func chance(ball: BallData, hp: int, max_hp: int, status_ids: Array[String]) -> float:
+## Story 018: `legendary` targets get x legendary_multiplier after the clamp.
+func chance(ball: BallData, hp: int, max_hp: int, status_ids: Array[String], legendary: bool = false) -> float:
 	var ratio: float = clampf(float(hp) / float(maxi(max_hp, 1)), 0.0, 1.0)
 	var raw: float = ball.base_chance * (1.0 - ratio * hp_factor) * status_multiplier(status_ids)
-	return clampf(raw, min_chance, max_chance)
+	return clampf(raw, min_chance, max_chance) * (legendary_multiplier if legendary else 1.0)

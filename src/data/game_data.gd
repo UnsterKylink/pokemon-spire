@@ -9,7 +9,16 @@ const DEFAULT_REWARDS_PATH: String = "res://assets/data/rewards.json"
 const DEFAULT_ACT_PATH: String = "res://assets/data/act1.json"
 const DEFAULT_EVENTS_PATH: String = "res://assets/data/events.json"
 ## Room type ids the game logic knows (their CONTENT and proportions are data, act1.json).
-const ROOM_TYPES: Array[String] = ["wild", "elite", "center", "mart", "event", "boss"]
+const ROOM_TYPES: Array[String] = ["wild", "elite", "center", "mart", "event", "boss", "rival"]
+## Story 018: room types act1.json MAY omit (the rival room is only placed by zones.json forced floors).
+const OPTIONAL_ROOM_TYPES: Array[String] = ["rival"]
+## Story 018: the rival's map room type / the fight "room" kinds of the special fights (Main._fight_room_type).
+const ROOM_RIVAL: String = "rival"
+const ROOM_RIVAL_FINAL: String = "rival_final"
+const ROOM_LEGENDARY: String = "legendary"
+## Story 018: rooms an event start_fight may use.
+const EVENT_FIGHT_ROOMS: Array[String] = ["wild", "elite", "legendary"]
+const DEFAULT_RIVAL_PATH: String = "res://assets/data/rival.json"
 ## Room types that start a battle (need encounter_pool + modifiers).
 const FIGHT_ROOM_TYPES: Array[String] = ["wild", "elite", "boss"]
 const DEFAULT_ITEMS_PATH: String = "res://assets/data/items.json"
@@ -32,7 +41,9 @@ const ROSTER_MAX_TIER: int = 3
 const ZONE_TYPED_ROOMS: Array[String] = ["wild", "elite"]
 ## The room type that holds the zone's gym fight.
 const ROOM_GYM: String = "boss"
-const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "add_ball", "nothing"]
+const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "add_ball", "nothing",
+		"apply_status_next_fight", "cure_all", "gain_money", "lose_money", "gamble_money", "upgrade_random_card", "add_card_of_type",
+		"remove_card_choice", "add_item_random", "add_pokemon", "evolve_team_member", "start_fight"]
 const NO_FLOOR_LIMIT: int = 1000000
 ## Minimum number of types the type table must define (story 003).
 const MIN_TYPES: int = 18
@@ -77,6 +88,9 @@ var _roster_ids: Dictionary = {}  # roster id -> its entry (story 013b; the entr
 var _roster_wild: Dictionary = {}  # type id ("" = any type) -> {tier int -> Array[String] wild_ok roster ids, file order}
 var _roster_candidates: Array[String] = []  # roster ids with roles.candidate_start (story 013b starter draw)
 var _starter_roster_share: float = 0.0  # pokemon.json starter_choice.roster_share
+var _rival_cfg: Dictionary = {}  # validated rival.json (story 018); {} = no rival
+var _legendary_cfg: Dictionary = {}  # validated events.json "legendary" (story 018); {} = no legendary events
+var _legendary_events: Array[String] = []  # ids of the events flagged legendary: true (file order)
 
 
 ## Loads all the files (balls story 017, skipped when `balls_path` is ""; act and events story 005; items, potions, shop story 006; zones story 012; league story 013;
@@ -87,7 +101,8 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 		items_path: String = DEFAULT_ITEMS_PATH, potions_path: String = DEFAULT_POTIONS_PATH,
 		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
 		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH,
-		statuses_path: String = DEFAULT_STATUSES_PATH, balls_path: String = DEFAULT_BALLS_PATH) -> bool:
+		statuses_path: String = DEFAULT_STATUSES_PATH, balls_path: String = DEFAULT_BALLS_PATH,
+		rival_path: String = DEFAULT_RIVAL_PATH) -> bool:
 	_type_chart = TypeChart.neutral_chart()
 	_status_book = StatusBook.new()
 	_cards.clear()
@@ -124,6 +139,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_roster_wild = {}
 	_roster_candidates.clear()
 	_starter_roster_share = 0.0
+	_rival_cfg = {}
+	_legendary_cfg = {}
+	_legendary_events.clear()
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -180,6 +198,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	ok = _load_shop(shop_root) and ok
 	ok = _load_zones(zones_root) and ok
 	ok = _load_league(league_root) and ok
+	if not rival_path.is_empty():  # story 018: last (needs zones, roster, evolutions, types)
+		var rival_root: Dictionary = _read_json(rival_path)
+		ok = (not rival_root.is_empty() and _load_rival(rival_root)) and ok
 	return ok
 
 
@@ -564,6 +585,34 @@ func get_event_pool() -> Array[String]:
 	for id: String in _act.get("event_pool", []):
 		ids.append(id)
 	return ids
+
+
+## Story 018: ids of event_pool available in zone `zone_number` (1-based; min_zone <= zone <= max_zone). 0 = no filter.
+func get_event_pool_for_zone(zone_number: int) -> Array[String]:
+	var ids: Array[String] = []
+	for id: String in get_event_pool():
+		if zone_number <= 0 or event_available_in_zone(id, zone_number):
+			ids.append(id)
+	return ids
+
+
+## Story 018: true if event `event_id` may appear in zone `zone_number` (its min_zone / max_zone, default: every zone).
+func event_available_in_zone(event_id: String, zone_number: int) -> bool:
+	var ev: Dictionary = _events.get(event_id, {})
+	if ev.is_empty():
+		return false
+	return zone_number >= int(ev.get("min_zone", 1)) and zone_number <= int(ev.get("max_zone", NO_FLOOR_LIMIT))
+
+
+## Story 018: ids of the legendary events (events.json legendary: true), file order.
+func get_legendary_event_ids() -> Array[String]:
+	return _legendary_events.duplicate()
+
+
+## Story 018: events.json "legendary" config (copy): {min_zone, chance, max_per_run, per_zone {hp_multiplier, strength_bonus}};
+## {} without legendary events.
+func get_legendary_config() -> Dictionary:
+	return _legendary_cfg.duplicate(true)
 
 
 ## Event definition (copy): {id, title, text, options:[{label, result_text, effects}]}. {} if unknown.
@@ -1016,6 +1065,12 @@ func is_boss_pokemon(pokemon_id: String) -> bool:
 	return bool((_enemies.get(pokemon_id, {}) as Dictionary).get("boss", false))
 
 
+## Story 018: true for an enemy flagged `legendary: true` in pokemon.json (legendary events only: never wild, carrier,
+## starter or rival).
+func is_legendary_pokemon(pokemon_id: String) -> bool:
+	return bool((_enemies.get(pokemon_id, {}) as Dictionary).get("legendary", false))
+
+
 ## Enemy ids of an encounter (copy; empty if unknown). Story 013b: also decodes a generated "roster:<id>,..." id
 ## (empty if any id is unknown or the count is outside Battle.MIN_ENEMIES..MAX_ENEMIES).
 func get_encounter_enemy_ids(encounter_id: String) -> Array[String]:
@@ -1244,8 +1299,8 @@ func _load_league(root: Dictionary) -> bool:
 			push_error("GameData: the gym type pool cannot give %d gyms while leaving %d Conseil 4 types free" % [get_zone_count(), count])
 			ok = false
 	for pid: String in _starter_candidates:
-		if is_boss_pokemon(pid):
-			push_error("GameData: boss Pokémon '%s' cannot be a starter candidate" % pid)
+		if is_boss_pokemon(pid) or is_legendary_pokemon(pid):
+			push_error("GameData: boss / legendary Pokémon '%s' cannot be a starter candidate" % pid)
 			ok = false
 	var heal: Variant = root.get("heal_percent_between_fights", null)
 	if not (_is_number(heal) and heal >= 0 and heal <= 100):
@@ -1555,7 +1610,9 @@ func _load_balls(root: Dictionary) -> bool:
 	var cap_v: Variant = root.get("capture", null)
 	var rules: CaptureRules = null
 	if cap_v is Dictionary:
-		rules = CaptureRules.from_dict(cap_v, _status_book.ids(), FIGHT_ROOM_TYPES)
+		var capture_rooms: Array[String] = FIGHT_ROOM_TYPES.duplicate()
+		capture_rooms.append(ROOM_LEGENDARY)  # story 018: the legendary event fight
+		rules = CaptureRules.from_dict(cap_v, _status_book.ids(), capture_rooms)
 	if rules == null:
 		push_error("GameData: balls file needs a valid 'capture' object")
 		ok = false
@@ -1692,7 +1749,7 @@ func get_roster_starter_candidates() -> Array[String]:
 func get_carriers_for_type(type_id: String) -> Array[String]:
 	if _carriers_by_type.is_empty():
 		for pid: String in get_pokemon_ids():
-			if is_boss_pokemon(pid) or (_roster_ids.has(pid) and not bool(((_roster_ids[pid] as Dictionary).get("roles", {}) as Dictionary).get("carrier_ok", false))):
+			if is_boss_pokemon(pid) or is_legendary_pokemon(pid) or (_roster_ids.has(pid) and not bool(((_roster_ids[pid] as Dictionary).get("roles", {}) as Dictionary).get("carrier_ok", false))):
 				continue
 			for t: String in (get_pokemon_info(pid)["types"] as Array):
 				if not _carriers_by_type.has(t):
@@ -1768,7 +1825,8 @@ func _load_starters(pokemon_root: Dictionary) -> bool:
 		_starter_roster_share = float(share_v)
 	for pid: String in _roster_ids.keys():  # story 013b: roster candidates whose primary type has starter cards
 		var entry: Dictionary = _roster_ids[pid]
-		if bool((entry.get("roles", {}) as Dictionary).get("candidate_start", false)) and not is_boss_pokemon(pid):
+		if bool((entry.get("roles", {}) as Dictionary).get("candidate_start", false)) and not is_boss_pokemon(pid) \
+				and not is_legendary_pokemon(pid):
 			if by_type.has(String((entry["types"] as Array)[0])):
 				_roster_candidates.append(pid)
 			else:
@@ -2322,6 +2380,9 @@ func _load_rewards(root: Dictionary) -> bool:
 			elif seen.has(card_id):
 				push_error("GameData: reward pool '%s' lists '%s' twice" % [pid, str(card_id)])
 				ok = false
+			elif card.legendary:
+				push_error("GameData: reward pool '%s': legendary card '%s' must not be a reward" % [pid, str(card_id)])
+				ok = false
 			elif card.rarity == CardData.RARITY_STARTER:
 				push_error("GameData: reward pool '%s': starter-rarity card '%s' must not be a reward" % [pid, str(card_id)])
 				ok = false
@@ -2389,6 +2450,14 @@ func _load_events(root: Dictionary) -> bool:
 			if not (ev.get(key, null) is String) or String(ev[key]).is_empty():
 				push_error("GameData: event '%s' needs a text '%s'" % [id, key])
 				ev_ok = false
+		for key: String in ["min_zone", "max_zone"]:  # story 018
+			if ev.has(key) and not _is_positive_int(ev[key]):
+				push_error("GameData: event '%s' %s must be an integer >= 1" % [id, key])
+				ev_ok = false
+		if _is_positive_int(ev.get("min_zone", 1)) and _is_positive_int(ev.get("max_zone", NO_FLOOR_LIMIT)) \
+				and int(ev.get("min_zone", 1)) > int(ev.get("max_zone", NO_FLOOR_LIMIT)):
+			push_error("GameData: event '%s' min_zone > max_zone" % id)
+			ev_ok = false
 		var opts_v: Variant = ev.get("options", null)
 		if not (opts_v is Array) or (opts_v as Array).size() != 2:
 			push_error("GameData: event '%s' needs exactly 2 options" % id)
@@ -2404,6 +2473,9 @@ func _load_events(root: Dictionary) -> bool:
 				if not (o.get(key, null) is String) or String(o[key]).is_empty():
 					push_error("GameData: event '%s' option needs a text '%s'" % [id, key])
 					ev_ok = false
+			if o.has("requires_money") and not _is_positive_int(o["requires_money"]):  # story 018
+				push_error("GameData: event '%s' option requires_money must be an integer >= 1" % id)
+				ev_ok = false
 			var effects_v: Variant = o.get("effects", null)
 			if not (effects_v is Array) or (effects_v as Array).is_empty():
 				push_error("GameData: event '%s' option needs a non-empty 'effects' array" % id)
@@ -2412,11 +2484,50 @@ func _load_events(root: Dictionary) -> bool:
 			for eff_v: Variant in (effects_v as Array):
 				if not _check_effect(id, eff_v):
 					ev_ok = false
+		if ev_ok and bool(ev.get("legendary", false)):
+			ev_ok = _check_legendary_event(id, ev)
 		if ev_ok:
 			_events[id] = ev
+			if bool(ev.get("legendary", false)):
+				_legendary_events.append(id)
 		else:
 			ok = false
+	var leg_v: Variant = root.get("legendary", null)
+	if leg_v != null:
+		var leg: Dictionary = leg_v if leg_v is Dictionary else {}
+		var pz: Variant = leg.get("per_zone", {})
+		if not _is_positive_int(leg.get("min_zone", null)) or not _is_number(leg.get("chance", null)) \
+				or float(leg.get("chance", -1)) < 0.0 or float(leg.get("chance", 2)) > 1.0 \
+				or not _is_positive_int(leg.get("max_per_run", null)) or not (pz is Dictionary) \
+				or not _is_number((pz as Dictionary).get("hp_multiplier", 0)) or float((pz as Dictionary).get("hp_multiplier", 0)) < 0.0 \
+				or not _is_number((pz as Dictionary).get("strength_bonus", 0)) or float((pz as Dictionary).get("strength_bonus", 0)) < 0.0:
+			push_error("GameData: events 'legendary' needs min_zone >= 1, chance 0..1, max_per_run >= 1, per_zone {hp_multiplier >= 0, strength_bonus >= 0}")
+			ok = false
+		else:
+			_legendary_cfg = leg.duplicate(true)
+	elif not _legendary_events.is_empty():
+		push_error("GameData: legendary events need the events 'legendary' config")
+		ok = false
 	return ok
+
+
+## Story 018: a legendary event has exactly 2 options, [0] walk away (no fight), [1] a start_fight room 'legendary' on an
+## encounter of ONE legendary: true Pokémon.
+func _check_legendary_event(id: String, ev: Dictionary) -> bool:
+	var opts: Array = ev["options"]
+	for e: Dictionary in (opts[0] as Dictionary)["effects"]:
+		if String(e["type"]) == "start_fight":
+			push_error("GameData: legendary event '%s' option 0 (walk away) must not start a fight" % id)
+			return false
+	var found: bool = false
+	for e: Dictionary in (opts[1] as Dictionary)["effects"]:
+		if String(e["type"]) == "start_fight" and String(e.get("room", "")) == ROOM_LEGENDARY \
+				and String(e.get("source", "")) == "encounter":
+			var ids: Array[String] = get_encounter_enemy_ids(String(e.get("encounter", "")))
+			found = ids.size() == 1 and is_legendary_pokemon(ids[0])
+	if not found:
+		push_error("GameData: legendary event '%s' option 1 must start_fight (room legendary) one legendary Pokémon" % id)
+	return found
 
 
 func _check_effect(event_id: String, eff_v: Variant) -> bool:
@@ -2442,6 +2553,31 @@ func _check_effect(event_id: String, eff_v: Variant) -> bool:
 		"add_ball":
 			good = eff.get("ball", null) is String and _balls.has(eff["ball"]) \
 					and (not eff.has("count") or _is_positive_int(eff["count"]))
+		"apply_status_next_fight":
+			good = eff.get("status", null) is String and _status_book.has(eff["status"]) and _is_positive_int(eff.get("value", null))
+		"gain_money", "lose_money":
+			good = _is_positive_int(eff.get("value", null))
+		"gamble_money":
+			good = _is_positive_int(eff.get("stake", null)) and _is_number(eff.get("chance", null)) \
+					and float(eff["chance"]) >= 0.0 and float(eff["chance"]) <= 1.0 and _is_number(eff.get("win", null)) and float(eff["win"]) >= 0.0
+		"upgrade_random_card", "remove_card_choice":
+			good = not eff.has("count") or _is_positive_int(eff["count"])
+		"add_card_of_type":
+			# The card type lives in "of_type" ("type" is the effect kind): "player" | "any" | a types.json id.
+			var of: Variant = eff.get("of_type", null)
+			good = eff.get("rarity", null) is String and _rarity_weights.has(eff["rarity"]) and of is String \
+					and (String(of) in ["player", "any"] or _type_chart.is_known_type(String(of)))
+		"add_item_random":
+			var rr: Variant = eff.get("rarities", null)
+			good = rr is Array and not (rr as Array).is_empty()
+			if good:
+				for r: Variant in (rr as Array):
+					good = good and r is String and String(r) in CardData.RARITIES
+		"add_pokemon":
+			good = _is_positive_int(eff.get("tier", null)) and int(eff["tier"]) <= ROSTER_MAX_TIER \
+					and not get_roster_stage1_ids(int(eff["tier"])).is_empty()
+		"start_fight":
+			good = _check_start_fight(eff)
 	if not good:
 		push_error("GameData: event '%s' effect '%s' has invalid or unknown parameters" % [event_id, t])
 	return good
@@ -2476,7 +2612,7 @@ func _load_act(root: Dictionary) -> bool:
 			push_error("GameData: unknown room type '%s'" % tid)
 			ok = false
 	for tid: String in ROOM_TYPES:
-		if not rooms.has(tid):
+		if not rooms.has(tid) and tid not in OPTIONAL_ROOM_TYPES:
 			push_error("GameData: room type '%s' is missing" % tid)
 			ok = false
 	if not ok:
@@ -2501,6 +2637,9 @@ func _load_act(root: Dictionary) -> bool:
 			push_error("GameData: room type '%s' needs name, weight >= 0, min_floor >= 1 and max_floor >= min_floor" % tid)
 			ok = false
 			continue
+		if tid == ROOM_RIVAL and r["weight"] != 0:
+			push_error("GameData: the rival room must have weight 0 (zones.json forced floors place it)")
+			ok = false
 		if tid != "boss" and r["weight"] > 0:
 			any_weight = true
 		if tid == "boss" and r["weight"] != 0:
@@ -2616,6 +2755,9 @@ func _load_act(root: Dictionary) -> bool:
 		if not (eid is String) or not _events.has(eid):
 			push_error("GameData: event_pool references unknown event '%s'" % str(eid))
 			ok = false
+		elif _legendary_events.has(eid):
+			push_error("GameData: legendary event '%s' must not be in event_pool" % str(eid))
+			ok = false
 	if ok:
 		_act = root
 	return ok
@@ -2672,3 +2814,281 @@ func _read_json(path: String) -> Dictionary:
 		push_error("GameData: invalid JSON in %s" % path)
 		return {}
 	return parsed
+
+
+# --- Rival, event fights, legendary events (story 018) ---------------------------------------------
+
+## Story 018: start_fight effect check: source 'encounter' (known encounter) | 'rival_starter'; room in EVENT_FIGHT_ROOMS;
+## modifiers {hp_multiplier > 0, strength_bonus >= 0}; optional pre_status [{id (statuses.json), value >= 1}].
+func _check_start_fight(eff: Dictionary) -> bool:
+	var src: String = String(eff.get("source", ""))
+	if src == "encounter":
+		if get_encounter_enemy_ids(String(eff.get("encounter", ""))).is_empty():
+			return false
+	elif src != "rival_starter":
+		return false
+	if String(eff.get("room", "")) not in EVENT_FIGHT_ROOMS or not _valid_modifiers(eff.get("modifiers", null)):
+		return false
+	if String(eff.get("room", "")) == ROOM_LEGENDARY and src != "encounter":
+		return false
+	var pre: Variant = eff.get("pre_status", [])
+	if not (pre is Array):
+		return false
+	for p_v: Variant in (pre as Array):
+		if not (p_v is Dictionary) or not ((p_v as Dictionary).get("id", null) is String) \
+				or not _status_book.has(String(p_v["id"])) or not _is_positive_int((p_v as Dictionary).get("value", null)):
+			return false
+	return true
+
+
+## Story 018: stage-1 roster Pokémon (roles.candidate_start, never legendary / boss) of roster tier `tier`, file order
+## (event add_pokemon "œuf mystère").
+func get_roster_stage1_ids(tier: int) -> Array[String]:
+	var ids: Array[String] = []
+	for pid: String in _roster_ids.keys():
+		var e: Dictionary = _roster_ids[pid]
+		if bool((e.get("roles", {}) as Dictionary).get("candidate_start", false)) and int(e.get("tier", 0)) == tier \
+				and not is_boss_pokemon(pid) and not is_legendary_pokemon(pid):
+			ids.append(pid)
+	return ids
+
+
+## Story 018: fight modifiers of a legendary event fight in `zone` (RunState.current_zone()): the zone's gym_modifiers x
+## the effect's `mods`, then per zone beyond legendary.min_zone: hp x (1 + per_zone.hp_multiplier x n), strength +
+## floor(per_zone.strength_bonus x n). {hp_multiplier: float, strength_bonus: int}.
+func get_legendary_fight_modifiers(mods: Dictionary, zone: Dictionary) -> Dictionary:
+	var gm: Dictionary = zone.get("gym_modifiers", {"hp_multiplier": 1.0, "strength_bonus": 0})
+	var n: int = maxi(0, int(zone.get("number", 1)) - int(_legendary_cfg.get("min_zone", 1)))
+	var pz: Dictionary = _legendary_cfg.get("per_zone", {})
+	return {"hp_multiplier": float(gm["hp_multiplier"]) * float(mods.get("hp_multiplier", 1.0)) * (1.0 + float(pz.get("hp_multiplier", 0.0)) * n),
+			"strength_bonus": int(gm["strength_bonus"]) + int(mods.get("strength_bonus", 0)) + floori(float(pz.get("strength_bonus", 0.0)) * n)}
+
+
+## Story 018: true when rival.json is loaded (the rival appears in the run).
+func has_rival() -> bool:
+	return not _rival_cfg.is_empty()
+
+
+## Story 018: the rival's default name (rival.json default_name; "" without rival).
+func get_rival_default_name() -> String:
+	return String(_rival_cfg.get("default_name", ""))
+
+
+## Story 018: all rival encounters (copies, fight order): {id, zone, kind ("room" | "pre_league"), team_size_weights,
+## teammate_tiers, strongest_pool (opt), modifiers, reward {money, item_rarities, card_rarity_weights, card_count?, offer_stolen_card}}.
+func get_rival_encounters() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for e: Dictionary in _rival_cfg.get("encounters", []):
+		result.append(e.duplicate(true))
+	return result
+
+
+## Story 018: the rival encounter of zone `zone_number` with `kind` ("room" or "pre_league"); {} if none.
+func get_rival_encounter_for_zone(zone_number: int, kind: String) -> Dictionary:
+	for e: Dictionary in _rival_cfg.get("encounters", []):
+		if int(e["zone"]) == zone_number and String(e["kind"]) == kind:
+			return e.duplicate(true)
+	return {}
+
+
+## Story 018: the rival encounter `encounter_id` (copy; {} if unknown).
+func get_rival_encounter(encounter_id: String) -> Dictionary:
+	for e: Dictionary in _rival_cfg.get("encounters", []):
+		if String(e["id"]) == encounter_id:
+			return e.duplicate(true)
+	return {}
+
+
+## Story 018: counter types of `type_id` (rival.json counter_types, preference order; empty if none).
+func get_rival_counter_types(type_id: String) -> Array[String]:
+	var result: Array[String] = []
+	result.assign((_rival_cfg.get("counter_types", {}) as Dictionary).get(type_id, []))
+	return result
+
+
+## Story 018: rival starter candidates for a player whose starter's PRIMARY type is `player_type`: roster candidate_start
+## (stage 1, never legendary / boss) whose primary type is the first counter type that has some (else a candidate having
+## that counter type second). Empty if none.
+func rival_starter_candidates(player_type: String) -> Array[String]:
+	for ct: String in get_rival_counter_types(player_type):
+		var primary: Array[String] = []
+		var secondary: Array[String] = []
+		for pid: String in _roster_candidates:
+			var types: Array = (_roster_ids[pid] as Dictionary)["types"]
+			if String(types[0]) == ct:
+				primary.append(pid)
+			elif types.has(ct):
+				secondary.append(pid)
+		if not primary.is_empty():
+			return primary
+		if not secondary.is_empty():
+			return secondary
+	return [] as Array[String]
+
+
+## Story 018: draws the rival's starter (stage 1) against `player_type` with the injected rng (one randi_range); "" if none.
+func draw_rival_starter(player_type: String, rng: RandomNumberGenerator) -> String:
+	var pool: Array[String] = rival_starter_candidates(player_type)
+	if pool.is_empty():
+		return ""
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+
+## Story 018: the rival's starter form after `badges` badges: one evolution step per zones.json evolution_after_badges
+## number <= badges (same milestones as the player's starter), only through forms that exist as enemies.
+func rival_form_at(base_id: String, badges: int) -> String:
+	var cur: String = base_id
+	for n: int in get_evolution_after_badges():
+		if n > badges:
+			continue
+		var evo: Dictionary = get_evolution(cur)
+		if evo.is_empty() or not _enemies.has(String(evo["id"])):
+			break
+		cur = String(evo["id"])
+	return cur
+
+
+## Story 018: the rival team of encounter `def` as a generated "roster:<starter form>,<mate>,..." encounter id: the starter at
+## its stage for `badges` first, then team_size - 1 teammates of def.teammate_tiers (any type, no duplicate species, never
+## legendary; the strongest_pool best bst of the tier if set), re-drawn (zones.json softlock_rerolls) while a teammate is
+## immune to every type of `attack_types`. Deterministic for a seeded rng.
+func build_rival_team(def: Dictionary, base_id: String, badges: int, rng: RandomNumberGenerator,
+		attack_types: Array[String] = []) -> String:
+	var lead: String = rival_form_at(base_id, badges)
+	var size: int = clampi(int(_weighted_key(def["team_size_weights"], rng)), 1, Battle.MAX_ENEMIES)
+	var rerolls: int = int(_zones_cfg.get("softlock_rerolls", DEFAULT_SOFTLOCK_REROLLS))
+	var encounter_id: String = ""
+	for attempt: int in rerolls + 1:
+		var ids: Array[String] = [lead]
+		for i: int in size - 1:
+			var tier: int = int((def["teammate_tiers"] as Array)[mini(i, (def["teammate_tiers"] as Array).size() - 1)])
+			var pid: String = _draw_rival_mate(tier, int(def.get("strongest_pool", 0)), ids, rng)
+			if pid.is_empty():
+				break
+			ids.append(pid)
+		encounter_id = ROSTER_ENCOUNTER_PREFIX + ",".join(ids)
+		if not encounter_softlocks(encounter_id, attack_types):
+			break
+	return encounter_id
+
+
+func _draw_rival_mate(tier: int, strongest: int, exclude: Array[String], rng: RandomNumberGenerator) -> String:
+	if strongest <= 0:
+		return _draw_roster_pokemon("", tier, exclude, rng)
+	var pool: Array[String] = []
+	for pid: String in (_roster_wild.get("", {}) as Dictionary).get(tier, []):
+		if not exclude.has(pid):
+			pool.append(pid)
+	pool.sort_custom(func(a: String, b: String) -> bool:
+		var ba: int = int((_roster_ids[a] as Dictionary).get("bst", 0))
+		var bb: int = int((_roster_ids[b] as Dictionary).get("bst", 0))
+		return ba > bb or (ba == bb and a < b))
+	pool = pool.slice(0, strongest)
+	if pool.is_empty():
+		return _draw_roster_pokemon("", tier, exclude, rng)
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+
+## Story 018: fight modifiers of rival encounter `def` in `zone`: an elite of that zone (get_fight_modifiers("elite"))
+## x def.modifiers (hp multiplied, strength added).
+func get_rival_fight_modifiers(def: Dictionary, zone: Dictionary) -> Dictionary:
+	var em: Dictionary = get_fight_modifiers("elite", zone)
+	var m: Dictionary = def.get("modifiers", {})
+	return {"hp_multiplier": float(em["hp_multiplier"]) * float(m.get("hp_multiplier", 1.0)),
+			"strength_bonus": int(em["strength_bonus"]) + int(m.get("strength_bonus", 0))}
+
+
+## Validates rival.json (story 018). Reports every problem.
+func _load_rival(root: Dictionary) -> bool:
+	var ok: bool = true
+	if not (root.get("default_name", null) is String) or String(root["default_name"]).strip_edges().is_empty():
+		push_error("GameData: rival needs a non-empty 'default_name'")
+		ok = false
+	var ct_v: Variant = root.get("counter_types", null)
+	if not (ct_v is Dictionary):
+		push_error("GameData: rival needs a 'counter_types' object")
+		return false
+	for t: String in _type_chart.get_type_ids():
+		var list_v: Variant = (ct_v as Dictionary).get(t, null)
+		if not (list_v is Array) or (list_v as Array).is_empty():
+			push_error("GameData: rival counter_types['%s'] must be a non-empty array" % t)
+			ok = false
+			continue
+		for c: Variant in (list_v as Array):
+			if not (c is String) or not _type_chart.is_known_type(String(c)) \
+					or _type_chart.damage_multiplier(String(c), [t] as Array[String]) <= 1.0:
+				push_error("GameData: rival counter_types['%s']: '%s' is not super effective against it" % [t, str(c)])
+				ok = false
+	var enc_v: Variant = root.get("encounters", null)
+	if not (enc_v is Array) or (enc_v as Array).is_empty():
+		push_error("GameData: rival needs a non-empty 'encounters' array")
+		return false
+	var seen: Dictionary = {}
+	var pre_league: int = 0
+	for e_v: Variant in (enc_v as Array):
+		var e: Dictionary = e_v if e_v is Dictionary else {}
+		var id: String = String(e.get("id", ""))
+		var label: String = "rival encounter '%s'" % id
+		if id.is_empty() or seen.has(id):
+			push_error("GameData: every rival encounter needs a unique 'id'")
+			ok = false
+			continue
+		seen[id] = true
+		var zone: int = int(e.get("zone", 0)) if _is_positive_int(e.get("zone", null)) else 0
+		var kind: String = String(e.get("kind", ""))
+		if zone < 1 or zone > get_zone_count() or kind not in ["room", "pre_league"]:
+			push_error("GameData: %s needs zone 1..%d and kind room|pre_league" % [label, get_zone_count()])
+			ok = false
+			continue
+		if kind == "pre_league":
+			pre_league += 1
+			if zone != get_zone_count():
+				push_error("GameData: %s (pre_league) must be in the last zone" % label)
+				ok = false
+		elif not (get_zone_act_config(zone).get("placement", {}) as Dictionary).get("forced_floors", {}).values().has(ROOM_RIVAL):
+			push_error("GameData: %s: zone %d has no forced 'rival' floor (zones.json zone_overrides)" % [label, zone])
+			ok = false
+		var sw: Variant = e.get("team_size_weights", null)
+		if not (sw is Dictionary) or (sw as Dictionary).is_empty() or not _check_weights_by_int_key(sw, 1, Battle.MAX_ENEMIES):
+			push_error("GameData: %s needs team_size_weights {'1'..'3': weight > 0}" % label)
+			ok = false
+		else:
+			var max_size: int = 1
+			for k: String in (sw as Dictionary).keys():
+				max_size = maxi(max_size, int(k))
+			var tiers: Variant = e.get("teammate_tiers", null)
+			var tiers_ok: bool = tiers is Array and (tiers as Array).size() >= max_size - 1
+			if tiers_ok:
+				for t: Variant in (tiers as Array):
+					tiers_ok = tiers_ok and _is_positive_int(t) and int(t) <= ROSTER_MAX_TIER
+			if not tiers_ok:
+				push_error("GameData: %s needs teammate_tiers (one roster tier 1..3 per teammate)" % label)
+				ok = false
+		if e.has("strongest_pool") and not _is_positive_int(e["strongest_pool"]):
+			push_error("GameData: %s strongest_pool must be an integer >= 1" % label)
+			ok = false
+		if not _valid_modifiers(e.get("modifiers", null)) or float((e.get("modifiers", {}) as Dictionary).get("hp_multiplier", 0)) < 1.0:
+			push_error("GameData: %s needs modifiers {hp_multiplier >= 1, strength_bonus >= 0} (harder than an elite)" % label)
+			ok = false
+		var r: Dictionary = e.get("reward", {}) if e.get("reward", null) is Dictionary else {}
+		var rr_ok: bool = _is_number(r.get("money", null)) and float(r["money"]) >= 0 and r.get("item_rarities", null) is Array \
+				and r.get("card_rarity_weights", null) is Dictionary and r.get("offer_stolen_card", null) is bool \
+				and (not r.has("card_count") or _is_positive_int(r["card_count"]))
+		if rr_ok:
+			for ir: Variant in (r["item_rarities"] as Array):
+				rr_ok = rr_ok and ir is String and String(ir) in CardData.RARITIES
+			rr_ok = rr_ok and _check_rarity_weights(label + " reward", r["card_rarity_weights"])
+		if not rr_ok:
+			push_error("GameData: %s needs reward {money >= 0, item_rarities, card_rarity_weights, offer_stolen_card, card_count?}" % label)
+			ok = false
+	if pre_league > 1:
+		push_error("GameData: at most one pre_league rival encounter")
+		ok = false
+	if ok:
+		for t: String in _type_chart.get_type_ids():
+			if rival_starter_candidates(t).is_empty() and not _roster_candidates.is_empty():
+				push_error("GameData: no rival starter candidate counters type '%s'" % t)
+				ok = false
+	if ok:
+		_rival_cfg = root.duplicate(true)
+	return ok

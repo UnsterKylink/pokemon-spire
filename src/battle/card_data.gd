@@ -32,6 +32,12 @@ var upgrade_override: Dictionary = {}
 ## Optional status inflicted on the target (statuses.json id + stack value); "" = none (story 016). Mentioned in `description`.
 var status_id: String = ""
 var status_value: int = 0
+## Story 018 (generic): true = the damage AND the status hit EVERY living enemy (a target index is still given, any living one).
+var target_all: bool = false
+## Story 018 (generic): HP the player recovers when the card is played (never above max HP); 0 = none.
+var heal: int = 0
+## Story 018: unique legendary card (rarity stays "rare"; the UI may give it its own look). Never in reward pools.
+var legendary: bool = false
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -68,6 +74,13 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 			return null
 		card.status_id = String((status_v as Dictionary)["id"])
 		card.status_value = int(sv)
+	card.target_all = bool(d.get("target_all", false))
+	var heal_v: Variant = d.get("heal", 0)
+	if not (heal_v is int or heal_v is float) or float(heal_v) < 0.0 or float(heal_v) != floorf(float(heal_v)):
+		push_error("CardData: card '%s' has an invalid 'heal' (integer >= 0 expected)" % card_id)
+		return null
+	card.heal = int(heal_v)
+	card.legendary = bool(d.get("legendary", false))
 	var up: Variant = d.get("upgrade", {})
 	if not (up is Dictionary) or not valid_upgrade_rule(up):
 		push_error("CardData: card '%s' has an invalid 'upgrade' (expected {damage, block, cost} integers)" % card_id)
@@ -104,6 +117,9 @@ func _copy() -> CardData:
 	copy.upgrade_override = upgrade_override
 	copy.status_id = status_id
 	copy.status_value = status_value
+	copy.target_all = target_all
+	copy.heal = heal
+	copy.legendary = legendary
 	return copy
 
 
