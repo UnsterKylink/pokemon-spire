@@ -993,7 +993,7 @@ func get_current_fight() -> Dictionary:
 	return _current_fight
 
 
-## What the last special win gave (rival: {kind, encounter_id, money, item}; legendary: {kind, pokemon_id, name, captured,
+## What the last special win gave (rival: {kind, encounter_id, money, item, healed}; legendary: {kind, pokemon_id, name, captured,
 ## cards}); {} after any other fight. Read it on the reward screen.
 func get_last_special_reward() -> Dictionary:
 	return _last_special_reward
@@ -1258,7 +1258,7 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 		var def: Dictionary = _current_fight["rival_def"]
 		_last_loot = SpecialFights.apply_rival_win(_data, _run, def, _loot_rng)
 		_last_special_reward = {"kind": room, "encounter_id": String(def["id"]), "money": int(_last_loot["money"]),
-				"item": _last_loot["item"]}
+				"item": _last_loot["item"], "healed": int(_last_loot["healed"])}
 		_show_reward_screen(SpecialFights.rival_reward_offers(_data, _run, def, defeated_ids, _reward_rng), _last_loot)
 		return
 	if room == GameData.ROOM_LEGENDARY and not _current_fight.is_empty():  # story 018

@@ -83,3 +83,47 @@ Inchangés (vérifiés, pas besoin d'y toucher) : statuses.json, shop.json (prix
 **Code** : `src/data/game_data.gd` — `pick_encounter(..., attack_types: Array[String] = [])` (boucle de re-tirage autour de l'ancien corps devenu `_pick_encounter_once`), `deck_attack_types(deck)`, `encounter_softlocks(encounter_id, attack_types)`, constante `DEFAULT_SOFTLOCK_REROLLS` + validation de `softlock_rerolls` (entier ≥ 0) dans `_load_zones` ; appels : `src/main.gd` `_start_room_fight` et `tools/balance/sim_run.gd` `_room_fight` passent `_data.deck_attack_types(_run.deck)`.
 
 **Effet** : combats bloqués 51–61 → 0–2 par 3000 parties (les 2 restants = plafond de 80 tours, pas d'immunité) ; zone 1 10.3 % → 2.1 % des parties à réglage égal (it17 → it18). Test : scratch `t22` (20 assertions : 1931 tirages bloquants sans correctif → 24 avec, ≥ 98 % supprimés ; aucun tirage en plus quand le 1er est bon ; déterminisme ; validation).
+
+## Story 018 — rival, nouveaux événements, légendaires
+
+Simulateur mis à jour (`tools/balance/sim_run.gd`) : salles `rival` (zones 2/4/6, étage 3 forcé), combat automatique du rival avant le Conseil 4, événements filtrés par zone + légendaires + `requires_money` (option inabordable → l'autre), retraits de cartes (la politique oublie sa carte de plus faible valeur), combats d'événement (élite / starter du rival / légendaire ; pas de capture dans le simulateur). Politique inchangée (1re option sans `lose_hp` / `remove_card` ; les légendaires ont « s'éloigner » en option 0, donc le joueur auto les affronte seulement si s'éloigner coûte des PV : Darkrai, Lugia, Rayquaza). Seul ajout de configuration de politique : `map_scores.rival` (salle forcée, toutes les salles de l'étage sont `rival`) et `rival` / `rival_final` / `legendary` dans `booster_rooms` (traitées comme élite / arène).
+
+Référence : report-post017 = 36.2 % (600 parties) ; cible ≈ 35 % (±3), ≥ 75 % des parties ≥ 3 badges, ≥ 50 % atteignent le Conseil, zone 1 ≤ 5 %, aucune étape > 20 % des défaites, aucun combat de rival > ~10 % des parties.
+
+| Itér. | Parties | Victoires | ≥ 3 badges | Conseil atteint | Constat → changement suivant |
+|---|---:|---:|---:|---:|---|
+| post018 v0 | 1000 | 45.1 % | — | — | rival zone 6 = 13.2 % des parties (24 % des défaites) ; objets rares du rival (Gemme Énergie, Cloche Éclat) ; légendaires gagnés 127/129 |
+| i1 | 1000 | 42.3 % | 84.3 % | 53.4 % | récompenses du rival réduites, rival 3 plus faible, légendaires ×1.4 / +2 → test : sans les nouveaux événements 37.8 % (événements ≈ +4.5 pts, rival + légendaires ≈ +1.6) |
+| i2 | 1000 | 40.1 % | 83.9 % | 51.1 % | gains d'événements choisis par le joueur auto réduits |
+| i3 | 1000 | 34.0 % | 81.5 % | 45.8 % | rivals plus durs → trop de morts avant le Conseil |
+| i4 | 1000 | 30.4 % | 84.3 % | 49.3 % | difficulté déplacée sur le rival final (×1.3 / +2) : il entame les PV avant le Conseil membre 1 |
+| i5 | 1000 | 44.6 % | 84.3 % | 50.8 % | essai `heal_percent` 40 après le rival final : beaucoup trop (les PV à l'entrée de la Ligue décident) |
+| i6 | 1000 | 40.9 % | 84.3 % | 50.8 % | heal 10 : encore trop → retiré (0) |
+| i7 | 1000 | 37.7 % | 84.3 % | 50.8 % | rival final ×1.2 / +1 |
+| i8 | 1000 | 35.0 % | 84.3 % | 50.8 % | rival final ×1.25 / +1 → à 2000 parties 33.8 %, Conseil 49.8 % (limite) |
+| i9 | 2000 | 36.9 % | 85.2 % | 53.1 % | coéquipiers du rival 3 tiers [1, 2] (moins de morts en zone 6) |
+| **final** | **2000** | **34.5 %** (IC 32.4–36.6) | **85.2 %** | **53.1 %** | rival final ×1.3 / +1 → `report-post018.md` |
+
+Final (2000 parties) : zone 1 = 3.4 % des parties ; étape la plus meurtrière = league_member_1 (15.7 % des défaites) ; défaites contre le rival : zone 2 1.3 %, zone 4 1.9 %, zone 6 3.2 %, avant le Conseil 3.3 % des parties ; légendaire vu dans 29 % des parties (au plus 1), affronté 267 fois, battu 202 (76 %), 65 défaites (3.3 %).
+
+Valeurs modifiées (toutes nouvelles en story 018 ; « avant » = première version de la story) :
+
+| Fichier | Clé | Avant | Après | Pourquoi |
+|---|---|---|---|---|
+| rival.json | rival_1 modifiers / reward | ×1.1 +0 ; 60 ₽, objet uncommon/rare, cartes 15/50/35 | ×1.05 +0 ; 30 ₽, objet common, cartes 40/45/15 | objets rares trop forts tôt (boule de neige) |
+| rival.json | rival_2 modifiers / reward | ×1.1 +1 ; 80 ₽, uncommon/rare, 10/50/40 | ×1.1 +0 ; 40 ₽, common, 35/45/20 | idem |
+| rival.json | rival_3 tiers / modifiers / reward | [2, 3] ×1.1 +1 ; 100 ₽, uncommon/rare, 5/45/50 | [1, 2] ×1.0 +0 ; 50 ₽, common, 30/45/25 | 13 % des parties mouraient en zone 6 (starter stade 3 à l'avantage de type + 3 Pokémon) |
+| rival.json | rival_final modifiers / reward | ×1.1 +1 ; 150 ₽, uncommon/rare | ×1.3 +1 ; 60 ₽, common/uncommon (3 cartes rares gardées) | la difficulté du rival est mise juste avant le Conseil (ne réduit pas l'accès au Conseil) |
+| rival.json | reward.heal_percent (nouveau, optionnel) | — | absent (0) | essayé à 40 / 10 : trop généreux |
+| events.json | start_fight légendaires modifiers | ×1.0 +0 | ×2.0 +4 | légendaires gagnés 98 % → 76 % |
+| events.json | legendary.per_zone.hp_multiplier | 0.08 | 0.1 | idem, en zones tardives |
+| events.json | dresseur_echange A / vieux_dresseur B | carte rare | carte peu commune | gains trop forts pour un choix sans coût |
+| events.json | marchand_ambulant A | 80 ₽, uncommon/rare | 110 ₽, common/uncommon | idem |
+| events.json | bricoleur A | 40 ₽ | 70 ₽ | idem |
+| events.json | piege_poison A | carte uncommon + Poison 4 | carte common + Poison 6 | idem |
+| events.json | infirmiere_tournee A | soin 25 % | soin 15 % − 20 ₽ | idem |
+| events.json | pari_croupier chance | 0.45 | 0.4 | espérance légèrement négative |
+| events.json | rival_provocation duel modifiers | ×1.0 +0 | ×1.2 +1 | duel trop facile pour sa récompense |
+| events.json | pierre_evolution A / B | évolution ; 80 ₽ | évolution − 5 PV ; 50 ₽ | idem |
+| events.json | oeuf_mystere B | 60 ₽ | 40 ₽ | idem |
+| events.json | vieux_dresseur A | amélioration | amélioration − 30 ₽ | idem |

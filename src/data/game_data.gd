@@ -3076,13 +3076,14 @@ func _load_rival(root: Dictionary) -> bool:
 		var r: Dictionary = e.get("reward", {}) if e.get("reward", null) is Dictionary else {}
 		var rr_ok: bool = _is_number(r.get("money", null)) and float(r["money"]) >= 0 and r.get("item_rarities", null) is Array \
 				and r.get("card_rarity_weights", null) is Dictionary and r.get("offer_stolen_card", null) is bool \
-				and (not r.has("card_count") or _is_positive_int(r["card_count"]))
+				and (not r.has("card_count") or _is_positive_int(r["card_count"])) \
+				and (not r.has("heal_percent") or (_is_number(r["heal_percent"]) and float(r["heal_percent"]) >= 0 and float(r["heal_percent"]) <= 100))
 		if rr_ok:
 			for ir: Variant in (r["item_rarities"] as Array):
 				rr_ok = rr_ok and ir is String and String(ir) in CardData.RARITIES
 			rr_ok = rr_ok and _check_rarity_weights(label + " reward", r["card_rarity_weights"])
 		if not rr_ok:
-			push_error("GameData: %s needs reward {money >= 0, item_rarities, card_rarity_weights, offer_stolen_card, card_count?}" % label)
+			push_error("GameData: %s needs reward {money >= 0, item_rarities, card_rarity_weights, offer_stolen_card, card_count?, heal_percent? 0..100}" % label)
 			ok = false
 	if pre_league > 1:
 		push_error("GameData: at most one pre_league rival encounter")

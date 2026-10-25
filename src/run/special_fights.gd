@@ -37,13 +37,15 @@ static func _rival_fight(data: GameData, run: RunState, def: Dictionary, room: S
 
 
 ## After a won rival fight: records it, pays rival.json reward.money and gives ONE held item of reward.item_rarities the run
-## does not own (uniform, `rng`: Main's loot rng; none if every such item is owned). Returns the RunState.apply_loot format
-## {money, item: ItemData|null, potion: null, ball: null}.
+## does not own (uniform, `rng`: Main's loot rng; none if every such item is owned), then heals reward.heal_percent % of max
+## HP (optional, default 0). Returns the RunState.apply_loot format {money, item: ItemData|null, potion: null, ball: null}
+## plus healed: HP restored.
 static func apply_rival_win(data: GameData, run: RunState, def: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	run.mark_rival_done(String(def["id"]))
 	var reward: Dictionary = def["reward"]
 	var result: Dictionary = {"money": int(reward["money"]), "item": null, "potion": null, "ball": null}
 	run.add_money(int(reward["money"]))
+	result["healed"] = run.heal_percent(float(reward.get("heal_percent", 0)))
 	var pool: Array[ItemData] = []
 	for iid: String in data.get_item_ids():
 		var it: ItemData = data.get_item(iid)
