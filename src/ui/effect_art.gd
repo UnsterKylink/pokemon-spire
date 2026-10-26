@@ -28,7 +28,7 @@ const STATUSES_PATH: String = "res://assets/data/statuses.json"
 ## Fallback status colours when statuses.json is missing (same values as the data file).
 const STATUS_COLORS: Dictionary = {"sleep": Color("#a890f0"), "paralysis": Color("#f8d030"), "poison": Color("#a040a0"),
 		"burn": Color("#f08030"), "freeze": Color("#98d8d8")}
-const SHIELD_GREEN: Color = Color("#7BE38C")
+const SHIELD_GREEN: Color = Color("#4FE070")
 const SHIELD_DEEP: Color = Color("#23A04E")
 const HEART_PINK: Color = Color("#FF8FBF")
 const HEART_DEEP: Color = Color("#E0407E")
@@ -169,7 +169,7 @@ func _draw_shield(c: Vector2, r: float, w: float) -> void:
 		outer.append(c + Vector2(cos(a), sin(a)) * r * 1.05)
 		inner.append(c + Vector2(cos(a), sin(a)) * r * 0.55)
 	draw_circle(c, r * 1.2, Color(SHIELD_GREEN, 0.25), true, -1.0, true)
-	_shape(outer, Color(SHIELD_GREEN.lightened(0.45), 0.92), Color(SHIELD_GREEN.darkened(0.05), 0.92), 0.0)
+	_shape(outer, SHIELD_GREEN.lightened(0.4), SHIELD_GREEN.darkened(0.1), 0.0)
 	var facet: Color = Color(1, 1, 1, 0.55)
 	for i: int in 6:
 		draw_line(inner[i], outer[i], facet, maxf(1.0, w * 0.5), true)
@@ -280,7 +280,7 @@ func _draw_freeze(c: Vector2, r: float, w: float) -> void:
 
 func _crystal(c: Vector2, r: float, col: Color, w: float) -> void:
 	var pts: PackedVector2Array = _pts(CRYSTAL, c, r)
-	_shape(pts, col.lightened(0.55), col.darkened(0.1), 0.0)
+	_shape(pts, col.lightened(0.5), col.darkened(0.3), 0.0)
 	# Left facets lighter, right facets darker, central ridge.
 	draw_colored_polygon(PackedVector2Array([pts[0], pts[5], pts[4], pts[3], c]), Color(1, 1, 1, 0.35))
 	draw_colored_polygon(PackedVector2Array([pts[0], pts[1], pts[2], pts[3], c]), Color(0, 0.2, 0.4, 0.12))
