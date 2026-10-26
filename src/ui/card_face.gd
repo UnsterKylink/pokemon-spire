@@ -18,7 +18,7 @@ const GEM_R: float = 12.5
 const BANNER_Y: float = 5.0
 const BANNER_H: float = 23.0
 const WINDOW_Y: float = 32.0
-const WINDOW_H: float = 74.0
+const WINDOW_H: float = 78.0
 const DESC_GAP: float = 4.0
 const DESC_BOTTOM: float = 11.0
 const PILL_H: float = 15.0
@@ -173,15 +173,16 @@ func _layout() -> void:
 	# Cost gem number.
 	_place(_cost_label, Rect2(_gem_c - Vector2(r, r), Vector2(2.0 * r, 2.0 * r)), roundi(FONT_COST * s))
 	# Name: fit on one line inside the banner (right of the gem).
-	var name_rect := Rect2(_gem_c.x + r + 1.0 * s, _banner.position.y, _banner.end.x - (_gem_c.x + r) - 4.0 * s, _banner.size.y)
-	_place(_name_label, name_rect, _fit_one_line(_name_label, card.display_name, roundi(FONT_NAME * s), roundi(FONT_NAME_MIN * s), name_rect.size.x))
+	var name_rect := Rect2(_gem_c.x + r + 2.0 * s, _banner.position.y, _banner.end.x - (_gem_c.x + r) - 6.0 * s, _banner.size.y)
+	_place(_name_label, name_rect, _fit_one_line(_name_label, card.display_name, roundi(FONT_NAME * s), roundi(FONT_NAME_MIN * s),
+			name_rect.size.x - 4.0 * s))
 	# Illustration window content.
 	var inner: Rect2 = _window.grow(-3.0 * s)
 	var small: int = roundi(FONT_SMALL * s)
 	var pill_h: float = PILL_H * s
 	var strip := Rect2(inner.position.x + 2.0 * s, inner.end.y - pill_h, inner.size.x - 4.0 * s, pill_h)
 	_place(_carrier_label, strip, _fit_one_line(_carrier_label, carrier_name, small, maxi(8, small - 3), strip.size.x - 6.0 * s))
-	var art_area := Rect2(inner.position, Vector2(inner.size.x, inner.size.y - pill_h * 0.55))
+	var art_area := Rect2(inner.position, Vector2(inner.size.x, inner.size.y - pill_h * 0.2))
 	if _art_rect != null:
 		_art_rect.position = art_area.position
 		_art_rect.size = art_area.size
@@ -196,7 +197,7 @@ func _layout() -> void:
 		tw = minf(tw, inner.size.x)
 		_place(_type_label, Rect2(inner.end.x - tw, inner.position.y, tw, pill_h), small)
 	# Description: biggest font that fits the cream box.
-	var text_rect: Rect2 = _desc.grow_individual(-4.0 * s, -2.0 * s, -4.0 * s, -2.0 * s)
+	var text_rect: Rect2 = _desc.grow_individual(-5.0 * s, -3.0 * s, -5.0 * s, -3.0 * s)
 	_place(_desc_label, text_rect, _fit_multiline(_desc_label, card.description, roundi(FONT_DESC * s), roundi(FONT_DESC_MIN * s), text_rect.size))
 	if _tab != null:
 		var tfont: Font = _tab.get_theme_font("font")
@@ -256,7 +257,7 @@ func _draw() -> void:
 	draw_circle(_gem_c + Vector2(-r * 0.38, -r * 0.42), r * 0.22, Color(1, 1, 1, 0.75), true, -1.0, true)
 	# Illustration window: light type backdrop + halo behind the Pokémon.
 	_rrect(_window, 6.0 * s, frame_color.lightened(0.72), frame_color.lightened(0.38), UiStyle.OUTLINE, 2.0 * s)
-	var halo_r: float = minf(_window.size.x, _window.size.y) * 0.42
+	var halo_r: float = minf(_window.size.x, _window.size.y) * 0.46
 	draw_circle(_window.get_center() - Vector2(0, 4.0 * s), halo_r, Color(1, 1, 1, 0.45), true, -1.0, true)
 	# Description box.
 	_rrect(_desc, 6.0 * s, UiStyle.CREAM.lightened(0.4), UiStyle.CREAM, UiStyle.OUTLINE, 2.0 * s)
@@ -296,5 +297,10 @@ static func _rounded_points(rect: Rect2, radius: float, segments: int = 6) -> Pa
 	for i: int in 4:
 		for k: int in segments + 1:
 			var a: float = start_angles[i] + (PI * 0.5) * float(k) / float(segments)
-			pts.append(corners[i] + Vector2(cos(a), sin(a)) * r)
+			var p: Vector2 = corners[i] + Vector2(cos(a), sin(a)) * r
+			# Pills / circles: skip coincident points (zero-length edges break the triangulation).
+			if pts.is_empty() or pts[pts.size() - 1].distance_squared_to(p) > 0.01:
+				pts.append(p)
+	if pts.size() > 1 and pts[0].distance_squared_to(pts[pts.size() - 1]) <= 0.01:
+		pts.remove_at(pts.size() - 1)
 	return pts

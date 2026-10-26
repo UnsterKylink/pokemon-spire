@@ -94,6 +94,12 @@ const CAPTURE_TRIO: String = "trio_r2"
 const STORY_019_SEED: int = 1907
 ## Story 018 shots: run seed.
 const RIVAL_SEED: int = 1801
+## Story 020 shots: run seed, the forced 5-card hand (attack, skill, legendary, long description, status attack)
+## and the 10-card hand (narrowest cards).
+const STYLE_SEED: int = 2020
+const STYLE_HAND: Array[String] = ["flammette", "abri", "voile_temporel", "hypnose", "dard_venin"]
+const STYLE_HAND_10: Array[String] = ["flammette", "abri", "feu_sacre", "hypnose", "dard_venin", "griffe", "toxik",
+		"aeroblast", "trou_noir", "ecrasement"]
 var _main: Main
 var _out_dir: String = "user://qa"
 var _filter: String = ""
@@ -1374,7 +1380,33 @@ func _rival_shots() -> void:
 	await _shot("10-rival-final")
 
 
+## Story 020: redesigned cards in the battle hand (5 and 10 cards), the reward screen and the deck overlay (filter `story-020`).
+func _style_shots() -> void:
+	_main.start_new_run(STYLE_SEED, "salameche")
+	_main.start_encounter("trio_vol")
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	await create_timer(FLOAT_WAIT).timeout
+	await _shot("01-main-5-cartes")
+	bs.select_card(0)
+	await _shot("02-carte-selectionnee")
+	bs.qa_force_hand(STYLE_HAND_10)
+	await _shot("03-main-10-cartes")
+	_main.open_deck("deck")
+	await _shot("04-deck-combat")
+	_main.close_deck()
+	await _win_battle(true)
+	await _shot("05-recompense")
+	_main.open_deck()
+	await _shot("06-deck-carte")
+	_main.close_deck()
+
+
 func _run() -> void:
+	if _filter == "story-020":
+		await _style_shots()
+		quit(0)
+		return
 	if _filter == "story-018":
 		await _rival_shots()
 		quit(0)
