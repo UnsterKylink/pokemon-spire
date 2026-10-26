@@ -6,6 +6,11 @@ extends Control
 ## as the Button's "Content" child, inset by INSET so the caller's own border (rarity / selection) stays visible.
 ## Lays itself out from its size (170x200, 220x270 and narrowed hand cards). Display only; ignores the mouse.
 ## Implements: story-020 (style graphique).
+## Story 020b (premium): textured frame whose material follows the rarity (starter / common = slate, uncommon = brushed
+## silver, rare = gold, legendary = gold + gems), body still tinted by the type, inner bevel, parchment banner and text
+## box, soft drop shadow, animated holographic foil on rare / legendary (card_holo.gdshader), Kreon / Nunito fonts,
+## and a hover that scales the face up and tilts it toward the cursor (visual only: the Button keeps its rect, so
+## layout and clicks are unchanged).
 
 ## Distance (px) between the button edge and the face, so the caller's border ring shows around the card.
 const INSET: float = 3.0
@@ -13,7 +18,7 @@ const INSET: float = 3.0
 const BASE_H: float = 194.0
 const RADIUS: float = 8.0
 const OUTLINE_W: float = 2.5
-const PAD: float = 5.0
+const PAD: float = 6.0
 const GEM_R: float = 12.5
 const BANNER_Y: float = 5.0
 const BANNER_H: float = 23.0
@@ -32,6 +37,34 @@ const BANNER_CREAM_TOP: Color = Color("#FFFDF4")
 const BANNER_GOLD_TOP: Color = Color("#FFF1A8")
 const STRIP_BG: Color = Color(0.07, 0.08, 0.16, 0.72)
 const HOVER_GLOW: Color = Color(1, 1, 1, 0.9)
+## Story 020b: frame band width (reference px), frame material texture per rarity, gem colour of legendary frames.
+const FRAME_BAND: float = 4.5
+const RARITY_MATERIAL: Dictionary = {
+	"starter": "card_stone", "common": "card_stone", "uncommon": "card_silver", "rare": "card_gold"}
+const LEGENDARY_GEM: Color = Color("#E0307A")
+## Generated textures are 512 px; UVs = local px / TEX_SIZE (+ a per-card offset so cards do not look stamped).
+const TEX_SIZE: float = 512.0
+## How much of the type colour tints the frame material (0 = raw metal / stone).
+const FRAME_TYPE_TINT: float = 0.2
+## Drop shadow: offset (reference px) and alpha of the three soft layers; hovered = longer shadow.
+const SHADOW_OFFSET: float = 4.0
+const SHADOW_OFFSET_HOVER: float = 9.0
+const SHADOW_ALPHAS: Array[float] = [0.2, 0.12, 0.06]
+## Hover: scale, max tilt toward the cursor (degrees), tween time (s), z-index while lifted, tilt smoothing.
+const HOVER_SCALE: float = 1.08
+const HOVER_TILT_DEG: float = 2.5
+const HOVER_TIME: float = 0.14
+const HOVER_Z: int = 10
+const TILT_FOLLOW: float = 12.0
+## Holographic foil strength (card_holo.gdshader `holo`) and hover glare.
+const HOLO_RARE: float = 0.28
+const HOLO_LEGENDARY: float = 0.4
+const GLARE_HOVER: float = 0.3
+## Foil strength kept over the description box (fraction), so the text stays readable.
+const HOLO_CALM: float = 0.2
+const HOLO_SHADER_PATH: String = "res://src/ui/shaders/card_holo.gdshader"
+
+static var _holo_shader: Shader
 
 var card: CardData
 var frame_color: Color = UiStyle.SKILL
@@ -39,7 +72,14 @@ var type_name: String = ""
 var carrier_name: String = ""
 var art: Texture2D
 var art_is_pixel: bool = false
+## True while the cursor is over the card (face lifted); the glow ring also needs `_glow` (playable card).
 var hovered: bool = false
+var _glow: bool = false
+var _foil: ColorRect
+var _foil_mat: ShaderMaterial
+var _tween: Tween
+var _mouse_uv: Vector2 = Vector2(0.5, 0.3)
+var _uv_offset: Vector2 = Vector2.ZERO
 
 var _name_label: Label
 var _cost_label: Label
@@ -80,11 +120,82 @@ static func create(card_data: CardData, color: Color, type_label_text: String, c
 	return f
 
 
-## Hover highlight (white glow around the face); driven by the parent Button's mouse signals.
+## Hover highlight (white glow around the face + lift); kept for callers of story 020. See hover().
 func set_hovered(value: bool) -> void:
-	if hovered != value:
-		hovered = value
+	hover(value, value)
+
+
+## Story 020b: cursor over the card (`on`): scale up to HOVER_SCALE around the bottom centre, raise the z-index,
+## follow the cursor with a small tilt and the glare; `glow` = white ring too (playable cards). Visual only.
+func hover(on: bool, glow: bool = true) -> void:
+	_glow = glow and on
+	if hovered == on:
 		queue_redraw()
+		return
+	hovered = on
+	z_index = HOVER_Z if on else 0
+	if _tween != null:
+		_tween.kill()
+	if is_inside_tree():
+		_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_tween.tween_property(self, "scale", Vector2.ONE * (HOVER_SCALE if on else 1.0), HOVER_TIME)
+	else:
+		scale = Vector2.ONE * (HOVER_SCALE if on else 1.0)
+	if on:
+		_ensure_foil()
+	if _foil != null:
+		_foil.visible = on or _holo_strength() > 0.0
+		_foil_mat.set_shader_parameter("glare", GLARE_HOVER if on else 0.0)
+	set_process(true)
+	queue_redraw()
+
+
+func _ready() -> void:
+	set_process(false)
+
+
+func _process(delta: float) -> void:
+	var target_rot: float = 0.0
+	var m := Vector2(0.5, 0.3)
+	if hovered and size.x > 0.0 and size.y > 0.0:
+		var lm: Vector2 = get_local_mouse_position()
+		m = Vector2(clampf(lm.x / size.x, 0.0, 1.0), clampf(lm.y / size.y, 0.0, 1.0))
+		target_rot = deg_to_rad(HOVER_TILT_DEG) * (m.x - 0.5) * 2.0
+	var k: float = minf(1.0, delta * TILT_FOLLOW)
+	rotation = lerpf(rotation, target_rot, k)
+	_mouse_uv = _mouse_uv.lerp(m, k)
+	if _foil_mat != null:
+		_foil_mat.set_shader_parameter("mouse", _mouse_uv)
+	if not hovered and absf(rotation) < 0.0005:
+		rotation = 0.0
+		set_process(false)
+
+
+func _holo_strength() -> float:
+	if card.legendary:
+		return HOLO_LEGENDARY
+	return HOLO_RARE if card.rarity == "rare" else 0.0
+
+
+## Foil / glare overlay (created at build for holo cards, on first hover for the others).
+func _ensure_foil() -> void:
+	if _foil != null:
+		return
+	if _holo_shader == null and ResourceLoader.exists(HOLO_SHADER_PATH):
+		_holo_shader = load(HOLO_SHADER_PATH) as Shader
+	if _holo_shader == null:
+		return
+	_foil_mat = ShaderMaterial.new()
+	_foil_mat.shader = _holo_shader
+	_foil_mat.set_shader_parameter("noise_tex", UiStyle.ui_texture("ui_noise"))
+	_foil_mat.set_shader_parameter("holo", _holo_strength())
+	_foil_mat.set_shader_parameter("glare", 0.0)
+	_foil_mat.set_shader_parameter("calm_factor", HOLO_CALM)
+	_foil = ColorRect.new()
+	_foil.name = "Foil"
+	_foil.material = _foil_mat
+	_add(_foil)
+	_layout()
 
 
 func _build() -> void:
@@ -119,6 +230,16 @@ func _build() -> void:
 		_tab = _make_label("LegendaryTab", UiStyle.TEXT_DARK, 0)
 		_tab.text = CardView.TEXT_LEGENDARY
 		_tab.add_theme_stylebox_override("normal", _pill(UiStyle.LEGENDARY, UiStyle.OUTLINE))
+	_name_label.add_theme_font_override("font", UiStyle.font_title())
+	_cost_label.add_theme_font_override("font", UiStyle.font_title())
+	_desc_label.add_theme_font_override("font", UiStyle.font_body())
+	for l: Label in [_type_label, _carrier_label, _tab]:
+		if l != null:
+			l.add_theme_font_override("font", UiStyle.font_bold())
+	var h: int = absi(hash(card.id))
+	_uv_offset = Vector2(float(h % 97) / 97.0, float(floori(h / 97.0) % 89) / 89.0) * 0.4
+	if _holo_strength() > 0.0:
+		_ensure_foil()
 
 
 func _add(c: Control) -> void:
@@ -204,6 +325,13 @@ func _layout() -> void:
 		var tab_fs: int = maxi(8, small - 1)
 		var tab_w: float = minf(w - 2.0 * pad, tfont.get_string_size(_tab.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tab_fs).x + 12.0 * s)
 		_place(_tab, Rect2(Vector2((w - tab_w) * 0.5, h - pill_h + 1.0 * s), Vector2(tab_w, pill_h - 1.0 * s)), tab_fs)
+	pivot_offset = Vector2(w * 0.5, h * 0.92)
+	if _foil != null:
+		_foil.position = Vector2.ZERO
+		_foil.size = size
+		_foil_mat.set_shader_parameter("radius_px", RADIUS * s)
+		_foil_mat.set_shader_parameter("calm_rect", Vector4(_desc.position.x / w, _desc.position.y / h,
+				_desc.size.x / w, _desc.size.y / h))
 	queue_redraw()
 
 
@@ -240,42 +368,101 @@ func _draw() -> void:
 		return
 	var s: float = _s
 	var legendary: bool = card.legendary
-	# Body: soft vertical gradient of the frame colour, thick dark (gold) outline.
-	var body_outline: Color = UiStyle.LEGENDARY if legendary else UiStyle.OUTLINE
-	_rrect(_body.grow(-OUTLINE_W * 0.5), RADIUS * s, frame_color.lightened(0.28), frame_color.darkened(0.12),
-			body_outline, (OUTLINE_W + (1.0 if legendary else 0.0)) * s)
+	# Soft drop shadow (3 layers), longer while lifted.
+	var off: float = (SHADOW_OFFSET_HOVER if hovered else SHADOW_OFFSET) * s
+	for i: int in SHADOW_ALPHAS.size():
+		var c := Color(0, 0, 0, SHADOW_ALPHAS[i])
+		_rrect(_body.grow(1.0 + 2.5 * float(i) * s).grow_individual(0, -off * 0.5, 0, 0), (RADIUS + 2.0 * i) * s,
+				c, c, Color(0, 0, 0, 0), 0.0, Vector2(0, off))
+	# Frame: material texture of the rarity (slate / silver / gold), lightly tinted by the type colour.
+	var mat_name: String = "card_gold" if legendary else String(RARITY_MATERIAL.get(card.rarity, "card_stone"))
+	var tint: Color = Color.WHITE.lerp(frame_color, FRAME_TYPE_TINT)
+	_rrect_tex(_body, RADIUS * s, UiStyle.ui_texture(mat_name), tint.lightened(0.1), tint.darkened(0.12))
+	# Body: type colour over a fine grain, inset by the frame band.
+	var band: float = FRAME_BAND * s
+	var inner: Rect2 = _body.grow(-band)
+	_rrect_tex(inner, (RADIUS - 2.5) * s, UiStyle.ui_texture("card_grain"), frame_color.lightened(0.25), frame_color.darkened(0.18))
+	# Bevel: light rim on the frame, dark inner shadow where the body sinks under it.
+	_rrect(_body.grow(-OUTLINE_W * s), (RADIUS - 1.0) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(1, 1, 1, 0.35), 1.0 * s)
+	_rrect(inner, (RADIUS - 2.5) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0.5), 1.6 * s)
+	_rrect(inner.grow(-1.5 * s), (RADIUS - 3.5) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0.18), 1.4 * s)
 	if legendary:
-		_rrect(_body.grow(-4.5 * s), (RADIUS - 3.0) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), UiStyle.LEGENDARY_INNER, 1.5 * s)
-	# Name banner (cream, gold for legendary) then the cost gem on top of its left end.
-	var banner_top: Color = BANNER_GOLD_TOP if legendary else BANNER_CREAM_TOP
-	var banner_bottom: Color = UiStyle.LEGENDARY if legendary else UiStyle.CREAM.darkened(0.06)
-	_rrect(_banner, _banner.size.y * 0.5, banner_top, banner_bottom, UiStyle.OUTLINE, 2.0 * s)
+		_rrect(inner.grow(-2.8 * s), (RADIUS - 4.0) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), UiStyle.LEGENDARY_INNER, 1.3 * s)
+	# Outer outline (gold on legendary cards).
+	var body_outline: Color = UiStyle.LEGENDARY.darkened(0.25) if legendary else UiStyle.OUTLINE
+	_rrect(_body.grow(-OUTLINE_W * 0.5), RADIUS * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), body_outline,
+			(OUTLINE_W + (0.5 if legendary else 0.0)) * s)
+	# Name banner: parchment (gold metal on legendary cards), then the cost gem on top of its left end.
+	if legendary:
+		_rrect_tex(_banner, _banner.size.y * 0.5, UiStyle.ui_texture("card_gold"), BANNER_GOLD_TOP, UiStyle.LEGENDARY)
+	else:
+		_rrect_tex(_banner, _banner.size.y * 0.5, UiStyle.ui_texture("ui_parchment"), Color.WHITE, UiStyle.CREAM.darkened(0.04))
+	_rrect(_banner.grow(-1.5 * s), _banner.size.y * 0.5, Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(1, 1, 1, 0.55), 1.0 * s)
+	_rrect(_banner, _banner.size.y * 0.5, Color(0, 0, 0, 0), Color(0, 0, 0, 0), UiStyle.OUTLINE, 2.0 * s)
 	var r: float = GEM_R * s
 	draw_circle(_gem_c + Vector2(0, 1.5 * s), r + 1.5 * s, UiStyle.OUTLINE, true, -1.0, true)
 	_rrect(Rect2(_gem_c - Vector2(r, r), Vector2(2.0 * r, 2.0 * r)), r, UiStyle.ACCENT_YELLOW.lightened(0.35),
-			UiStyle.ACCENT_YELLOW.darkened(0.15), UiStyle.OUTLINE, 2.0 * s)
-	draw_circle(_gem_c + Vector2(-r * 0.38, -r * 0.42), r * 0.22, Color(1, 1, 1, 0.75), true, -1.0, true)
-	# Illustration window: light type backdrop + halo behind the Pokémon.
-	_rrect(_window, 6.0 * s, frame_color.lightened(0.72), frame_color.lightened(0.38), UiStyle.OUTLINE, 2.0 * s)
+			UiStyle.ACCENT_YELLOW.darkened(0.25), UiStyle.OUTLINE, 2.0 * s)
+	draw_arc(_gem_c, r - 3.0 * s, PI * 0.15, PI * 0.85, 10, Color(0.55, 0.3, 0.0, 0.35), 1.5 * s, true)
+	draw_circle(_gem_c + Vector2(-r * 0.38, -r * 0.42), r * 0.22, Color(1, 1, 1, 0.8), true, -1.0, true)
+	# Illustration window: light type backdrop + halo, inner shadow from the top edge.
+	_rrect(_window, 6.0 * s, frame_color.lightened(0.72), frame_color.lightened(0.38), Color(0, 0, 0, 0), 0.0)
 	var halo_r: float = minf(_window.size.x, _window.size.y) * 0.46
 	draw_circle(_window.get_center() - Vector2(0, 4.0 * s), halo_r, Color(1, 1, 1, 0.45), true, -1.0, true)
-	# Description box.
-	_rrect(_desc, 6.0 * s, UiStyle.CREAM.lightened(0.4), UiStyle.CREAM, UiStyle.OUTLINE, 2.0 * s)
-	# Rarity gem on the bottom edge (legendary cards show the ribbon instead).
-	if not legendary:
-		var gc := Vector2(size.x * 0.5, size.y - DESC_BOTTOM * s * 0.5)
-		var g: float = 5.5 * s
-		var gem := PackedVector2Array([gc + Vector2(0, -g), gc + Vector2(g, 0), gc + Vector2(0, g), gc + Vector2(-g, 0)])
-		draw_colored_polygon(gem, UiStyle.rarity_color(card.rarity))
-		gem.append(gem[0])
-		draw_polyline(gem, UiStyle.OUTLINE, 1.5 * s, true)
-	if hovered:
-		_rrect(_body.grow(-1.0), RADIUS * s, Color(1, 1, 1, 0.06), Color(1, 1, 1, 0.0), HOVER_GLOW, 2.0 * s)
+	var shade := Rect2(_window.position, Vector2(_window.size.x, _window.size.y * 0.3))
+	_rrect(shade, 6.0 * s, Color(0, 0, 0, 0.22), Color(0, 0, 0, 0.0), Color(0, 0, 0, 0), 0.0)
+	_rrect(_window, 6.0 * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), UiStyle.OUTLINE, 2.0 * s)
+	# Description box: parchment, inner shadow at the top, dark outline.
+	_rrect_tex(_desc, 6.0 * s, UiStyle.ui_texture("ui_parchment"), Color.WHITE, UiStyle.CREAM)
+	var dshade := Rect2(_desc.position, Vector2(_desc.size.x, minf(8.0 * s, _desc.size.y * 0.3)))
+	_rrect(dshade, 6.0 * s, Color(0.35, 0.2, 0.05, 0.22), Color(0.35, 0.2, 0.05, 0.0), Color(0, 0, 0, 0), 0.0)
+	_rrect(_desc, 6.0 * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), UiStyle.OUTLINE, 2.0 * s)
+	if legendary:
+		# Gold + gem: a faceted gem set in each side band, where the window meets the text box.
+		var gy: float = (_window.end.y + _desc.position.y) * 0.5
+		for gx: float in [band * 0.5 + 0.5 * s, size.x - band * 0.5 - 0.5 * s]:
+			_gem(Vector2(gx, gy), 5.5 * s, LEGENDARY_GEM)
+	else:
+		# Rarity gem on the bottom edge (legendary cards show the ribbon instead).
+		_gem(Vector2(size.x * 0.5, size.y - DESC_BOTTOM * s * 0.5), 5.5 * s, UiStyle.rarity_color(card.rarity))
+	if hovered and _glow:
+		_rrect(_body.grow(1.5 * s), (RADIUS + 1.5) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(1, 0.95, 0.75, 0.45), 3.0 * s)
+		_rrect(_body.grow(-1.0), RADIUS * s, Color(1, 1, 1, 0.05), Color(1, 1, 1, 0.0), HOVER_GLOW, 2.0 * s)
+
+
+## Faceted diamond gem (`color`) with a dark outline and a white glint.
+func _gem(c: Vector2, g: float, color: Color) -> void:
+	var top := c + Vector2(0, -g)
+	var right := c + Vector2(g, 0)
+	var bottom := c + Vector2(0, g)
+	var left := c + Vector2(-g, 0)
+	draw_colored_polygon(PackedVector2Array([top, right, bottom, left]), color.darkened(0.15))
+	draw_colored_polygon(PackedVector2Array([top, c, left]), color.lightened(0.35))
+	draw_colored_polygon(PackedVector2Array([top, right, c]), color.lightened(0.1))
+	draw_colored_polygon(PackedVector2Array([c, right, bottom]), color.darkened(0.3))
+	draw_polyline(PackedVector2Array([top, right, bottom, left, top]), UiStyle.OUTLINE, maxf(1.0, g * 0.25), true)
+	draw_circle(c + Vector2(-g * 0.3, -g * 0.35), g * 0.16, Color(1, 1, 1, 0.85), true, -1.0, true)
+
+
+## Rounded rect filled with `tex` (UV = local px / TEX_SIZE + this card's offset) multiplied by a vertical
+## gradient `top` -> `bottom`. Falls back to the plain gradient when the texture is missing.
+func _rrect_tex(rect: Rect2, radius: float, tex: Texture2D, top: Color, bottom: Color) -> void:
+	if tex == null:
+		_rrect(rect, radius, top, bottom, Color(0, 0, 0, 0), 0.0)
+		return
+	var pts: PackedVector2Array = _rounded_points(rect, radius)
+	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for p: Vector2 in pts:
+		cols.append(top.lerp(bottom, clampf((p.y - rect.position.y) / maxf(rect.size.y, 1.0), 0.0, 1.0)))
+		uvs.append(p / TEX_SIZE + _uv_offset)
+	draw_polygon(pts, cols, uvs, tex)
 
 
 ## Rounded rect with a vertical gradient fill (top -> bottom; transparent = no fill) and an outline (width 0 = none).
-func _rrect(rect: Rect2, radius: float, top: Color, bottom: Color, outline: Color, outline_w: float) -> void:
-	var pts: PackedVector2Array = _rounded_points(rect, radius)
+func _rrect(rect: Rect2, radius: float, top: Color, bottom: Color, outline: Color, outline_w: float,
+		offset: Vector2 = Vector2.ZERO) -> void:
+	var pts: PackedVector2Array = _rounded_points(Rect2(rect.position + offset, rect.size), radius)
 	if top.a > 0.0 or bottom.a > 0.0:
 		var cols := PackedColorArray()
 		for p: Vector2 in pts:

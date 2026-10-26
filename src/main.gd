@@ -157,6 +157,7 @@ func _ready() -> void:
 	_deck_panel = DeckOverlay.new()
 	add_child(_deck_panel)
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
+	add_child(PostFx.new(), false, Node.INTERNAL_MODE_BACK)  # story 020b: global image finish, above every screen
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
 	var cli_forced: bool = false

@@ -32,6 +32,8 @@ const COLOR_LEG_PANEL: Color = Color(0.1, 0.08, 0.14)
 const COLOR_LEG_BORDER: Color = Color(0.95, 0.75, 0.25)
 const COLOR_UNAVAILABLE: Color = Color(0.55, 0.55, 0.6)
 const LEG_SPRITE_SIZE: Vector2 = Vector2(150, 150)
+## Story 020b: side of the art of an item / potion / ball given by an option.
+const GAIN_ART_SIDE: float = 56.0
 
 var _event: Dictionary = {}
 var _info: Label
@@ -52,6 +54,9 @@ var _panel_style: StyleBoxFlat
 var _leg_caption: Label
 var _leg_sprite: TextureRect
 var _picker: DeckPicker
+## Story 020b: what the run held when the event opened (ids), to show the art of what the chosen option gave.
+var _before: Dictionary = {}
+var _gains: HBoxContainer
 
 
 func _ready() -> void:
@@ -71,6 +76,9 @@ func setup(event: Dictionary, run: RunState, data: GameData = null, availability
 	_title.text = String(event.get("title", ""))
 	_text.text = String(event.get("text", ""))
 	_set_info(run)
+	_before = _holdings(run)
+	if _gains != null:
+		_gains.visible = false
 	_apply_legendary_style(event, data)
 	for b: Button in _option_buttons:
 		_options_box.remove_child(b)
@@ -122,8 +130,51 @@ func show_result(result_text: String, summary: String, run: RunState) -> void:
 	_summary.text = summary if not summary.is_empty() else "Rien ne change."
 	_summary.visible = true
 	_set_info(run)
+	_show_gains(run)
 	_continue_button.visible = true
 	_result_shown = true
+
+
+## Story 020b: {"items": [ids], "potions": {id: n}, "balls": {id: n}} held by `run`.
+static func _holdings(run: RunState) -> Dictionary:
+	var h: Dictionary = {"items": [], "potions": {}, "balls": {}}
+	if run == null:
+		return h
+	for it: ItemData in run.items:
+		(h["items"] as Array).append(it.id)
+	for p: PotionData in run.potions:
+		h["potions"][p.id] = int(h["potions"].get(p.id, 0)) + 1
+	for bid: String in run.balls.keys():
+		h["balls"][bid] = run.ball_count(bid)
+	return h
+
+
+## Story 020b: shows the official art of every held item / potion / ball the option just gave (tooltip = name).
+func _show_gains(run: RunState) -> void:
+	var now: Dictionary = _holdings(run)
+	var gained: Array[String] = []
+	for id: String in now["items"]:
+		if not (_before.get("items", []) as Array).has(id):
+			gained.append(id)
+	for key: String in ["potions", "balls"]:
+		var was: Dictionary = _before.get(key, {})
+		for id: String in (now[key] as Dictionary).keys():
+			for k: int in maxi(0, int(now[key][id]) - int(was.get(id, 0))):
+				gained.append(id)
+	if _gains == null:
+		_gains = HBoxContainer.new()
+		_gains.name = "Gains"
+		_gains.alignment = BoxContainer.ALIGNMENT_CENTER
+		_gains.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_gains.add_theme_constant_override("separation", 10)
+		_summary.get_parent().add_child(_gains)
+		_summary.get_parent().move_child(_gains, _summary.get_index() + 1)
+	for child: Node in _gains.get_children():
+		_gains.remove_child(child)
+		child.queue_free()
+	for id: String in gained:
+		_gains.add_child(ItemIcon.make(id, GAIN_ART_SIDE))
+	_gains.visible = not gained.is_empty()
 
 
 ## Presses "Continuer" (only once the result is shown).

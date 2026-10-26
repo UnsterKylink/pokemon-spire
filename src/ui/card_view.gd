@@ -2,7 +2,7 @@ class_name CardView
 extends RefCounted
 ## Shared UI helpers to draw cards, type badges and labels (battle hand and reward screen).
 ## Implements: story-001/003 card look, story-004 rarity display, story-009 carrying Pokémon on cards,
-## story-020 redesigned card face (CardFace, design/art-bible.md).
+## story-020 redesigned card face (CardFace, design/art-bible.md), story-020b premium face (materials, foil, hover tilt).
 
 const COLOR_TEXT_LIGHT: Color = Color(1.0, 1.0, 1.0)
 const COLOR_TEXT_DARK: Color = Color(0.1, 0.1, 0.12)
@@ -107,8 +107,9 @@ static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokem
 			pixel = true
 	var face: CardFace = CardFace.create(card, color, type_text, carrier, tex, pixel)
 	b.add_child(face)
-	b.mouse_entered.connect(func() -> void: face.set_hovered(not b.disabled))
-	b.mouse_exited.connect(face.set_hovered.bind(false))
+	# Story 020b: every card lifts / tilts under the cursor (so unplayable cards can be read); only playable ones glow.
+	b.mouse_entered.connect(func() -> void: face.hover(true, not b.disabled))
+	b.mouse_exited.connect(face.hover.bind(false, false))
 
 
 ## Story 020: official artwork path of a Pokémon from its sprite path (assets/sprites/pokemon/<slug>.png ->

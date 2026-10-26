@@ -49,6 +49,7 @@ const TEXT_NO_ITEM: String = "aucun"
 const TEXT_MORE_ITEMS: String = "+%d"
 const TEXT_POTIONS: String = "Potions :"
 const TEXT_EMPTY_SLOT: String = "— vide —"
+const TEXT_EMPTY_TIP: String = "Emplacement de potion libre."
 const TEXT_POTION_HINT: String = "Clique pour l'utiliser (sans coût d'énergie)."
 const TEXT_POTION_LATER: String = "Utilisable pendant ton tour, en combat."
 ## Story 017: Poké Balls carried ("Balls : 3" + one drawn icon per ball; tooltip = each kind and its count).
@@ -443,7 +444,7 @@ func _make_item_slot(item: ItemData) -> PanelContainer:
 	sb.anti_aliasing = true
 	sb.set_content_margin_all(2)
 	chip.add_theme_stylebox_override("panel", sb)
-	chip.add_child(ItemIcon.make(item.id, ITEM_ICON_SIDE, true, String(item.get("icon")) if "icon" in item else ""))
+	chip.add_child(ItemIcon.make(item.id, ITEM_ICON_SIDE))
 	return chip
 
 
@@ -467,7 +468,7 @@ func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -
 	if index >= potions.size():
 		b.text = TEXT_EMPTY_SLOT
 		b.disabled = true
-		b.tooltip_text = TEXT_EMPTY_SLOT.replace("—", "").strip_edges().capitalize()
+		b.tooltip_text = TEXT_EMPTY_TIP
 		sb.bg_color = UiStyle.BG_DEEP
 		sb.border_color = Color(COLOR_EMPTY, 0.6)
 	else:

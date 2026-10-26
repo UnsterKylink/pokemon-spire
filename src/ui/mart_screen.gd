@@ -4,7 +4,8 @@ extends Control
 ## items and potions with their prices; sold-out slots stay visible ("Vendu"), unaffordable / impossible ones
 ## are disabled with the reason as tooltip. "Retirer une carte (prix)" opens the deck picker; "Quitter" goes back
 ## to the map. Holds no game state: it reads the visit's ShopInventory and emits buy_requested / remove_requested,
-## Main applies them and calls refresh. Implements: story-006-objets-et-services (criterion 5).
+## Main applies them and calls refresh. Implements: story-006-objets-et-services (criterion 5),
+## story-020b-refonte-visuelle-premium (every held item / potion / ball tile shows its official art, soft shadow).
 
 ## The player clicked an article: kind = ShopEntry.KIND_CARD / KIND_ITEM / KIND_POTION / KIND_BALL (story 017), index in that list.
 signal buy_requested(kind: String, index: int)
@@ -23,7 +24,10 @@ const COLOR_CAPTION: Color = Color(0.7, 0.72, 0.82)
 const COLOR_STATUS: Color = Color(0.55, 1.0, 0.6)
 const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
 const CARD_SIZE: Vector2 = Vector2(170, 200)
-const TILE_SIZE: Vector2 = Vector2(224, 118)
+const TILE_SIZE: Vector2 = Vector2(224, 124)
+## Story 020b: side of the item art on a tile / on a ball tile.
+const TILE_ICON_SIDE: float = 46.0
+const BALL_ICON_SIDE: float = 58.0
 ## Story 017: the Poké Balls row (lower tiles so the row fits above the buttons).
 const BALL_TILE_SIZE: Vector2 = Vector2(600, 92)
 const TEXT_BALLS: String = "Poké Balls"
@@ -102,11 +106,6 @@ func refresh(status: String = "") -> void:
 		var reason: String = TEXT_BAG_FULL % [_run.ball_total(), _run.max_balls()] if not e.sold and bag_full else ""
 		var tile: Button = _make_tile(e, i, _shop.can_buy_ball(i), reason, BallIcon.color_of(e.ball.id).lightened(0.3))
 		tile.custom_minimum_size = BALL_TILE_SIZE
-		var icon: BallIcon = BallIcon.make(e.ball.id, 22)
-		icon.position = Vector2(10, 9)
-		icon.size = Vector2(22, 22)
-		icon.modulate = Color(1, 1, 1, 0.45) if tile.disabled else Color.WHITE
-		tile.add_child(icon)
 		_balls_box.add_child(tile)
 	var price: String = RunHud.format_money(_shop.removal_price())
 	_remove_button.text = TEXT_REMOVE % price
@@ -242,24 +241,53 @@ func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent:
 	for side: String in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 8 if side == "left" or side == "right" else 5)
 	b.add_child(margin)
-	var box := VBoxContainer.new()
+	var box: BoxContainer = VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", 0)
 	margin.add_child(box)
+	var is_ball: bool = e.kind == ShopEntry.KIND_BALL
+	var head := HBoxContainer.new()  # story 020b: art + name
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_theme_constant_override("separation", 8)
+	box.add_child(head)
+	var art: ItemIcon = ItemIcon.make(_entry_id(e), BALL_ICON_SIDE if is_ball else TILE_ICON_SIDE)
+	art.name = "Art"
+	head.add_child(art)
 	var n: Label = CardView.make_label(18)
 	n.text = e.get_name()
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	n.add_theme_color_override("font_color", accent.lerp(Color.WHITE, 0.3))
-	box.add_child(n)
+	head.add_child(n)
+	if is_ball:  # wide ball tile: description next to the name
+		box.remove_child(head)
+		var wide := HBoxContainer.new()
+		wide.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		wide.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		wide.add_theme_constant_override("separation", 12)
+		box.add_child(wide)
+		n.custom_minimum_size = Vector2(130, 0)
+		n.size_flags_horizontal = Control.SIZE_FILL
+		wide.add_child(head)
+		box = wide
 	var d: Label = CardView.make_label(13)  # story 020: 3-line descriptions fit the 118 px tile
 	d.text = e.get_description()
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	d.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	box.add_child(d)
 	var price: Label = _price_label(e, can_buy)
 	if not reason.is_empty() and not e.sold:
 		price.text = "%s · %s" % [price.text, TEXT_OWNED.trim_suffix(".") if reason == TEXT_OWNED else ("Sac plein" if e.kind == ShopEntry.KIND_BALL else "Pleine")]
-	box.add_child(price)
+	if is_ball:
+		d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		box.add_child(d)
+		price.custom_minimum_size = Vector2(90, 0)
+		box.add_child(price)
+	else:
+		box.add_child(d)
+		box.add_child(price)
 	margin.modulate = Color(1, 1, 1, 0.45) if b.disabled else Color.WHITE
 	if e.kind == ShopEntry.KIND_ITEM:
 		b.pressed.connect(buy_item.bind(index))
@@ -268,6 +296,18 @@ func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent:
 	else:
 		b.pressed.connect(buy_potion.bind(index))
 	return b
+
+
+## Story 020b: data id of a shop entry (its art file name).
+func _entry_id(e: ShopEntry) -> String:
+	match e.kind:
+		ShopEntry.KIND_ITEM:
+			return e.item.id
+		ShopEntry.KIND_POTION:
+			return e.potion.id
+		ShopEntry.KIND_BALL:
+			return e.ball.id
+	return ""
 
 
 func _style_button(b: Button, border: Color, sold: bool) -> void:

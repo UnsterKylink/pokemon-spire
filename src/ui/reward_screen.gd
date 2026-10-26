@@ -25,6 +25,8 @@ const TEXT_LOOT: String = "Butin :"
 const TEXT_CAPTURED: String = "Capturé : %s rejoint l'équipe — +%d carte%s"
 const TEXT_CAPTURED_AGAIN: String = "Capturé : %s (déjà dans l'équipe) — +%d carte%s"
 const TEXT_BALL_LOOT: String = "Ball : %s"
+## Story 020b: side of the item / potion / ball art in a loot chip.
+const LOOT_ART_SIDE: float = 34.0
 const COLOR_CAPTURED: Color = Color(0.45, 1.0, 0.55)
 const CAPTURE_SPRITE_SIDE: float = 40.0
 ## Story 018: special win titles / legendary card column / rival heal chip.
@@ -89,23 +91,31 @@ func set_loot(loot: Dictionary) -> void:
 			RunHud.COLOR_MONEY))
 	var item: ItemData = loot.get("item", null)
 	if item != null:
-		_loot_box.add_child(_loot_chip("Objet : " + item.display_name, item.description, CardView.rarity_color(item.rarity)))
+		_loot_box.add_child(_with_art(_loot_chip("Objet : " + item.display_name, item.description,
+				CardView.rarity_color(item.rarity)), item.id))
 	var potion: PotionData = loot.get("potion", null)
 	if potion != null:
-		_loot_box.add_child(_loot_chip("Potion : " + potion.display_name, potion.description, COLOR_POTION))
+		_loot_box.add_child(_with_art(_loot_chip("Potion : " + potion.display_name, potion.description, COLOR_POTION),
+				potion.id))
 	var ball: BallData = loot.get("ball", null)
 	if ball != null:
-		var chip: PanelContainer = _loot_chip(TEXT_BALL_LOOT % ball.display_name, ball.description, BallIcon.color_of(ball.id).lightened(0.3))
-		var row: HBoxContainer = HBoxContainer.new()
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_theme_constant_override("separation", 6)
-		var title: Label = chip.get_child(0).get_child(0) as Label
-		chip.get_child(0).remove_child(title)
-		row.add_child(BallIcon.make(ball.id, 18))
-		row.add_child(title)
-		chip.get_child(0).add_child(row)
-		chip.get_child(0).move_child(row, 0)
-		_loot_box.add_child(chip)
+		_loot_box.add_child(_with_art(_loot_chip(TEXT_BALL_LOOT % ball.display_name, ball.description,
+				BallIcon.color_of(ball.id).lightened(0.3)), ball.id))
+
+
+## Story 020b: puts the official art of `id` before the chip's title (row = [art, title]; get_loot_texts reads
+## the title at index 1).
+func _with_art(chip: PanelContainer, id: String) -> PanelContainer:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 8)
+	var title: Label = chip.get_child(0).get_child(0) as Label
+	chip.get_child(0).remove_child(title)
+	row.add_child(ItemIcon.make(id, LOOT_ART_SIDE))
+	row.add_child(title)
+	chip.get_child(0).add_child(row)
+	chip.get_child(0).move_child(row, 0)
+	return chip
 
 
 ## Story 018: what a special win gave (Main.get_last_special_reward()): rival -> title "Tu as battu {rival} !" and a
@@ -195,7 +205,7 @@ func get_loot_texts() -> Array[String]:
 	for child: Node in _loot_box.get_children():
 		if child is PanelContainer:
 			var first: Node = (child as PanelContainer).get_child(0).get_child(0)
-			if first is HBoxContainer:  # story 017 ball chip: icon + title
+			if first is HBoxContainer:  # story 017 / 020b chip with art: icon + title
 				first = first.get_child(1)
 			texts.append((first as Label).text)
 	return texts
