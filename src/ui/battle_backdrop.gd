@@ -5,9 +5,14 @@ extends Control
 ## "platform" under each fighter, a 25 % dark band under the hand and up to 30 slow ambient particles.
 ## Every colour / shape count comes from assets/data/backdrops.json (one entry per backdrop id; unknown ids
 ## fall back to "route"). Display only: owns no game state. BattleScreen places the platforms (set_platforms).
+## Story 020b: painted look. A shader layer (src/ui/shaders/backdrop_atmosphere.gdshader, per-backdrop "atmosphere"
+## values) adds horizon haze, ground mist, soft clouds, horizon glow, light shafts and film grain; every silhouette fades
+## into the haze at its base (atmospheric perspective); platforms get a radial shading. If a painted image exists at
+## painted_path (assets/art/backdrops/<id>.png) it replaces the code backdrop (haze softened, platforms lighter).
 
 const DATA_PATH: String = "res://assets/data/backdrops.json"
 const ELLIPSE_POINTS: int = 40
+const ATMOSPHERE_SHADER: String = "res://src/ui/shaders/backdrop_atmosphere.gdshader"
 
 ## backdrops.json root cache (pure display data), filled on first use.
 static var _root: Dictionary = {}
@@ -22,9 +27,30 @@ var _particle_def: Dictionary = {}
 var _motion: bool = true
 var _particle_layer: Control
 var _layer_has_accent: bool = false
+var _atmosphere: ColorRect
+var _atmosphere_mat: ShaderMaterial
+var _painted: Texture2D
+## Fog colour silhouettes fade into at their base, and how much (0 = none) for the layer being drawn.
+var _haze: Color = Color.WHITE
+var _haze_amount: float = 0.0
+var _haze_top: float = 0.0
+var _haze_bottom: float = 1.0
 
 
 func _ready() -> void:
+	_atmosphere = ColorRect.new()
+	_atmosphere.name = "Atmosphere"
+	_atmosphere.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_atmosphere.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_atmosphere.color = Color.WHITE
+	var shader: Shader = load(ATMOSPHERE_SHADER) as Shader
+	if shader != null:
+		_atmosphere_mat = ShaderMaterial.new()
+		_atmosphere_mat.shader = shader
+		_atmosphere.material = _atmosphere_mat
+	else:
+		_atmosphere.visible = false
+	add_child(_atmosphere)
 	_particle_layer = Control.new()
 	_particle_layer.name = "Particles"
 	_particle_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -57,7 +83,12 @@ func set_backdrop(id: String) -> void:
 	_id = resolve_id(id)
 	_def = _backdrops().get(_id, {})
 	_particle_def = _def.get("particles", {}) if _def.get("particles", null) is Dictionary else {}
+	_painted = null
+	var painted_path: String = String(_data().get("painted_path", ""))
+	if painted_path.contains("%s") and ResourceLoader.exists(painted_path % _id):
+		_painted = load(painted_path % _id) as Texture2D
 	_seed_particles()
+	_update_atmosphere()
 	queue_redraw()
 	if _particle_layer != null:
 		_particle_layer.queue_redraw()
@@ -81,6 +112,7 @@ func set_hand_top(y: float) -> void:
 	if is_equal_approx(y, _hand_top):
 		return
 	_hand_top = y
+	_update_atmosphere()
 	queue_redraw()
 
 
@@ -88,6 +120,12 @@ func set_hand_top(y: float) -> void:
 func set_motion_enabled(enabled: bool) -> void:
 	_motion = enabled
 	set_process(enabled and not _particles.is_empty())
+	_update_atmosphere()
+
+
+## Story 020b: true when the painted image assets/art/backdrops/<id>.png is shown instead of the code backdrop.
+func has_painted_image() -> bool:
+	return _painted != null
 
 
 func _process(delta: float) -> void:
@@ -106,7 +144,31 @@ func _process(delta: float) -> void:
 
 func _on_resized() -> void:
 	_seed_particles()
+	_update_atmosphere()
 	queue_redraw()
+
+
+## Pushes the backdrop's "atmosphere" values (backdrops.json) to the shader layer.
+func _update_atmosphere() -> void:
+	if _atmosphere_mat == null or size.y <= 0.0:
+		return
+	var a: Dictionary = _def.get("atmosphere", {}) if _def.get("atmosphere", null) is Dictionary else {}
+	var sky: Array[Color] = _sky_colors()
+	var fog_scale: float = _num("painted_fog_scale", 0.35) if _painted != null else 1.0
+	var m: ShaderMaterial = _atmosphere_mat
+	m.set_shader_parameter("screen_size", size)
+	m.set_shader_parameter("horizon", _horizon_y() / size.y)
+	m.set_shader_parameter("hand_top", _shade_top() / size.y)
+	m.set_shader_parameter("fog_color", _color(a.get("fog", null), sky[1].lightened(0.1)))
+	m.set_shader_parameter("fog_density", float(a.get("fog_density", 0.35)) * fog_scale)
+	m.set_shader_parameter("glow_color", _color(a.get("glow_color", _def.get("glow", null)), sky[1]))
+	m.set_shader_parameter("glow", float(a.get("glow", 0.25)) * fog_scale)
+	m.set_shader_parameter("rays", float(a.get("rays", 0.2)) * fog_scale)
+	m.set_shader_parameter("sun_x", float(a.get("sun_x", 0.75)))
+	m.set_shader_parameter("clouds", float(a.get("clouds", 0.25)) * (0.0 if _painted != null else 1.0))
+	m.set_shader_parameter("grain", _num("atmosphere_grain", 0.035))
+	m.set_shader_parameter("mottle", _num("atmosphere_mottle", 0.14) * (0.0 if _painted != null else 1.0))
+	m.set_shader_parameter("speed", 1.0 if _motion else 0.0)
 
 
 # --- Data --------------------------------------------------------------------------------------------
@@ -168,22 +230,48 @@ func _draw() -> void:
 	var hy: float = _horizon_y()
 	var sky: Array[Color] = _sky_colors()
 	var ground: Array[Color] = _ground_colors()
+	if _painted != null:
+		_draw_painted(ground[0])
+		return
 	_gradient_rect(Rect2(0, 0, w, hy), sky[0], sky[1])
 	if _def.has("glow"):
 		var glow: Color = _color(_def["glow"], Color.WHITE)
 		_gradient_rect(Rect2(0, hy - 120.0, w, 120.0), Color(glow, 0.0), Color(glow, 0.45))
 	var layers: Array = _def.get("layers", [])
+	var atmo: Dictionary = _def.get("atmosphere", {}) if _def.get("atmosphere", null) is Dictionary else {}
+	_haze = _color(atmo.get("fog", null), sky[1])
 	for i: int in layers.size():
 		if layers[i] is Dictionary:
+			var far: float = 1.0 - float(i) / maxf(1.0, layers.size() - 1.0)
+			_haze_amount = lerpf(_num("haze_near", 0.25), _num("haze_far", 0.55), far)
+			_haze_top = hy * float((layers[i] as Dictionary).get("base", 1.0)) - float((layers[i] as Dictionary).get("height", 100))
+			_haze_bottom = hy * float((layers[i] as Dictionary).get("base", 1.0)) + 4.0
 			_draw_layer(layers[i], i, sky[1], ground[0], hy)
+	_haze_amount = 0.0
 	_gradient_rect(Rect2(0, hy, w, h - hy), ground[0], ground[1])
 	draw_line(Vector2(0, hy), Vector2(w, hy), ground[0].darkened(0.25), 2.0)
 	_draw_ground_detail(String(_def.get("ground_detail", "none")), ground[0], hy)
 	_draw_platforms(ground[0])
+	_draw_hand_band()
+
+
+## Painted image (cover-fit, centred), lighter platforms, the hand band.
+func _draw_painted(ground_top: Color) -> void:
+	var ts: Vector2 = _painted.get_size()
+	if ts.x <= 0.0 or ts.y <= 0.0:
+		return
+	var k: float = maxf(size.x / ts.x, size.y / ts.y)
+	var ds: Vector2 = ts * k
+	draw_texture_rect(_painted, Rect2((size - ds) * 0.5, ds), false)
+	_draw_platforms(ground_top, _num("painted_platform_alpha", 0.55))
+	_draw_hand_band()
+
+
+func _draw_hand_band() -> void:
 	if _hand_top > 0.0:
 		var shade: float = _num("hand_shade", 0.25)
-		_gradient_rect(Rect2(0, _hand_top - 24.0, w, 24.0), Color(0, 0, 0, 0), Color(0, 0, 0, shade))
-		draw_rect(Rect2(0, _hand_top, w, h - _hand_top), Color(0, 0, 0, shade))
+		_gradient_rect(Rect2(0, _hand_top - 24.0, size.x, 24.0), Color(0, 0, 0, 0), Color(0, 0, 0, shade))
+		draw_rect(Rect2(0, _hand_top, size.x, size.y - _hand_top), Color(0, 0, 0, shade))
 
 
 func _gradient_rect(r: Rect2, top: Color, bottom: Color) -> void:
@@ -199,22 +287,47 @@ func _ellipse(center: Vector2, rx: float, ry: float, from_angle: float = 0.0, to
 	return pts
 
 
+## Filled polygon; while a silhouette layer is drawn (_haze_amount > 0) each vertex fades toward the fog colour the
+## lower it sits (atmospheric perspective: bases melt into the horizon haze).
 func _fill(pts: PackedVector2Array, c: Color) -> void:
-	if pts.size() >= 3:
+	if pts.size() < 3:
+		return
+	if _haze_amount <= 0.0:
 		draw_colored_polygon(pts, c)
+		return
+	var cols := PackedColorArray()
+	cols.resize(pts.size())
+	var span: float = maxf(_haze_bottom - _haze_top, 1.0)
+	for i: int in pts.size():
+		var t: float = clampf((pts[i].y - _haze_top) / span, 0.0, 1.0)
+		cols[i] = c.lerp(Color(_haze, c.a), _haze_amount * t * t)
+	draw_polygon(pts, cols)
 
 
-func _draw_platforms(ground_top: Color) -> void:
+## Ellipse shaded from a light centre to a darker rim (triangle fan with vertex colours).
+func _fill_radial(center: Vector2, rx: float, ry: float, inner: Color, outer: Color) -> void:
+	var pts := PackedVector2Array([center])
+	var cols := PackedColorArray([inner])
+	for i: int in ELLIPSE_POINTS + 1:
+		var a: float = TAU * i / ELLIPSE_POINTS
+		pts.append(center + Vector2(cos(a) * rx, sin(a) * ry))
+		cols.append(outer)
+	for i: int in ELLIPSE_POINTS:
+		draw_polygon(PackedVector2Array([pts[0], pts[i + 1], pts[i + 2]]), PackedColorArray([cols[0], cols[i + 1], cols[i + 2]]))
+
+
+func _draw_platforms(ground_top: Color, alpha: float = 1.0) -> void:
 	var fill: Color = ground_top.lightened(_num("platform_lighten", 0.18))
 	var rim: Color = ground_top.darkened(_num("platform_rim_darken", 0.4))
 	for r: Rect2 in _platforms:
 		var c := Vector2(r.position.x + r.size.x * 0.5, r.position.y)
 		var rx: float = r.size.x * 0.5
 		var ry: float = maxf(rx * 0.22, 10.0)
-		_fill(_ellipse(c + Vector2(0, 5), rx + 4.0, ry + 3.0), Color(0, 0, 0, 0.18))
-		_fill(_ellipse(c, rx, ry), rim)
-		_fill(_ellipse(c - Vector2(0, 3), rx - 6.0, ry - 4.0), fill)
-		_fill(_ellipse(c - Vector2(rx * 0.15, ry * 0.35), rx * 0.45, ry * 0.25), Color(1, 1, 1, 0.16))
+		_fill_radial(c + Vector2(0, 6), rx + 14.0, ry + 7.0, Color(0, 0, 0, 0.3 * alpha), Color(0, 0, 0, 0.0))
+		_fill(_ellipse(c, rx, ry), Color(rim, alpha))
+		_fill_radial(c - Vector2(0, 3), rx - 5.0, ry - 4.0, Color(fill.lightened(0.12), alpha), Color(fill.darkened(0.12), alpha))
+		_fill(_ellipse(c - Vector2(rx * 0.15, ry * 0.35), rx * 0.45, ry * 0.25), Color(1, 1, 1, 0.14 * alpha))
+		draw_arc(c - Vector2(0, 3), rx - 5.0, PI * 1.05, PI * 1.95, 24, Color(1, 1, 1, 0.12 * alpha), 1.5, true)
 
 
 func _draw_ground_detail(kind: String, top: Color, hy: float) -> void:

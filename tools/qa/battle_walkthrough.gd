@@ -1501,7 +1501,46 @@ func _backdrop_shots() -> void:
 	await _shot("1x-combat-carte-selectionnee")
 
 
+## Story 020b: animated Pokémon (front sheets for enemies, back sheet for the player) on the shader backdrops, a big
+## player (Dracaufeu) against Éthernatos and a solo fight; files 1x-*.png (filter `story-020b`). The anim frame is printed.
+func _premium_battle_shots() -> void:
+	_main.start_new_run(STYLE_SEED, "salameche")
+	_main.start_encounter("trio_vol")
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	for id: String in ["route", "fire", "water", "ghost", "league", "ethernatos", "grass", "psychic", "dark"]:
+		bs.set_backdrop(id)
+		await _shot("1x-combat-" + id)
+		var sp: AnimatedPokemon = bs.find_child("PlayerSprite", true, false) as AnimatedPokemon
+		print("premium backdrop=%s player_animated=%s frame=%d" % [bs.get_backdrop_id(), sp.is_animated() if sp != null else false,
+				sp.get_frame() if sp != null else -1])
+	print("premium evolution stage=%d" % _main.qa_set_evolution_stage(3))
+	_main.qa_start_boss()  # zone Champion (big sprites) against Dracaufeu (big back sheet)
+	bs = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	bs.set_backdrop("ethernatos")
+	await _shot("1x-grand-ethernatos-dracaufeu")
+	for zone: int in 8:  # the gym whose trio has the tallest sprite (Roucarnage, Onix...)
+		if _main.qa_set_zone(zone) and String(_main.get_zone().get("type_id", "")) in ["flying", "rock"]:
+			_main.qa_start_gym()
+			bs = _main.get_battle_screen()
+			bs.qa_force_hand(STYLE_HAND)
+			await _shot("1x-grand-champion-" + bs.get_backdrop_id())
+			break
+	_main.start_encounter("solo_pikachu")
+	bs = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	bs.set_backdrop("electric")
+	await _shot("1x-solo-electric")
+	bs.set_backdrop("dragon")
+	await _shot("1x-solo-dragon")
+
+
 func _run() -> void:
+	if _filter == "story-020b":
+		await _premium_battle_shots()
+		quit(0)
+		return
 	if _filter == "story-020":
 		await _style_shots()
 		await _backdrop_shots()

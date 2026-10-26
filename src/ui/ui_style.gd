@@ -3,6 +3,8 @@ extends RefCounted
 ## Shared look of the game (« Cartoon vectoriel lumineux »): palette, type / rarity colours, StyleBoxFlat
 ## factories and a Theme. Values mirror design/art-bible.md; type colours come from assets/data/types.json.
 ## Display only: owns no game state. Implements: story-020 (style graphique).
+## Story 020b (refonte premium): embedded fonts (Kreon titles / Nunito text, OFL, assets/fonts/), generated material
+## textures (assets/art/ui/) and the « sheen » finish (grain, light gradient, inner highlight) on panels and buttons.
 
 # --- Palette (art bible §2) -------------------------------------------------------------------------
 const BG_DEEP: Color = Color("#161B33")
@@ -48,6 +50,29 @@ const DEFAULT_FONT_SIZE: int = 18
 
 const TYPES_PATH: String = "res://assets/data/types.json"
 
+# --- Story 020b: fonts, textures, finish (art bible §3, §4, §8) ------------------------------------------
+## Titles, card names, numbers: Kreon (slab serif, the Slay the Spire family); text: Nunito (rounded, very readable).
+const FONT_TITLE_PATH: String = "res://assets/fonts/kreon/Kreon-Variable.ttf"
+const FONT_BODY_PATH: String = "res://assets/fonts/nunito/Nunito-Variable.ttf"
+const WEIGHT_TITLE: int = 700
+const WEIGHT_BODY: int = 600
+const WEIGHT_BOLD: int = 800
+## Roles drawn with the title font (the others use the body font).
+const TITLE_ROLES: Array[String] = ["title", "heading", "number"]
+## Labels at or above this size (set by screens) get the title font from the screen polisher.
+const TITLE_FONT_MIN_SIZE: int = 24
+const UI_TEXTURE_DIR: String = "res://assets/art/ui/"
+const SHEEN_SHADER_PATH: String = "res://src/ui/shaders/ui_sheen.gdshader"
+## Sheen strengths: [grain, mottling, top_light, bottom_shade, highlight_line] for panels and buttons.
+const SHEEN_PANEL: Array[float] = [0.06, 0.07, 0.07, 0.14, 0.18]
+const SHEEN_BUTTON: Array[float] = [0.05, 0.03, 0.16, 0.2, 0.42]
+## Below this fill alpha a box is a see-through overlay: no sheen.
+const SHEEN_MIN_ALPHA: float = 0.5
+
+static var _fonts: Dictionary = {}
+static var _textures: Dictionary = {}
+static var _sheen_materials: Dictionary = {}
+
 ## types.json colour cache (type id -> Color), filled on first use. Pure display cache.
 static var _type_colors: Dictionary = {}
 static var _types_loaded: bool = false
@@ -62,6 +87,44 @@ static func type_color(type_id: String, chart: TypeChart = null) -> Color:
 		return chart.get_type_color(type_id) if chart.is_known_type(type_id) else SKILL
 	_load_type_colors()
 	return _type_colors.get(type_id, SKILL)
+
+
+## Story 020b: title font (Kreon Bold) — screen titles, headings, numbers, card names. Never null.
+static func font_title() -> Font:
+	return _font("title", FONT_TITLE_PATH, WEIGHT_TITLE)
+
+
+## Story 020b: body font (Nunito SemiBold) — text, captions, card descriptions. Never null.
+static func font_body() -> Font:
+	return _font("body", FONT_BODY_PATH, WEIGHT_BODY)
+
+
+## Story 020b: bold body font (Nunito ExtraBold) — buttons, pills, small labels. Never null.
+static func font_bold() -> Font:
+	return _font("bold", FONT_BODY_PATH, WEIGHT_BOLD)
+
+
+## Generated UI / card texture `assets/art/ui/<tex_name>.png` (null when missing). Cached.
+static func ui_texture(tex_name: String) -> Texture2D:
+	if not _textures.has(tex_name):
+		var path: String = UI_TEXTURE_DIR + tex_name + ".png"
+		_textures[tex_name] = load(path) as Texture2D if ResourceLoader.exists(path) else null
+	return _textures[tex_name]
+
+
+static func _font(key: String, path: String, weight: int) -> Font:
+	if _fonts.has(key):
+		return _fonts[key]
+	var f: Font = ThemeDB.fallback_font
+	if ResourceLoader.exists(path):
+		var base: FontFile = load(path) as FontFile
+		if base != null:
+			var v := FontVariation.new()
+			v.base_font = base
+			v.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): weight}
+			f = v
+	_fonts[key] = f
+	return f
 
 
 ## Rarity colour (art bible §2); `legendary` overrides the rarity with the legendary gold.
@@ -171,6 +234,7 @@ static func apply_button(b: Button, base: Color = ACCENT_BLUE) -> void:
 static func apply_label(l: Label, role: String) -> void:
 	var spec: Array = LABEL_ROLES.get(role, LABEL_ROLES["body"])
 	l.add_theme_font_size_override("font_size", int(spec[0]))
+	l.add_theme_font_override("font", font_title() if TITLE_ROLES.has(role) else font_body())
 	l.add_theme_constant_override("outline_size", int(spec[1]))
 	l.add_theme_color_override("font_outline_color", OUTLINE)
 	l.add_theme_color_override("font_color", spec[2])
@@ -181,6 +245,9 @@ static func apply_label(l: Label, role: String) -> void:
 static func make_theme() -> Theme:
 	var t := Theme.new()
 	t.default_font_size = DEFAULT_FONT_SIZE
+	t.default_font = font_body()
+	t.set_font("font", "Button", font_bold())
+	t.set_font("font", "TooltipLabel", font_body())
 	for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
 		t.set_stylebox(state, "Button", button_box(state))
 	t.set_color("font_color", "Button", TEXT)
@@ -235,6 +302,9 @@ static func style_screen(root: Control) -> void:
 static func polish_node(n: Node) -> void:
 	if n is Label:
 		var l: Label = n
+		if l.has_theme_font_size_override("font_size") and not l.has_theme_font_override("font") \
+				and l.get_theme_font_size("font_size") >= TITLE_FONT_MIN_SIZE:
+			l.add_theme_font_override("font", font_title())  # story 020b
 		if l.has_theme_font_size_override("font_size") and not l.has_theme_constant_override("outline_size"):
 			var fs: int = l.get_theme_font_size("font_size")
 			if fs >= 24:
@@ -244,6 +314,7 @@ static func polish_node(n: Node) -> void:
 		var c: Control = n
 		if c.has_theme_stylebox_override("panel") and c.get_theme_stylebox("panel") is StyleBoxFlat:
 			_skin_box(c.get_theme_stylebox("panel") as StyleBoxFlat, true)
+		add_sheen(c, true)
 	elif n is Button:
 		var b: Button = n
 		for child: Node in b.get_children():
@@ -252,6 +323,53 @@ static func polish_node(n: Node) -> void:
 		for state: String in ["normal", "hover", "pressed", "disabled"]:
 			if b.has_theme_stylebox_override(state) and b.get_theme_stylebox(state) is StyleBoxFlat:
 				_skin_box(b.get_theme_stylebox(state) as StyleBoxFlat, false)
+		add_sheen(b, false)
+
+
+## Story 020b: adds the material finish (grain, soft light gradient, inner top highlight; ui_sheen.gdshader) over the
+## StyleBoxFlat of panel / button `c`, masked to its rounded rect. Skipped for see-through, borderless-fill or
+## card boxes; idempotent. The finish is an internal Node2D child: not sorted by containers, not in get_children().
+static func add_sheen(c: Control, is_panel: bool) -> void:
+	if c.has_meta("ui_sheen"):
+		return
+	var sb: StyleBox = c.get_theme_stylebox("panel" if is_panel else "normal")
+	if not (sb is StyleBoxFlat):
+		return
+	var flat: StyleBoxFlat = sb
+	if not flat.draw_center or flat.bg_color.a < SHEEN_MIN_ALPHA:
+		return
+	var mat: ShaderMaterial = sheen_material(flat.corner_radius_top_left, flat.border_width_top,
+			maxi(0, flat.border_width_bottom - flat.border_width_top), is_panel)
+	if mat == null:
+		return
+	c.set_meta("ui_sheen", true)
+	var sheen := _Sheen.new()
+	sheen.name = "UiSheen"
+	sheen.material = mat
+	c.add_child(sheen, false, Node.INTERNAL_MODE_FRONT)
+
+
+## Shared sheen material for a box shape (radius / border / bottom relief, panel or button strengths). Cached.
+static func sheen_material(radius: int, border: int, bottom_inset: int, is_panel: bool) -> ShaderMaterial:
+	var key: String = "%d_%d_%d_%s" % [radius, border, bottom_inset, is_panel]
+	if _sheen_materials.has(key):
+		return _sheen_materials[key]
+	var mat: ShaderMaterial = null
+	if ResourceLoader.exists(SHEEN_SHADER_PATH):
+		mat = ShaderMaterial.new()
+		mat.shader = load(SHEEN_SHADER_PATH) as Shader
+		var k: Array[float] = SHEEN_PANEL if is_panel else SHEEN_BUTTON
+		mat.set_shader_parameter("noise_tex", ui_texture("ui_noise"))
+		mat.set_shader_parameter("radius", float(radius))
+		mat.set_shader_parameter("border", float(border))
+		mat.set_shader_parameter("bottom_inset", float(bottom_inset))
+		mat.set_shader_parameter("grain", k[0])
+		mat.set_shader_parameter("mottling", k[1])
+		mat.set_shader_parameter("top_light", k[2])
+		mat.set_shader_parameter("bottom_shade", k[3])
+		mat.set_shader_parameter("highlight_line", k[4])
+	_sheen_materials[key] = mat
+	return mat
 
 
 static func _skin_box(sb: StyleBoxFlat, is_panel: bool) -> void:
@@ -305,3 +423,18 @@ class _ScreenPolisher extends Node:
 		for n: Node in nodes:
 			if is_instance_valid(n):
 				UiStyle.polish_node(n)
+
+
+## Story 020b: the finish drawn over a panel / button box (see add_sheen). Covers the parent's rect, redraws on resize.
+class _Sheen extends Node2D:
+	func _ready() -> void:
+		var p: Control = get_parent() as Control
+		if p != null:
+			p.resized.connect(queue_redraw)
+
+	func _draw() -> void:
+		var p: Control = get_parent() as Control
+		var tex: Texture2D = UiStyle.ui_texture("ui_noise")
+		if p == null or tex == null or p.size.x <= 0.0 or p.size.y <= 0.0:
+			return
+		draw_texture_rect(tex, Rect2(Vector2.ZERO, p.size), false)

@@ -5,6 +5,8 @@ extends PanelContainer
 ## and the potion belt (max_potions slots). Owned by Main and shown above every run screen (map, battle,
 ## reward, event, Centre, Mart, act end). Reads RunState / Battle only; a click on a usable potion emits
 ## potion_pressed and Main asks the battle to drink it. Implements: story-006-objets-et-services (criteria 2, 6).
+## Story 020b: held items are shown as their official illustration (ItemIcon, rarity ring, tooltip = name +
+## description), potion slots as round flasks with the potion art, balls as one icon per kind + "×n".
 
 ## Emitted when a usable potion slot is clicked (index into the shown potion list).
 signal potion_pressed(index: int)
@@ -23,7 +25,12 @@ const COLOR_CHIP_BG: Color = UiStyle.BG_PANEL_LIGHT
 const COLOR_POTION: Color = UiStyle.BLOCK_BLUE
 const COLOR_EMPTY: Color = Color(0.45, 0.46, 0.52)
 const COLOR_FLASH: Color = Color(1.0, 0.85, 0.3)
-const POTION_SLOT_SIZE: Vector2 = Vector2(112, 32)
+const POTION_SLOT_SIZE: Vector2 = Vector2(38, 34)
+## Story 020b: side of a held-item icon slot / of a ball icon.
+const ITEM_SLOT_SIDE: float = 34.0
+const ITEM_ICON_SIDE: float = 28.0
+const POTION_ICON_SIDE: float = 26.0
+const TEXT_BALL_COUNT: String = "×%d"
 ## Story 012: side of a badge slot in the bar.
 const BADGE_SLOT_SIDE: float = 22.0
 const FLASH_DURATION: float = 0.7
@@ -50,7 +57,7 @@ const TEXT_BALLS_TIP: String = "Poké Balls : %d/%d"
 const TEXT_BALLS_LINE: String = "%s ×%d"
 const TEXT_BALLS_NONE: String = "Aucune Ball. Achète-en au Poké Mart ou gagne-en en combat."
 const TEXT_BALLS_HINT: String = "En combat sauvage : bouton « Capturer »."
-const BALL_ICON_SIDE: float = 14.0
+const BALL_ICON_SIDE: float = 24.0
 
 var _money: Label
 var _items_box: HBoxContainer
@@ -157,7 +164,7 @@ func _init() -> void:
 	_balls_box.add_child(_balls_value)
 	_balls_icons = HBoxContainer.new()
 	_balls_icons.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_balls_icons.add_theme_constant_override("separation", 1)
+	_balls_icons.add_theme_constant_override("separation", 2)
 	_balls_box.add_child(_balls_icons)
 	row.add_child(_caption(TEXT_POTIONS))
 	_potions_box = HBoxContainer.new()
@@ -207,8 +214,7 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 		none.add_theme_color_override("font_color", COLOR_EMPTY)
 		_items_box.add_child(none)
 	for item: ItemData in run.items:
-		var chip: PanelContainer = _make_chip(item.display_name, "%s\n%s" % [item.display_name, item.description],
-				CardView.rarity_color(item.rarity))
+		var chip: PanelContainer = _make_item_slot(item)
 		_chips[item.id] = chip
 		_items_box.add_child(chip)
 	for child: Node in _potions_box.get_children():
@@ -235,13 +241,22 @@ func _refresh_balls(run: RunState) -> void:
 	var total: int = run.ball_total()
 	_balls_value.text = str(total)
 	_balls_value.add_theme_color_override("font_color", COLOR_POTION if total > 0 else COLOR_EMPTY)
+	_balls_value.visible = total == 0  # story 020b: with balls, each kind shows its icon + "×n" instead
 	var lines: PackedStringArray = PackedStringArray([TEXT_BALLS_TIP % [total, run.max_balls()]])
 	for bid: String in run.balls.keys():
 		var n: int = run.ball_count(bid)
 		var def: BallData = ball_book.get(bid, null)
 		lines.append(TEXT_BALLS_LINE % [def.display_name if def != null else bid, n])
-		for k: int in n:
-			_balls_icons.add_child(BallIcon.make(bid, BALL_ICON_SIDE))
+		if n <= 0:
+			continue
+		_balls_icons.add_child(BallIcon.make(bid, BALL_ICON_SIDE))
+		var count: Label = CardView.make_label(15)
+		count.text = TEXT_BALL_COUNT % n
+		count.add_theme_color_override("font_color", UiStyle.TEXT)
+		count.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
+		count.add_theme_constant_override("outline_size", 4)
+		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_balls_icons.add_child(count)
 	lines.append(TEXT_BALLS_HINT if total > 0 else TEXT_BALLS_NONE)
 	_balls_box.tooltip_text = "\n".join(lines)
 
@@ -300,7 +315,7 @@ func get_money_text() -> String:
 func get_item_names() -> Array[String]:
 	var names: Array[String] = []
 	for id: String in _chips:
-		names.append(((_chips[id] as PanelContainer).get_child(0) as Label).text)
+		names.append(_chip_text(_chips[id]))
 	return names
 
 
@@ -318,6 +333,13 @@ func get_badge_slots() -> Array[Dictionary]:
 		var e: BadgeEmblem = child as BadgeEmblem
 		slots.append({"earned": e.is_earned(), "tooltip": e.tooltip_text})
 	return slots
+
+
+## Story 020b: name carried by an item slot (meta "label"; the "+N" chip keeps its Label).
+func _chip_text(chip: PanelContainer) -> String:
+	if chip.has_meta("label"):
+		return String(chip.get_meta("label"))
+	return (chip.get_child(0) as Label).text
 
 
 ## Text of each potion slot ("— vide —" for empty ones), for the QA harness.
@@ -371,7 +393,7 @@ func get_visible_item_texts() -> Array[String]:
 	var texts: Array[String] = []
 	for child: Node in _items_box.get_children():
 		if child is PanelContainer and (child as Control).visible:
-			texts.append(((child as PanelContainer).get_child(0) as Label).text)
+			texts.append(_chip_text(child as PanelContainer))
 	return texts
 
 
@@ -404,26 +426,50 @@ func _make_chip(text: String, tooltip: String, border: Color) -> PanelContainer:
 	return chip
 
 
+## Story 020b: held item slot: official art on a small disc ringed with the rarity colour; tooltip = name + text.
+func _make_item_slot(item: ItemData) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.name = "Item_" + item.id
+	chip.mouse_filter = Control.MOUSE_FILTER_STOP
+	chip.tooltip_text = "%s\n%s" % [item.display_name, item.description]
+	chip.set_meta("label", item.display_name)
+	chip.custom_minimum_size = Vector2(ITEM_SLOT_SIDE, ITEM_SLOT_SIDE)
+	var rarity: Color = CardView.rarity_color(item.rarity)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = UiStyle.BG_DEEP.lerp(rarity, 0.18)
+	sb.border_color = rarity.lerp(UiStyle.OUTLINE, 0.25)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(int(ITEM_SLOT_SIDE * 0.5))
+	sb.anti_aliasing = true
+	sb.set_content_margin_all(2)
+	chip.add_theme_stylebox_override("panel", sb)
+	chip.add_child(ItemIcon.make(item.id, ITEM_ICON_SIDE, true, String(item.get("icon")) if "icon" in item else ""))
+	return chip
+
+
 func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -> Button:
 	var b := Button.new()
 	b.name = "Potion%d" % index
 	b.custom_minimum_size = POTION_SLOT_SIZE
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 15)
+	# Story 020b: round flask slot showing the potion art; the name stays as (invisible) button text for the harness.
+	b.add_theme_font_size_override("font_size", 1)
 	b.clip_text = true
+	for key: String in ["font_color", "font_disabled_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(key, Color(0, 0, 0, 0))
+	b.add_theme_constant_override("outline_size", 0)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = COLOR_CHIP_BG
 	sb.set_border_width_all(2)
-	sb.border_width_bottom = 4
-	sb.set_corner_radius_all(UiStyle.BADGE_RADIUS)
+	sb.border_width_bottom = 3
+	sb.set_corner_radius_all(int(POTION_SLOT_SIZE.y * 0.5))
 	sb.anti_aliasing = true
-	b.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
 	if index >= potions.size():
 		b.text = TEXT_EMPTY_SLOT
 		b.disabled = true
+		b.tooltip_text = TEXT_EMPTY_SLOT.replace("—", "").strip_edges().capitalize()
 		sb.bg_color = UiStyle.BG_DEEP
-		sb.border_color = UiStyle.OUTLINE
-		b.add_theme_color_override("font_disabled_color", COLOR_EMPTY)
+		sb.border_color = Color(COLOR_EMPTY, 0.6)
 	else:
 		var p: PotionData = potions[index]
 		b.text = p.display_name
@@ -433,9 +479,12 @@ func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -
 		sb.border_color = UiStyle.OUTLINE
 		if usable:
 			sb.bg_color = UiStyle.ACCENT_BLUE
-			b.add_theme_constant_override("outline_size", 4)
-		b.add_theme_color_override("font_color", UiStyle.TEXT)
-		b.add_theme_color_override("font_disabled_color", UiStyle.TEXT_MUTED)
+			sb.border_color = UiStyle.ACCENT_YELLOW
+		var art: ItemIcon = ItemIcon.make(p.id, POTION_ICON_SIDE, false)
+		art.set_anchors_preset(Control.PRESET_CENTER)
+		art.position = (POTION_SLOT_SIZE - Vector2(POTION_ICON_SIDE, POTION_ICON_SIDE)) * 0.5
+		art.size = Vector2(POTION_ICON_SIDE, POTION_ICON_SIDE)
+		b.add_child(art)
 		b.pressed.connect(press_potion.bind(index))
 	var hover: StyleBoxFlat = sb.duplicate()
 	hover.bg_color = COLOR_CHIP_BG.lightened(0.15)

@@ -159,7 +159,7 @@ class EnemyView extends RefCounted:
 	var panel: VBoxContainer
 	var name_label: Label
 	var intent_label: Label
-	var sprite: TextureRect
+	var sprite: AnimatedPokemon
 	var hp_bar: ProgressBar
 	var hp_label: Label
 	var block_label: Label
@@ -218,7 +218,7 @@ var _pending_lost_turn: String = ""
 var _pending_items: Array[String] = []
 var _player_caption: Label
 var _float_layer: Control
-var _player_sprite: TextureRect
+var _player_sprite: AnimatedPokemon
 var _player_hp_bar: ProgressBar
 var _player_hp_label: Label
 var _player_block: Label
@@ -269,14 +269,17 @@ func _update_backdrop_layout() -> void:
 		return
 	var origin: Vector2 = _background.get_global_rect().position
 	var rects: Array[Rect2] = []
-	var sprites: Array[TextureRect] = [_player_sprite]
+	var sprites: Array[AnimatedPokemon] = [_player_sprite]
 	for v: EnemyView in _enemy_views:
 		sprites.append(v.sprite)
-	for tr: TextureRect in sprites:
+	for tr: AnimatedPokemon in sprites:
 		if tr == null or not is_instance_valid(tr) or tr.size.x <= 0.0:
 			continue
 		var r: Rect2 = tr.get_global_rect()
-		rects.append(Rect2(r.position.x - origin.x + r.size.x * 0.05, r.position.y - origin.y + r.size.y * 0.86, r.size.x * 0.9, 0.0))
+		# Story 020b: the ellipse sits on the feet line of the animated sprite, a bit wider than what is drawn.
+		var drawn: Rect2 = tr.get_drawn_rect()
+		var pw: float = clampf(drawn.size.x * 1.15, r.size.x * 0.55, r.size.x * 0.95)
+		rects.append(Rect2(r.position.x - origin.x + (r.size.x - pw) * 0.5, r.position.y - origin.y + tr.get_feet_y() - 4.0, pw, 0.0))
 	_background.set_platforms(rects)
 	_background.set_hand_top(_hand_box.get_global_rect().position.y - origin.y + SELECT_LIFT)
 
@@ -860,8 +863,9 @@ func _make_hp_bar(fill_color: Color, sprite_scale: float) -> ProgressBar:
 	return bar
 
 
-func _make_sprite_holder(node_name: String, sprite_scale: float) -> TextureRect:
-	var tr := TextureRect.new()
+## Story 020b: the holder is an AnimatedPokemon (sprite sheet, feet on the platform; still sprite fallback).
+func _make_sprite_holder(node_name: String, sprite_scale: float) -> AnimatedPokemon:
+	var tr := AnimatedPokemon.new()
 	tr.name = node_name
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -911,7 +915,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.intent_label.clip_text = true  # never widens the slot; the font shrinks to fit first (_fit_intent_font)
 		v.panel.add_child(v.intent_label)
 		v.sprite = _make_sprite_holder("EnemySprite%d" % i, sprite_scale)
-		v.sprite.texture = _load_texture(enemies[i].sprite_path)
+		v.sprite.show_pokemon(enemies[i].sprite_path, false)
 		v.panel.add_child(v.sprite)
 		v.hp_bar = _make_hp_bar(COLOR_HP_ENEMY, sprite_scale)
 		v.panel.add_child(v.hp_bar)
@@ -948,7 +952,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 func _refresh_active_pokemon(p: Combatant) -> void:
 	_player_name.text = p.display_name
 	_set_badge_row(_player_type_badge, p.type_ids)
-	_player_sprite.texture = _load_texture(p.sprite_path)
+	_player_sprite.show_pokemon(p.sprite_path, true)
 
 
 ## A card brought another Pokémon in (fired before the hit): update the left panel, show
