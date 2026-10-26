@@ -9,7 +9,7 @@ extends Control
 signal continue_requested
 signal new_game_requested
 
-const COLOR_BG: Color = Color(0.12, 0.13, 0.18)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 const COLOR_PANEL: Color = Color(0.16, 0.17, 0.23)
 const COLOR_PANEL_BORDER: Color = Color(0.38, 0.4, 0.5)
 const COLOR_ERROR: Color = Color(0.95, 0.45, 0.4)
@@ -155,6 +155,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	var bg := ColorRect.new()
 	bg.color = COLOR_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

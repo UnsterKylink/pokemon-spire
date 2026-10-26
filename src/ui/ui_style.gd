@@ -217,3 +217,91 @@ static func _load_type_colors() -> void:
 		var def: Variant = types[id]
 		if def is Dictionary and String((def as Dictionary).get("color", "")).begins_with("#"):
 			_type_colors[String(id)] = Color(String((def as Dictionary)["color"]))
+
+
+## Story 020 (screens pass): gives `root` the art-bible theme and keeps re-skinning its subtree as it is built:
+## plain Buttons get the bright outlined buttons (theme), custom StyleBoxFlat panels / buttons get rounded
+## corners, a dark outline when they had none, a palette background when theirs was a plain dark grey and a soft
+## shadow; big labels (>= 24 px) get a dark text outline. Card buttons (CardFace child) are left untouched.
+## Display only; the helper node is internal, so get_children() of the screen is unchanged.
+static func style_screen(root: Control) -> void:
+	root.theme = make_theme()
+	var p := _ScreenPolisher.new()
+	p.name = "StylePolisher"
+	root.add_child(p, false, Node.INTERNAL_MODE_BACK)
+
+
+## Re-skins one node in place (see style_screen). Idempotent.
+static func polish_node(n: Node) -> void:
+	if n is Label:
+		var l: Label = n
+		if l.has_theme_font_size_override("font_size") and not l.has_theme_constant_override("outline_size"):
+			var fs: int = l.get_theme_font_size("font_size")
+			if fs >= 24:
+				l.add_theme_constant_override("outline_size", 8 if fs >= 32 else 6)
+				l.add_theme_color_override("font_outline_color", OUTLINE)
+	elif n is PanelContainer or n is Panel:
+		var c: Control = n
+		if c.has_theme_stylebox_override("panel") and c.get_theme_stylebox("panel") is StyleBoxFlat:
+			_skin_box(c.get_theme_stylebox("panel") as StyleBoxFlat, true)
+	elif n is Button:
+		var b: Button = n
+		for child: Node in b.get_children():
+			if child is CardFace:
+				return
+		for state: String in ["normal", "hover", "pressed", "disabled"]:
+			if b.has_theme_stylebox_override(state) and b.get_theme_stylebox(state) is StyleBoxFlat:
+				_skin_box(b.get_theme_stylebox(state) as StyleBoxFlat, false)
+
+
+static func _skin_box(sb: StyleBoxFlat, is_panel: bool) -> void:
+	if sb.has_meta("ui_skinned"):
+		return
+	sb.set_meta("ui_skinned", true)
+	var bg: Color = sb.bg_color
+	if bg.a > 0.5 and bg.s < 0.4 and bg.v < 0.36:
+		var pal: Color = BG_PANEL if is_panel else BG_PANEL_LIGHT
+		sb.bg_color = Color(pal.lightened(clampf((bg.v - 0.16) * 1.5, 0.0, 0.3)), bg.a)
+	var radius: int = maxi(sb.corner_radius_top_left, 12 if is_panel else 10)
+	sb.set_corner_radius_all(radius)
+	if sb.border_width_left + sb.border_width_top + sb.border_width_right + sb.border_width_bottom == 0:
+		sb.set_border_width_all(PANEL_BORDER if is_panel else BUTTON_BORDER)
+		sb.border_color = OUTLINE
+	if is_panel and sb.shadow_size == 0 and sb.bg_color.a > 0.9:
+		sb.shadow_color = SHADOW
+		sb.shadow_size = 6
+		sb.shadow_offset = Vector2(0, 3)
+	sb.anti_aliasing = true
+
+
+## Internal helper node of style_screen: polishes the screen's existing subtree, then every node added under it
+## (deferred one frame so the screen's own overrides are already set).
+class _ScreenPolisher extends Node:
+	var _pending: Array[Node] = []
+	var _queued: bool = false
+
+	func _ready() -> void:
+		_walk(get_parent())
+		get_tree().node_added.connect(_on_node_added)
+
+	func _walk(n: Node) -> void:
+		UiStyle.polish_node(n)
+		for c: Node in n.get_children():
+			_walk(c)
+
+	func _on_node_added(n: Node) -> void:
+		var root: Node = get_parent()
+		if root == null or not root.is_ancestor_of(n):
+			return
+		_pending.append(n)
+		if not _queued:
+			_queued = true
+			_flush.call_deferred()
+
+	func _flush() -> void:
+		_queued = false
+		var nodes: Array[Node] = _pending.duplicate()
+		_pending.clear()
+		for n: Node in nodes:
+			if is_instance_valid(n):
+				UiStyle.polish_node(n)

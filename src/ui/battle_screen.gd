@@ -22,8 +22,8 @@ signal defeat_acknowledged
 const SPRITE_SOURCE_SIZE: float = 96.0
 ## Enemy sprite scale by number of enemies (index 0 = 1 enemy). Chosen so 3 enemies fit 1280x720.
 ## Story 006: scales lowered (2.5 -> 2.0) so the arena still fits under the RunHud bar.
-const ENEMY_SPRITE_SCALES: Array[float] = [2.0, 2.0, 1.6]
-const PLAYER_SPRITE_SCALE: float = 2.0
+const ENEMY_SPRITE_SCALES: Array[float] = [2.2, 2.1, 1.7]
+const PLAYER_SPRITE_SCALE: float = 2.2
 const CARD_SIZE: Vector2 = Vector2(170, 200)
 ## Fit-in-720p layout (story 016 fix): outer margins, vertical gaps between the rows and inside the fighter panels.
 const SCREEN_MARGIN_X: int = 16
@@ -32,6 +32,20 @@ const ROW_SEPARATION: int = 4
 const PANEL_SEPARATION: int = 2
 ## Extra height of the hand row over the card height (selected card border stays inside).
 const HAND_EXTRA_HEIGHT: float = 4.0
+## Story 020: the selected card rises by this much (the hand row reserves the room, so nothing overlaps).
+const SELECT_LIFT: float = 16.0
+## Story 020: selected-card gold glow (StyleBoxFlat shadow) size and border width.
+const SELECT_GLOW: int = 12
+const SELECT_BORDER: int = 5
+## Story 020: art bible HP thresholds (> 50 % green, 25-50 % orange, < 25 % red).
+const HP_ORANGE_RATIO: float = 0.5
+const HP_RED_RATIO: float = 0.25
+const HP_BAR_HEIGHT: float = 18.0
+const ENERGY_GEM_SIZE: float = 50.0
+const TEXT_ENERGY: String = "Énergie"
+## Story 020: outline sizes of the arena / info-row texts (readable on any backdrop).
+const OUTLINE_BIG: int = 7
+const OUTLINE_SMALL: int = 5
 const END_TURN_SIZE: Vector2 = Vector2(160, 44)
 ## Hand layout: normal / tight card spacing and the usable width (1280 minus side margins).
 const HAND_SEPARATION: int = 12
@@ -162,6 +176,21 @@ class EnemyView extends RefCounted:
 const COLOR_HEADER_BG: Color = Color(0.1, 0.11, 0.16, 0.92)
 const COLOR_BOSS_HEADER: Color = Color(0.85, 0.2, 0.35)
 const COLOR_BOSS_HEADER_BG: Color = Color(0.2, 0.05, 0.14, 0.95)
+const COLOR_INTENT_BG: Color = Color(0.086, 0.106, 0.2, 0.8)
+
+
+## Story 020: round energy gem (art bible §5): ACCENT_YELLOW disc, dark outline, white highlight top-left;
+## the "n/m" label is a child drawn on top. Display only.
+class EnergyGem extends Control:
+	func _draw() -> void:
+		var r: float = minf(size.x, size.y) * 0.5 - 2.0
+		var c: Vector2 = size * 0.5
+		draw_circle(c + Vector2(0, 3), r + 1.0, UiStyle.SHADOW)
+		draw_circle(c, r + 0.5, UiStyle.OUTLINE)
+		var fill: Color = UiStyle.ACCENT_YELLOW if modulate.a > 0.0 else UiStyle.DISABLED_BG
+		draw_circle(c, r - 2.0, fill.darkened(0.18))
+		draw_circle(c - Vector2(0, 2), r - 4.0, fill)
+		draw_circle(c + Vector2(-r * 0.38, -r * 0.42), r * 0.2, Color(1, 1, 1, 0.75))
 
 var _trainer_header: PanelContainer
 var _trainer_style: StyleBoxFlat
@@ -173,7 +202,8 @@ var _encounter_id: String = ""
 
 var _data: GameData
 
-var _background: ColorRect
+var _background: BattleBackdrop
+var _energy_gem: EnergyGem
 var _player_name: Label
 var _player_type_badge: HBoxContainer
 var _player_float: FloatText
@@ -215,6 +245,40 @@ var _last_throw_chance: float = 0.0
 
 func _ready() -> void:
 	_build_ui()
+
+
+func _process(_delta: float) -> void:
+	_update_backdrop_layout()
+
+
+## Story 020: shows battle backdrop `id` (type id of the zone's gym, "route", "league", "ethernatos", "legendary";
+## unknown -> "route"). Main calls it right after setup. Display only.
+func set_backdrop(id: String) -> void:
+	_background.set_backdrop(id)
+
+
+## Story 020: backdrop id shown (after fallback).
+func get_backdrop_id() -> String:
+	return _background.get_backdrop_id()
+
+
+## Story 020: places the backdrop platforms under the sprites and the darker band under the hand (every frame;
+## the backdrop only redraws when a rect changed).
+func _update_backdrop_layout() -> void:
+	if _background == null or _hand_box == null:
+		return
+	var origin: Vector2 = _background.get_global_rect().position
+	var rects: Array[Rect2] = []
+	var sprites: Array[TextureRect] = [_player_sprite]
+	for v: EnemyView in _enemy_views:
+		sprites.append(v.sprite)
+	for tr: TextureRect in sprites:
+		if tr == null or not is_instance_valid(tr) or tr.size.x <= 0.0:
+			continue
+		var r: Rect2 = tr.get_global_rect()
+		rects.append(Rect2(r.position.x - origin.x + r.size.x * 0.05, r.position.y - origin.y + r.size.y * 0.86, r.size.x * 0.9, 0.0))
+	_background.set_platforms(rects)
+	_background.set_hand_top(_hand_box.get_global_rect().position.y - origin.y + SELECT_LIFT)
 
 
 ## Read-only access for the QA harness.
@@ -526,8 +590,8 @@ func click_background() -> void:
 # --- UI construction -------------------------------------------------------
 
 func _build_ui() -> void:
-	_background = ColorRect.new()
-	_background.color = COLOR_BG
+	_background = BattleBackdrop.new()
+	_background.name = "Backdrop"
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_background.mouse_filter = Control.MOUSE_FILTER_STOP
 	_background.gui_input.connect(_on_background_input)
@@ -563,7 +627,9 @@ func _build_ui() -> void:
 	_player_caption.text = TEXT_ACTIVE_CAPTION
 	_player_caption.add_theme_color_override("font_color", COLOR_ACTIVE_CAPTION)
 	player_box.add_child(_player_caption)
+	_outline(_player_caption, OUTLINE_SMALL)
 	_player_name = _make_label(28)
+	_outline(_player_name, OUTLINE_BIG)
 	player_box.add_child(_player_name)
 	_player_type_badge = CardView.make_type_badge_row()
 	player_box.add_child(_player_type_badge)
@@ -575,9 +641,11 @@ func _build_ui() -> void:
 	var player_hp_row := _make_hp_row()
 	player_box.add_child(player_hp_row)
 	_player_hp_label = _make_label(18)
+	_outline(_player_hp_label, OUTLINE_SMALL)
 	player_hp_row.add_child(_player_hp_label)
 	_player_block = _make_label(18)
-	_player_block.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+	_player_block.add_theme_color_override("font_color", UiStyle.BLOCK_BLUE)
+	_outline(_player_block, OUTLINE_SMALL)
 	player_hp_row.add_child(_player_block)
 	_player_chips = StatusChipRow.new()
 	player_box.add_child(_player_chips)
@@ -596,20 +664,44 @@ func _build_ui() -> void:
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info.add_theme_constant_override("separation", 18)
 	root.add_child(info)
+	info.alignment = BoxContainer.ALIGNMENT_BEGIN
 	_encounter_label = _make_label(20)
-	_encounter_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
+	_encounter_label.add_theme_color_override("font_color", UiStyle.TEXT_MUTED)
+	_outline(_encounter_label, OUTLINE_SMALL)
 	info.add_child(_encounter_label)
-	_energy_label = _make_label(26)
-	_energy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_energy_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.3))
-	info.add_child(_energy_label)
+	# Story 020: energy = round gem (art bible §5) with "n/m" on it, captioned "Énergie" (colour never alone).
+	var energy_box := HBoxContainer.new()
+	energy_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	energy_box.add_theme_constant_override("separation", 6)
+	info.add_child(energy_box)
+	var energy_caption: Label = _make_label(20)
+	energy_caption.text = TEXT_ENERGY
+	energy_caption.add_theme_color_override("font_color", UiStyle.ACCENT_YELLOW)
+	_outline(energy_caption, OUTLINE_SMALL)
+	energy_box.add_child(energy_caption)
+	_energy_gem = EnergyGem.new()
+	_energy_gem.name = "EnergyGem"
+	_energy_gem.mouse_filter = Control.MOUSE_FILTER_PASS
+	_energy_gem.tooltip_text = TEXT_ENERGY
+	_energy_gem.custom_minimum_size = Vector2.ONE * ENERGY_GEM_SIZE
+	_energy_gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	energy_box.add_child(_energy_gem)
+	_energy_label = _make_label(19)
+	_energy_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_energy_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_outline(_energy_label, OUTLINE_SMALL)
+	_energy_gem.add_child(_energy_label)
 	_draw_label = _make_label(18)
+	_outline(_draw_label, OUTLINE_SMALL)
 	info.add_child(_draw_label)
 	_discard_label = _make_label(18)
+	_outline(_discard_label, OUTLINE_SMALL)
 	info.add_child(_discard_label)
 	_deck_label = _make_label(18)
+	_outline(_deck_label, OUTLINE_SMALL)
 	info.add_child(_deck_label)
 	_hint_label = _make_label(18)
+	_outline(_hint_label, OUTLINE_SMALL)
 	_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# Story 017: the hint never widens the row (the capture button joined it): it shrinks with an ellipsis instead.
 	_hint_label.clip_text = true
@@ -620,13 +712,15 @@ func _build_ui() -> void:
 	_capture_button.name = "CaptureButton"
 	_capture_button.text = TEXT_CAPTURE
 	_capture_button.custom_minimum_size = CAPTURE_BUTTON_SIZE
-	_capture_button.add_theme_color_override("font_color", COLOR_CAPTURE)
+	UiStyle.apply_button(_capture_button, UiStyle.ACCENT_RED)
 	_capture_button.visible = false
 	_capture_button.pressed.connect(toggle_capture_mode)
 	info.add_child(_capture_button)
 	_end_turn_button = Button.new()
 	_end_turn_button.text = "Fin de tour"
 	_end_turn_button.custom_minimum_size = END_TURN_SIZE
+	_end_turn_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_button(_end_turn_button)
 	_end_turn_button.pressed.connect(press_end_turn)
 	info.add_child(_end_turn_button)
 
@@ -635,7 +729,7 @@ func _build_ui() -> void:
 	_hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_hand_box.name = "HandBox"
-	_hand_box.custom_minimum_size = Vector2(0, CARD_SIZE.y + HAND_EXTRA_HEIGHT)
+	_hand_box.custom_minimum_size = Vector2(0, CARD_SIZE.y + HAND_EXTRA_HEIGHT + SELECT_LIFT)
 	_hand_box.add_theme_constant_override("separation", 12)
 	root.add_child(_hand_box)
 
@@ -647,10 +741,7 @@ func _build_ui() -> void:
 	_trainer_header.anchor_right = 0.5
 	_trainer_header.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_trainer_header.offset_top = 6
-	_trainer_style = StyleBoxFlat.new()
-	_trainer_style.bg_color = COLOR_HEADER_BG
-	_trainer_style.set_border_width_all(2)
-	_trainer_style.set_corner_radius_all(10)
+	_trainer_style = UiStyle.panel(COLOR_HEADER_BG, UiStyle.BUTTON_RADIUS, UiStyle.PANEL_BORDER)
 	_trainer_style.content_margin_left = 16
 	_trainer_style.content_margin_right = 16
 	_trainer_style.content_margin_top = 1
@@ -685,6 +776,7 @@ func _build_ui() -> void:
 	_restart_button.text = "Continuer"
 	_restart_button.custom_minimum_size = Vector2(200, 56)
 	_restart_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_button(_restart_button)
 	_restart_button.pressed.connect(press_defeat_continue)
 	_end_box.add_child(_restart_button)
 
@@ -706,6 +798,12 @@ func _build_ui() -> void:
 
 func _make_label(font_size: int) -> Label:
 	return CardView.make_label(font_size)
+
+
+## Story 020: dark outline around a label's text (readable on any backdrop).
+func _outline(l: Label, outline_size: int) -> void:
+	l.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
+	l.add_theme_constant_override("outline_size", outline_size)
 
 
 ## Centred row holding the "PV x/y" and "Protection n" labels of a fighter.
@@ -735,19 +833,29 @@ func _make_float_text() -> FloatText:
 	return f
 
 
+## Story 020: rounded HP bar with a dark outline; the fill colour follows the HP ratio (_set_hp).
 func _make_hp_bar(fill_color: Color, sprite_scale: float) -> ProgressBar:
 	var bar := ProgressBar.new()
 	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.2, 0.2, 0.25)
-	bg.set_corner_radius_all(4)
+	bg.bg_color = UiStyle.BG_DEEP
+	bg.border_color = UiStyle.OUTLINE
+	bg.set_border_width_all(3)
+	bg.set_corner_radius_all(int(HP_BAR_HEIGHT * 0.5))
+	bg.shadow_color = UiStyle.SHADOW
+	bg.shadow_size = 3
+	bg.shadow_offset = Vector2(0, 2)
+	bg.anti_aliasing = true
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = fill_color
-	fill.set_corner_radius_all(4)
+	fill.border_color = UiStyle.OUTLINE
+	fill.set_border_width_all(3)
+	fill.set_corner_radius_all(int(HP_BAR_HEIGHT * 0.5))
+	fill.anti_aliasing = true
 	bar.add_theme_stylebox_override("background", bg)
 	bar.add_theme_stylebox_override("fill", fill)
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(SPRITE_SOURCE_SIZE * sprite_scale, 20)
+	bar.custom_minimum_size = Vector2(minf(SPRITE_SOURCE_SIZE * sprite_scale, 190.0), HP_BAR_HEIGHT)
 	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	return bar
 
@@ -786,12 +894,20 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.panel.gui_input.connect(_on_enemy_input.bind(i))
 		_enemies_box.add_child(v.panel)
 		v.name_label = _make_label(24)
+		_outline(v.name_label, OUTLINE_BIG)
 		v.name_label.text = enemies[i].display_name
 		v.panel.add_child(v.name_label)
 		v.type_badge = CardView.make_type_badge_row()
 		_set_badge_row(v.type_badge, enemies[i].type_ids)
 		v.panel.add_child(v.type_badge)
 		v.intent_label = _make_label(INTENT_FONT_SIZE)
+		_outline(v.intent_label, OUTLINE_SMALL)
+		# Story 020: intent on a dark pill so it reads on any backdrop; width set by _fit_intent_font.
+		var pill: StyleBoxFlat = UiStyle.badge(COLOR_INTENT_BG)
+		pill.content_margin_left = 10.0
+		pill.content_margin_right = 10.0
+		v.intent_label.add_theme_stylebox_override("normal", pill)
+		v.intent_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		v.intent_label.clip_text = true  # never widens the slot; the font shrinks to fit first (_fit_intent_font)
 		v.panel.add_child(v.intent_label)
 		v.sprite = _make_sprite_holder("EnemySprite%d" % i, sprite_scale)
@@ -803,9 +919,11 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		hp_row.mouse_filter = Control.MOUSE_FILTER_PASS
 		v.panel.add_child(hp_row)
 		v.hp_label = _make_label(18)
+		_outline(v.hp_label, OUTLINE_SMALL)
 		hp_row.add_child(v.hp_label)
 		v.block_label = _make_label(18)
 		v.block_label.add_theme_color_override("font_color", COLOR_INTENT_BLOCK)
+		_outline(v.block_label, OUTLINE_SMALL)
 		hp_row.add_child(v.block_label)
 		v.status_chips = StatusChipRow.new()
 		v.panel.add_child(v.status_chips)
@@ -1214,13 +1332,13 @@ func _refresh() -> void:
 	if _battle == null:
 		return
 	var p: Combatant = _battle.player
-	_player_hp_bar.max_value = p.max_hp
-	_player_hp_bar.value = p.hp
+	_set_hp(_player_hp_bar, p.hp, p.max_hp)
 	_player_hp_label.text = "PV %d/%d" % [p.hp, p.max_hp]
 	_player_block.text = "Protection %d" % p.block
 	var count: int = _battle.enemies.size()
 	_encounter_label.text = "Combat : %d ennemi%s" % [count, "s" if count > 1 else ""]
-	_energy_label.text = "Énergie %d/%d" % [_battle.energy, _battle.max_energy]
+	_energy_label.text = "%d/%d" % [_battle.energy, _battle.max_energy]
+	_energy_gem.modulate = Color.WHITE if _battle.energy > 0 else Color(1, 1, 1, 0.55)
 	_draw_label.text = "Pioche : %d" % _battle.draw_pile.size()
 	_discard_label.text = "Défausse : %d" % _battle.discard_pile.size()
 	_deck_label.text = "Deck : %d cartes" % _deck_size
@@ -1253,8 +1371,7 @@ func _refresh() -> void:
 
 
 func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
-	v.hp_bar.max_value = e.max_hp
-	v.hp_bar.value = e.hp
+	_set_hp(v.hp_bar, e.hp, e.max_hp)
 	v.hp_label.text = "PV %d/%d" % [e.hp, e.max_hp]
 	v.block_label.text = "Protection %d" % e.block if e.block > 0 else ""
 	if e.is_alive() and e.intent != null and _battle.state == Battle.State.PLAYER_TURN:
@@ -1266,6 +1383,8 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 	else:
 		v.intent_label.text = "K.O."
 		v.intent_label.add_theme_color_override("font_color", COLOR_KO)
+		_fit_intent_font(v.intent_label)
+	v.intent_label.self_modulate = Color.WHITE if not v.intent_label.text.is_empty() else Color.TRANSPARENT
 	if not e.is_alive():
 		v.panel.modulate = MODULATE_KO
 	elif _selected_index >= 0:
@@ -1289,6 +1408,19 @@ func _fit_intent_font(label: Label) -> void:
 	while font_size > INTENT_FONT_MIN and font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_w:
 		font_size -= 1
 	label.add_theme_font_size_override("font_size", font_size)
+	var pill_margin: float = 22.0
+	var text_w: float = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	label.custom_minimum_size.x = minf(ceilf(text_w) + pill_margin + 2.0, max_w)
+
+
+## Story 020: HP bar value + fill colour by ratio (art bible: > 50 % green, 25-50 % orange, < 25 % red).
+func _set_hp(bar: ProgressBar, hp: int, max_hp: int) -> void:
+	bar.max_value = max_hp
+	bar.value = hp
+	var ratio: float = float(hp) / float(maxi(max_hp, 1))
+	var fill: StyleBoxFlat = bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill != null:
+		fill.bg_color = UiStyle.HP_GREEN if ratio > HP_ORANGE_RATIO else (UiStyle.HP_ORANGE if ratio >= HP_RED_RATIO else UiStyle.HP_RED)
 
 
 func _rebuild_hand() -> void:
@@ -1307,6 +1439,8 @@ func _rebuild_hand() -> void:
 		var card: CardData = _battle.hand[i]
 		var b := Button.new()
 		b.custom_minimum_size = card_size
+		# Story 020: the hand row is SELECT_LIFT taller than a card: cards sit at the bottom, the selected one at the top.
+		b.size_flags_vertical = Control.SIZE_SHRINK_BEGIN if i == _selected_index else Control.SIZE_SHRINK_END
 		_fill_card_content(b, card)
 		b.disabled = not _battle.can_play(i)
 		var kind_color: Color = COLOR_SKILL if card.kind == CardData.KIND_SKILL else COLOR_ATTACK
@@ -1317,8 +1451,11 @@ func _rebuild_hand() -> void:
 		sb.set_corner_radius_all(6)
 		if i == _selected_index:
 			sb.bg_color = Color(0.35, 0.3, 0.1)
-			sb.set_border_width_all(5)
-			sb.border_color = COLOR_SELECTED
+			sb.set_border_width_all(SELECT_BORDER)
+			sb.border_color = UiStyle.ACCENT_YELLOW
+			sb.shadow_color = Color(UiStyle.ACCENT_YELLOW, 0.7)
+			sb.shadow_size = SELECT_GLOW
+			b.z_index = 1
 		var sb_hover: StyleBoxFlat = sb.duplicate()
 		sb_hover.bg_color = sb.bg_color.lightened(0.12)
 		var sb_disabled: StyleBoxFlat = sb.duplicate()

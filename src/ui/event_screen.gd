@@ -14,7 +14,7 @@ signal finished
 ## Story 018: emitted when the player picks the card to forget (index into RunState.deck); Main applies it.
 signal removal_picked(deck_index: int)
 
-const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 const COLOR_PANEL: Color = Color(0.14, 0.15, 0.2)
 const COLOR_BORDER: Color = Color(0.35, 0.75, 0.42)
 const COLOR_TITLE: Color = Color(1.0, 0.9, 0.4)
@@ -213,6 +213,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	var bg := ColorRect.new()
 	_bg = bg
 	bg.color = COLOR_BG

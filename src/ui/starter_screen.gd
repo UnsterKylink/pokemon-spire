@@ -9,7 +9,7 @@ signal starter_chosen(pokemon_id: String)
 
 const SPRITE_SIZE: Vector2 = Vector2(144, 144)
 const CARD_SIZE: Vector2 = Vector2(330, 420)
-const COLOR_BG: Color = Color(0.12, 0.13, 0.18)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 
 var _choices: Array[String] = []
 var _cards_box: HBoxContainer
@@ -107,6 +107,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	var bg := ColorRect.new()
 	bg.color = COLOR_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

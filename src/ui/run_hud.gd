@@ -15,12 +15,12 @@ const HEIGHT: float = 44.0
 ## Currency suffix. The default font has no "₽" glyph (it only renders through OS font fallback, absent on
 ## web / bare Linux), so the HUD uses the ASCII "P$". Change it here only.
 const CURRENCY: String = "P$"
-const COLOR_BAR: Color = Color(0.08, 0.09, 0.12)
-const COLOR_BAR_BORDER: Color = Color(0.32, 0.34, 0.44)
-const COLOR_MONEY: Color = Color(1.0, 0.84, 0.3)
-const COLOR_CAPTION: Color = Color(0.62, 0.64, 0.74)
-const COLOR_CHIP_BG: Color = Color(0.16, 0.17, 0.23)
-const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
+const COLOR_BAR: Color = UiStyle.BG_PANEL
+const COLOR_BAR_BORDER: Color = UiStyle.OUTLINE
+const COLOR_MONEY: Color = UiStyle.ACCENT_YELLOW
+const COLOR_CAPTION: Color = UiStyle.TEXT_MUTED
+const COLOR_CHIP_BG: Color = UiStyle.BG_PANEL_LIGHT
+const COLOR_POTION: Color = UiStyle.BLOCK_BLUE
 const COLOR_EMPTY: Color = Color(0.45, 0.46, 0.52)
 const COLOR_FLASH: Color = Color(1.0, 0.85, 0.3)
 const POTION_SLOT_SIZE: Vector2 = Vector2(112, 32)
@@ -84,8 +84,11 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = COLOR_BAR
-	sb.border_width_bottom = 2
+	sb.border_width_bottom = 3
 	sb.border_color = COLOR_BAR_BORDER
+	sb.shadow_color = UiStyle.SHADOW
+	sb.shadow_size = 4
+	sb.shadow_offset = Vector2(0, 2)
 	sb.content_margin_left = 16
 	sb.content_margin_right = 16
 	sb.content_margin_top = 4
@@ -100,6 +103,8 @@ func _init() -> void:
 	_money.custom_minimum_size = Vector2(96, 0)
 	_money.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_money.add_theme_color_override("font_color", COLOR_MONEY)
+	_money.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
+	_money.add_theme_constant_override("outline_size", 6)
 	_money.mouse_filter = Control.MOUSE_FILTER_STOP
 	_money.tooltip_text = "Pokédollars"
 	row.add_child(_money)
@@ -117,6 +122,8 @@ func _init() -> void:
 	_league_value = CardView.make_label(18)
 	_league_value.name = "LeagueProgress"
 	_league_value.add_theme_color_override("font_color", COLOR_LEAGUE)
+	_league_value.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
+	_league_value.add_theme_constant_override("outline_size", 5)
 	_league_value.mouse_filter = Control.MOUSE_FILTER_STOP
 	_league_value.visible = false
 	row.add_child(_league_value)
@@ -164,6 +171,12 @@ func _init() -> void:
 	_deck_button.custom_minimum_size = Vector2(90, 32)
 	_deck_button.focus_mode = Control.FOCUS_NONE
 	_deck_button.add_theme_font_size_override("font_size", 17)
+	UiStyle.apply_button(_deck_button, UiStyle.ACCENT_BLUE)
+	for state: String in ["normal", "hover", "pressed", "disabled"]:  # story 020: compact relief for the 44 px bar
+		var dsb: StyleBoxFlat = _deck_button.get_theme_stylebox(state)
+		dsb.content_margin_top = 1.0 if state != "pressed" else 3.0
+		dsb.content_margin_bottom = 3.0 if state != "pressed" else 1.0
+		dsb.border_width_bottom = 4 if state != "pressed" else 2
 	_deck_button.pressed.connect(press_deck)
 	row.add_child(_deck_button)
 
@@ -378,19 +391,14 @@ func _make_chip(text: String, tooltip: String, border: Color) -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.mouse_filter = Control.MOUSE_FILTER_STOP
 	chip.tooltip_text = tooltip
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = COLOR_CHIP_BG
-	sb.set_border_width_all(2)
-	sb.border_color = border
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 8
-	sb.content_margin_right = 8
-	sb.content_margin_top = 2
-	sb.content_margin_bottom = 2
+	var sb: StyleBoxFlat = UiStyle.badge(border.darkened(0.55).lerp(COLOR_CHIP_BG, 0.35))  # story 020: rarity tint
+	sb.border_width_bottom = 3
+	sb.content_margin_top = 1
+	sb.content_margin_bottom = 1
 	chip.add_theme_stylebox_override("panel", sb)
 	var l: Label = CardView.make_label(15)
 	l.text = text
-	l.add_theme_color_override("font_color", border.lerp(Color.WHITE, 0.35))
+	l.add_theme_color_override("font_color", border.lerp(Color.WHITE, 0.55))
 	chip.add_child(l)
 	return chip
 
@@ -405,11 +413,15 @@ func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = COLOR_CHIP_BG
 	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
+	sb.border_width_bottom = 4
+	sb.set_corner_radius_all(UiStyle.BADGE_RADIUS)
+	sb.anti_aliasing = true
+	b.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
 	if index >= potions.size():
 		b.text = TEXT_EMPTY_SLOT
 		b.disabled = true
-		sb.border_color = COLOR_EMPTY.darkened(0.3)
+		sb.bg_color = UiStyle.BG_DEEP
+		sb.border_color = UiStyle.OUTLINE
 		b.add_theme_color_override("font_disabled_color", COLOR_EMPTY)
 	else:
 		var p: PotionData = potions[index]
@@ -417,8 +429,11 @@ func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -
 		var usable: bool = battle != null and battle.can_use_potion(index)
 		b.disabled = not usable
 		b.tooltip_text = "%s\n%s\n%s" % [p.display_name, p.description, TEXT_POTION_HINT if usable else TEXT_POTION_LATER]
-		sb.border_color = COLOR_POTION if usable else COLOR_POTION.darkened(0.35)
-		b.add_theme_color_override("font_color", COLOR_POTION)
+		sb.border_color = UiStyle.OUTLINE
+		if usable:
+			sb.bg_color = UiStyle.ACCENT_BLUE
+			b.add_theme_constant_override("outline_size", 4)
+		b.add_theme_color_override("font_color", UiStyle.TEXT)
 		b.add_theme_color_override("font_disabled_color", COLOR_POTION.darkened(0.15))
 		b.pressed.connect(press_potion.bind(index))
 	var hover: StyleBoxFlat = sb.duplicate()

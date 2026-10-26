@@ -42,6 +42,7 @@ var _closed: bool = false
 
 
 func _init() -> void:
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	name = "RivalIntroBanner"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP

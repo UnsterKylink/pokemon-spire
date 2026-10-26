@@ -1402,9 +1402,88 @@ func _style_shots() -> void:
 	_main.close_deck()
 
 
+## Story 020 part 3 (screens pass): maps (zone 1 start, mid-zone with a travelled path, another gym type), starter
+## choice, reward, Mart, Centre, event, badge, league, run end and deck overlay, files 2x-<screen>.png (filter `story-020`).
+func _screens_style_shots() -> void:
+	_main.qa_set_autosave(false)  # never touch the real save
+	_main.qa_quit_to_title()
+	await _shot("2x-choix-starter")
+	_main.start_new_run(STYLE_SEED, "salameche")
+	_zone_line("2x zone 1 start")
+	await _shot("2x-carte-zone-1-debut")
+	var reward_done: bool = false
+	for step: int in 3:  # walk three rooms so the travelled path shows
+		var ids: Array[String] = _main.map_reachable_ids()
+		if ids.is_empty():
+			break
+		_main.map_choose(ids[0])
+		match _main.get_current_screen_name():
+			"battle":
+				await _win_battle(true)
+				if not reward_done:
+					reward_done = true
+					await _shot("2x-recompense")
+				_main.reward_skip()
+			"event":
+				_main.event_choose(0)
+				_main.event_continue()
+			"center":
+				_main.center_continue()
+			"mart":
+				_main.shop_leave()
+			_:
+				_main.room_continue()
+		print("2x walk step %d -> screen=%s" % [step, _main.get_current_screen_name()])
+	await _shot("2x-carte-chemin-parcouru")
+	_main.open_deck()
+	await _shot("2x-deck")
+	_main.close_deck()
+	_main.qa_set_money(MART_MONEY)
+	_main.qa_open_room("mart")
+	await _shot("2x-mart")
+	_main.shop_leave()
+	_main.qa_set_hp(_main.get_run_state().max_hp / 2)
+	_main.qa_open_room("center")
+	await _shot("2x-centre")
+	_main.center_continue()
+	_main.qa_show_event("marchand_ambulant")
+	await _shot("2x-evenement")
+	_main.event_choose(0)
+	_main.event_continue()
+	await _clear_gym()
+	if _main.get_current_screen_name() != "map":
+		print("2x: after gym 1 screen=", _main.get_current_screen_name())
+	_main.qa_skip_to_gym()
+	_main.qa_win_gym()
+	_main.reward_skip()
+	_drain_team_evolution()
+	await _shot("2x-badge")
+	_main.badge_continue()
+	if _main.get_current_screen_name() == "evolution":
+		_main.evolution_continue()
+		_main.evolution_skip()
+		_main.evolution_continue()
+	_main.qa_set_zone(4)
+	_zone_line("2x zone 5 map")
+	await _shot("2x-carte-autre-type")
+	_main.qa_set_zone(6)
+	_zone_line("2x zone 7 map")
+	await _shot("2x-carte-autre-type-b")
+	_main.qa_skip_to_league()
+	await _shot("2x-ligue")
+	_main.start_new_run(STYLE_SEED + 1, "salameche")
+	_main.map_choose(_main.map_reachable_ids()[0])
+	if _main.get_current_screen_name() != "battle":
+		_main.start_encounter("trio_vol")
+	_main.qa_lose_battle()
+	_main.battle_defeat_continue()
+	await _shot("2x-fin-de-partie")
+
+
 func _run() -> void:
 	if _filter == "story-020":
 		await _style_shots()
+		await _screens_style_shots()
 		quit(0)
 		return
 	if _filter == "story-018":

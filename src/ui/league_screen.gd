@@ -12,7 +12,7 @@ extends Control
 ## Emitted once by "Affronter <Nom>".
 signal finished
 
-const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 const COLOR_PANEL: Color = Color(0.14, 0.15, 0.2)
 const COLOR_ROW: Color = Color(0.18, 0.19, 0.25)
 const COLOR_BODY: Color = Color(0.92, 0.92, 0.95)
@@ -247,6 +247,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	_bg = ColorRect.new()
 	_bg.color = COLOR_BG
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)

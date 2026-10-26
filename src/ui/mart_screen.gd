@@ -13,7 +13,7 @@ signal remove_requested(deck_index: int)
 ## "Quitter".
 signal finished
 
-const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 const COLOR_ACCENT: Color = Color(0.36, 0.6, 1.0)
 const COLOR_TILE_BG: Color = Color(0.17, 0.18, 0.24)
 const COLOR_PRICE: Color = Color(1.0, 0.84, 0.3)
@@ -299,6 +299,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	var bg := ColorRect.new()
 	bg.color = COLOR_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

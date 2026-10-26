@@ -16,7 +16,7 @@ signal finished
 
 enum Step { CHOOSE, PICK, PREVIEW, WAITING, DONE }
 
-const COLOR_BG: Color = Color(0.1, 0.11, 0.15)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 const COLOR_PANEL: Color = Color(0.14, 0.15, 0.2)
 const COLOR_ACCENT: Color = Color(0.93, 0.48, 0.68)
 const COLOR_BODY: Color = Color(0.92, 0.92, 0.95)
@@ -234,6 +234,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	var bg := ColorRect.new()
 	bg.color = COLOR_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

@@ -61,6 +61,10 @@ const SCREEN_RESUME: String = "resume"
 const RNG_NAMES: Array[String] = ["battle", "encounter", "reward", "event", "starter", "loot", "shop", "zone", "league"]
 ## Room type of the zone's gym fight (story 012: its win pays loot + a card reward, then the badge; the last zone ends the run).
 const ROOM_BOSS: String = "boss"
+## Story 020: special battle backdrop ids (assets/data/backdrops.json).
+const BACKDROP_LEAGUE: String = "league"
+const BACKDROP_LEGENDARY: String = "legendary"
+const BACKDROP_FINAL_BOSS: String = "ethernatos"
 ## QA: player turns qa_lose_battle() ends at most before giving up.
 const QA_LOSE_MAX_TURNS: int = 60
 
@@ -929,6 +933,8 @@ func league_continue() -> void:
 	if _battle_screen != null:
 		_battle_screen.set_trainer_header("%s — %s" % [String(fight["name"]), String(fight["title"])],
 				_data.get_type_color(String(fight["type_id"])), String(fight["kind"]) == "final_boss")
+		if String(fight["kind"]) == "final_boss":
+			_battle_screen.set_backdrop(BACKDROP_FINAL_BOSS)  # story 020
 
 
 ## QA: the live league screen (LeagueScreen; null elsewhere).
@@ -1261,7 +1267,19 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	battle.battle_lost.connect(_on_battle_lost)
 	_set_screen(_battle_screen, SCREEN_BATTLE)
 	_battle_screen.setup(battle, _data, _run, encounter_id)
+	_battle_screen.set_backdrop(_backdrop_for(room_type))
 	_refresh_hud()
+
+
+## Story 020: battle backdrop id (assets/data/backdrops.json) for a fight in `room_type`: the league hall for league
+## fights (league_continue switches the final boss to "ethernatos"), the legendary backdrop for the legendary event,
+## otherwise the current zone's gym type (BattleBackdrop falls back to "route" for an unknown / empty type).
+func _backdrop_for(room_type: String) -> String:
+	if room_type == ROOM_LEAGUE:
+		return BACKDROP_LEAGUE
+	if room_type == GameData.ROOM_LEGENDARY:
+		return BACKDROP_LEGENDARY
+	return String(get_zone().get("type_id", ""))
 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:

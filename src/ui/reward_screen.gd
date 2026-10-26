@@ -14,7 +14,7 @@ signal skipped
 signal deck_requested
 
 const CARD_SIZE: Vector2 = Vector2(220, 270)
-const COLOR_BG: Color = Color(0.12, 0.13, 0.18)
+const COLOR_BG: Color = UiStyle.BG_DEEP
 const COLOR_STOLEN: Color = Color(1.0, 0.6, 0.2)
 const COLOR_ATTACK_BG: Color = Color(0.18, 0.18, 0.24)
 const COLOR_LOOT_BG: Color = Color(0.16, 0.17, 0.23)
@@ -231,6 +231,7 @@ func _build_ui() -> void:
 	if _built:
 		return
 	_built = true
+	UiStyle.style_screen(self)  # story 020: art-bible look
 	var bg := ColorRect.new()
 	bg.color = COLOR_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
