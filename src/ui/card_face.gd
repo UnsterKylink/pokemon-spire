@@ -59,7 +59,7 @@ const TILT_FOLLOW: float = 12.0
 ## Holographic foil strength (card_holo.gdshader `holo`) and hover glare.
 const HOLO_RARE: float = 0.3
 const HOLO_LEGENDARY: float = 0.4
-const GLARE_HOVER: float = 0.16
+const GLARE_HOVER: float = 0.1
 ## Foil strength kept over the description box (fraction), so the text stays readable.
 const HOLO_CALM: float = 0.2
 const HOLO_SHADER_PATH: String = "res://src/ui/shaders/card_holo.gdshader"

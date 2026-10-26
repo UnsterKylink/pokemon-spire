@@ -1,9 +1,9 @@
 class_name PostFx
 extends CanvasLayer
 ## Story 020b — global image finish (art bible §8): a CanvasLayer above every screen holding one full-screen
-## ColorRect with post_finish.gdshader (soft halo of bright areas, gentle colour grade, vignette, light film grain).
+## ColorRect with post_finish.gdshader (gentle colour grade, vignette, light film grain; halo available but off).
 ## Reads the screen texture, ignores the mouse, owns no game state. Added once by Main (internal child).
-## Budget: 1 draw call + 1 screen copy per frame, 18 texture reads per pixel (desktop 1280x720).
+## Budget: 1 draw call + 1 screen copy per frame, 2 texture reads per pixel (18 with the opt-in halo) (desktop 1280x720).
 
 const LAYER: int = 120
 const SHADER_PATH: String = "res://src/ui/shaders/post_finish.gdshader"

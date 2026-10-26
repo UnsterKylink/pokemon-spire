@@ -3,6 +3,9 @@
 > Story 020 « Style graphique ». Style validé par le joueur : **« Cartoon vectoriel lumineux »**.
 > Code de référence : `src/ui/ui_style.gd` (`UiStyle`, constantes + fabriques de styles) et `src/ui/card_view.gd` (cartes).
 > **Tout est dessiné en code** (StyleBoxFlat, `_draw`, dégradés) ; seules images : sprites et artworks officiels des Pokémon.
+> **Story 020b « Refonte premium »** (retour joueur : « ça fait jeu flash ») : polices embarquées, textures de matière
+> générées en code (Python PIL, `assets/art/ui/`), cadres de carte selon la rareté, effet holographique, survol animé,
+> finition d'image globale (`PostFx`). Shaders : `src/ui/shaders/` (`card_*`, `ui_*`, `post_*`).
 
 ## 1. Principes
 
@@ -56,7 +59,12 @@ Le texte posé sur une couleur de type est blanc **avec contour sombre**, ou som
 
 ## 3. Typographie
 
-Police **par défaut de Godot** (pas de police embarquée), hiérarchie par taille et contour (`UiStyle.apply_label`) :
+**Story 020b — polices libres (SIL OFL 1.1, licences à côté des fichiers)** :
+- **Kreon** Bold (graisse 700, `assets/fonts/kreon/`) — empattements doux, la famille de Slay the Spire : titres, en-têtes, nombres, **noms de carte**, coût. `UiStyle.font_title()`.
+- **Nunito** (`assets/fonts/nunito/`) — arrondie, très lisible : SemiBold 600 pour le texte et les descriptions de carte (`font_body()`, police par défaut du thème), ExtraBold 800 pour les boutons et pastilles (`font_bold()`).
+- Les rôles `title` / `heading` / `number` utilisent Kreon ; un Label d'écran de taille ≥ 24 reçoit Kreon automatiquement (`style_screen`).
+
+Hiérarchie par taille et contour (`UiStyle.apply_label`) :
 
 | Rôle | Taille | Contour | Couleur |
 |---|---|---|---|
@@ -74,6 +82,17 @@ Carte 170×200 : nom 15, coût 18, description 13 (rétrécit jusqu'à 10 si né
 - Panneau : rayon **14**, contour **3 px** `OUTLINE`, fond `BG_PANEL`, ombre 6 px noir 35 %, marges internes 12/10.
 - Bouton : rayon **12**, contour 2 px `OUTLINE` + **bas 5 px** couleur foncée (relief). Survol : +12 % clair. Appuyé : bas 2 px (le bouton « s'enfonce »). Désactivé : gris `#5A6078`, texte `#A0A6BC`. Focus clavier : anneau `ACCENT_YELLOW` 3 px.
 - Pastille (badge de type, statut) : rayon 9, contour 2 px, texte 13–16.
+- **Finition matière (020b, `ui_sheen.gdshader`)** posée par `style_screen` sur chaque panneau / bouton opaque (StyleBoxFlat inchangé dessous, même rayon, sous le contour) : grain du bruit généré, léger marbrage, lumière douce en haut / ombre en bas, **liseré clair interne** sous le bord haut (biseau). Boutons : lumière plus marquée (dégradé + reflet), pas de grain fort. Panneaux et boutons transparents (< 50 %) : pas de finition.
+
+### Textures générées (`assets/art/ui/`, 512 px sauf bruit 256 px, raccordables)
+| Fichier | Matière | Usage |
+|---|---|---|
+| `ui_noise.png` | bruit gris fractal | grain des panneaux / boutons, grain d'image, étincelles du holo |
+| `card_grain.png` | grain presque blanc | fond de carte (multiplie la couleur du type) |
+| `ui_parchment.png` | parchemin crème, fibres | bandeau de nom, cartouche de description |
+| `card_stone.png` | ardoise bleu-gris veinée | cadre des cartes Départ et Commune |
+| `card_silver.png` | argent brossé | cadre des cartes Peu commune |
+| `card_gold.png` | or brossé | cadre des cartes Rare et Légendaire |
 
 ## 5. Icônes (toutes dessinées en code)
 
@@ -144,3 +163,22 @@ Le bouton appelant garde son anneau extérieur (rareté, sélection, état) ; la
 └──────────◆──────────────┘  gemme de rareté (couleur de rareté) ; légendaire : ruban « Légendaire »
 ```
 Survol : liseré blanc lumineux. Carte injouable : face à 45 % d'opacité (géré par l'écran de combat).
+
+### Carte premium (story 020b, `CardFace`)
+- **Cadre en matière selon la rareté** : bande de 6 px (réf. 194 px de haut) en ardoise (Départ / Commune), argent brossé (Peu commune), or (Rare), **or + deux gemmes taillées magenta** sur les côtés (Légendaire, + liseré rose interne). Matière teintée à 10 % par la couleur du type ; le **corps** reste à la couleur du type (dégradé sur grain).
+- **Biseau** : liseré clair sur la bande, ombre interne sombre là où le corps passe sous le cadre ; ombre interne en haut de la fenêtre d'illustration et de la description.
+- **Bandeau de nom et description en parchemin** (or brossé pour le bandeau légendaire) ; nom en Kreon, description en Nunito.
+- **Ombre portée douce** sous la carte (3 couches, 4 px ; 9 px au survol).
+- **Holo animé** (`card_holo.gdshader`, superposition additive) sur Rare (0,30) et Légendaire (0,40) : bandes arc-en-ciel diagonales qui glissent avec le temps et la souris + étincelles ; atténué à 20 % sur la description pour garder le texte lisible.
+- **Survol** (toutes les cartes, jouables ou non) : la face grandit à **×1,08** (pivot en bas au centre, tween 0,14 s), s'**incline jusqu'à 2,5°** vers le curseur, passe au premier plan (z 10) et reçoit un reflet discret qui suit la souris ; le liseré lumineux reste réservé aux cartes jouables. Purement visuel : le bouton garde sa taille, sa place et ses clics.
+
+## 8. Finition d'image (story 020b, `PostFx`)
+
+`PostFx` (CanvasLayer 120, au-dessus de tout, ignore la souris), ajouté une fois par `Main` ; `post_finish.gdshader` lit l'écran :
+| Effet | Réglage par défaut | Remarque |
+|---|---|---|
+| Étalonnage | saturation ×1,06, contraste ×1,05, ombres légèrement froides / hautes lumières à peine chaudes | doux, la palette reste celle du §2 |
+| Vignette | −38 % au bord, début à ~45 % du rayon | recentre le regard |
+| Grain | ±2,2 %, rafraîchi 12 fois / s | grain de film, pas de scintillement |
+| Halo | **désactivé** (`halo_strength` 0, seuil 0,92) | voilait les décors clairs et adoucissait le texte ; réglage disponible |
+Coût : 1 appel de dessin + 1 copie d'écran par image, 2 lectures de texture par pixel (18 avec le halo). `set_enabled(false)` coupe tout (future option graphique).
