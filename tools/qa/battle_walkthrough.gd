@@ -1622,6 +1622,40 @@ func _premium_card_shots() -> void:
 		await _shot("3x-carte-survolee-" + f.card.id)
 		f.hover(false, false)
 		await create_timer(0.3).timeout
+	# Story 020b follow-up: skill cards (no carrier Pokémon) show their main effect (EffectArt), not a Poké Ball.
+	bs.qa_force_hand(["abri", "hypnose", "toxik", "feu_follet", "cage_eclair", "mur_de_fumee"])
+	await create_timer(FLOAT_WAIT).timeout
+	await _shot("3x-main-competences")
+	# Gallery of every effect illustration, including kinds no card uses yet (heal, draw, energy, buff, freeze).
+	var gallery := ColorRect.new()
+	gallery.color = UiStyle.BG_DEEP
+	gallery.position = Vector2(20, 200)
+	gallery.size = Vector2(1240, 140)
+	var kinds: Array[String] = [EffectArt.KIND_BLOCK, EffectArt.KIND_HEAL, EffectArt.KIND_DRAW, EffectArt.KIND_ENERGY,
+			EffectArt.KIND_BUFF, EffectArt.KIND_ATTACK, "sleep", "paralysis", "poison", "burn", "freeze"]
+	for i: int in kinds.size():
+		var cell := ColorRect.new()
+		cell.color = UiStyle.SKILL.lightened(0.6)
+		cell.position = Vector2(8 + i * 112, 8)
+		cell.size = Vector2(104, 100)
+		gallery.add_child(cell)
+		var art := EffectArt.new()
+		art.kind = kinds[i]
+		art.position = Vector2(8 + i * 112, 12)
+		art.size = Vector2(104, 80)
+		gallery.add_child(art)
+		var lbl := Label.new()
+		lbl.text = EffectArt.label_of(kinds[i])
+		lbl.add_theme_font_override("font", UiStyle.font_bold())
+		lbl.add_theme_color_override("font_color", UiStyle.TEXT_DARK)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.position = Vector2(8 + i * 112, 88)
+		lbl.size = Vector2(104, 20)
+		lbl.add_theme_font_size_override("font_size", 13)
+		gallery.add_child(lbl)
+	root.add_child(gallery)
+	await _shot("3x-effets-competences")
+	gallery.queue_free()
 	_main.open_deck("deck")
 	await _shot("3x-deck")
 	_main.close_deck()

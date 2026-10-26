@@ -2,7 +2,8 @@ class_name CardView
 extends RefCounted
 ## Shared UI helpers to draw cards, type badges and labels (battle hand and reward screen).
 ## Implements: story-001/003 card look, story-004 rarity display, story-009 carrying Pokémon on cards,
-## story-020 redesigned card face (CardFace, design/art-bible.md), story-020b premium face (materials, foil, hover tilt).
+## story-020 redesigned card face (CardFace, design/art-bible.md), story-020b premium face (materials, foil, hover tilt),
+## story-020b follow-up: cards without a carrier show their main effect (EffectArt) and its word in the carrier strip.
 
 const COLOR_TEXT_LIGHT: Color = Color(1.0, 1.0, 1.0)
 const COLOR_TEXT_DARK: Color = Color(0.1, 0.1, 0.12)
@@ -86,14 +87,15 @@ static func set_badge(badge: PanelContainer, type_id: String, chart: TypeChart) 
 
 ## Adds the card visuals to a Button as a child "Content" (a CardFace, art bible §7; every node ignores the mouse so
 ## the Button keeps click/hover/disabled): type-coloured frame, cost gem, name banner, the carrier Pokémon's official
-## artwork (fallback: its sprite, then nothing), type pill, carrier name ("Équipe" for skills), description, rarity gem.
+## artwork (fallback: its sprite, then nothing; no carrier: EffectArt of the main effect), type pill, carrier name (no
+## carrier: the effect word, e.g. « Protection », « Sommeil », see EffectArt.label_of), description, rarity gem.
 ## `pokemon_lookup(pokemon_id) -> Dictionary` ({name, sprite_path, ...}, e.g. GameData.get_pokemon_info). The face is
 ## inset by CardFace.INSET px so the caller's own border (rarity / selection) stays visible. Owns no state.
 static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokemon_lookup: Callable = Callable()) -> void:
 	var known_type: bool = chart != null and not card.type_id.is_empty() and chart.is_known_type(card.type_id)
 	var color: Color = UiStyle.type_color(card.type_id, chart) if known_type else UiStyle.SKILL
 	var type_text: String = chart.get_type_name(card.type_id) if known_type else ""
-	var carrier: String = TEXT_TEAM
+	var carrier: String = EffectArt.label_of(EffectArt.effect_kind(card)) if card.pokemon_id.is_empty() else TEXT_TEAM
 	var tex: Texture2D = null
 	var pixel: bool = false
 	if not card.pokemon_id.is_empty():

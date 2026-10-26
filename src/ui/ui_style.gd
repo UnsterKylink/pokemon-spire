@@ -3,7 +3,8 @@ extends RefCounted
 ## Shared look of the game (« Cartoon vectoriel lumineux »): palette, type / rarity colours, StyleBoxFlat
 ## factories and a Theme. Values mirror design/art-bible.md; type colours come from assets/data/types.json.
 ## Display only: owns no game state. Implements: story-020 (style graphique).
-## Story 020b (refonte premium): embedded fonts (Kreon titles / Nunito text, OFL, assets/fonts/), generated material
+## Story 020b (refonte premium): embedded fonts (Lilita One titles in Pokémon-logo colours / Jost text, OFL,
+## assets/fonts/; a fan font dropped in assets/fonts/pokemon/ replaces Lilita One for titles), generated material
 ## textures (assets/art/ui/) and the « sheen » finish (grain, light gradient, inner highlight) on panels and buttons.
 
 # --- Palette (art bible §2) -------------------------------------------------------------------------
@@ -44,21 +45,33 @@ const BUTTON_BOTTOM_PRESSED: int = 2
 const BADGE_RADIUS: int = 9
 ## Label roles -> [font size, outline size, colour].
 const LABEL_ROLES: Dictionary = {
-	"title": [40, 8, TEXT], "heading": [28, 6, TEXT], "number": [22, 6, TEXT],
+	"title": [40, 8, ACCENT_YELLOW], "heading": [28, 6, TEXT], "number": [22, 6, TEXT],
 	"body": [18, 0, TEXT], "caption": [15, 0, TEXT_MUTED], "dark": [16, 0, TEXT_DARK]}
 const DEFAULT_FONT_SIZE: int = 18
 
 const TYPES_PATH: String = "res://assets/data/types.json"
 
 # --- Story 020b: fonts, textures, finish (art bible §3, §4, §8) ------------------------------------------
-## Titles, card names, numbers: Kreon (slab serif, the Slay the Spire family); text: Nunito (rounded, very readable).
-const FONT_TITLE_PATH: String = "res://assets/fonts/kreon/Kreon-Variable.ttf"
-const FONT_BODY_PATH: String = "res://assets/fonts/nunito/Nunito-Variable.ttf"
-const WEIGHT_TITLE: int = 700
-const WEIGHT_BODY: int = 600
-const WEIGHT_BOLD: int = 800
-## Roles drawn with the title font (the others use the body font).
-const TITLE_ROLES: Array[String] = ["title", "heading", "number"]
+## Story 020b follow-up (style Pokémon): titles = Lilita One (chunky rounded display, drawn in the Pokémon-logo colours
+## by apply_logo); UI / card text = Jost (geometric Futura-like sans, close to modern Pokémon games / TCG).
+const FONT_TITLE_PATH: String = "res://assets/fonts/lilita_one/LilitaOne-Regular.ttf"
+const FONT_BODY_PATH: String = "res://assets/fonts/jost/Jost-Variable.ttf"
+## Any .ttf / .otf dropped here (preferred: FONT_FAN_FILE) replaces Lilita One for titles; Lilita One stays as the
+## fallback for glyphs the fan font lacks (accents).
+const FONT_FAN_DIR: String = "res://assets/fonts/pokemon/"
+const FONT_FAN_FILE: String = "Pokemon Solid.ttf"
+const FONT_FAN_EXTENSIONS: Array[String] = ["ttf", "otf"]
+const WEIGHT_BODY: int = 500
+const WEIGHT_BOLD: int = 700
+const WEIGHT_NUMBER: int = 800
+## Roles drawn with the title font; "number" uses font_number(), the others the body font.
+const TITLE_ROLES: Array[String] = ["title", "heading"]
+## Pokémon-logo look of big titles: yellow fill (ACCENT_YELLOW), thick blue outline, deep blue drop shadow.
+const LOGO_BLUE: Color = Color("#2A62B8")
+const LOGO_SHADOW: Color = Color("#16245E")
+const LOGO_SHADOW_OFFSET: int = 4
+## Screen labels at or above this size without their own colour get the logo look from the screen polisher.
+const LOGO_MIN_SIZE: int = 36
 ## Labels at or above this size (set by screens) get the title font from the screen polisher.
 const TITLE_FONT_MIN_SIZE: int = 24
 const UI_TEXTURE_DIR: String = "res://assets/art/ui/"
@@ -89,19 +102,69 @@ static func type_color(type_id: String, chart: TypeChart = null) -> Color:
 	return _type_colors.get(type_id, SKILL)
 
 
-## Story 020b: title font (Kreon Bold) — screen titles, headings, numbers, card names. Never null.
+## Title font — screen titles and headings: the fan font of assets/fonts/pokemon/ when present, else Lilita One.
+## Never null.
 static func font_title() -> Font:
-	return _font("title", FONT_TITLE_PATH, WEIGHT_TITLE)
+	if _fonts.has("title"):
+		return _fonts["title"]
+	var lilita: Font = _font("lilita", FONT_TITLE_PATH, 0)
+	var f: Font = lilita
+	var fan_path: String = fan_font_path()
+	if not fan_path.is_empty():
+		var fan: FontFile = load(fan_path) as FontFile
+		if fan != null:
+			var v := FontVariation.new()
+			v.base_font = fan
+			v.fallbacks = [lilita]
+			f = v
+	_fonts["title"] = f
+	return f
 
 
-## Story 020b: body font (Nunito SemiBold) — text, captions, card descriptions. Never null.
+## Path of the user-supplied title font in FONT_FAN_DIR (FONT_FAN_FILE first, else the first .ttf / .otf by name);
+## "" when there is none.
+static func fan_font_path() -> String:
+	if not DirAccess.dir_exists_absolute(FONT_FAN_DIR):
+		return ""
+	if ResourceLoader.exists(FONT_FAN_DIR + FONT_FAN_FILE):
+		return FONT_FAN_DIR + FONT_FAN_FILE
+	var names: Array[String] = []
+	for file: String in DirAccess.get_files_at(FONT_FAN_DIR):
+		var n: String = file.trim_suffix(".import").trim_suffix(".remap")
+		if FONT_FAN_EXTENSIONS.has(n.get_extension().to_lower()) and not names.has(n):
+			names.append(n)
+	names.sort()
+	for n: String in names:
+		if ResourceLoader.exists(FONT_FAN_DIR + n):
+			return FONT_FAN_DIR + n
+	return ""
+
+
+## Body font (Jost Medium) — text, captions, card descriptions. Never null.
 static func font_body() -> Font:
 	return _font("body", FONT_BODY_PATH, WEIGHT_BODY)
 
 
-## Story 020b: bold body font (Nunito ExtraBold) — buttons, pills, small labels. Never null.
+## Bold UI font (Jost Bold) — buttons, pills, small labels, card names. Never null.
 static func font_bold() -> Font:
 	return _font("bold", FONT_BODY_PATH, WEIGHT_BOLD)
+
+
+## Number font (Jost ExtraBold) — HP, energy, card cost. Never null.
+static func font_number() -> Font:
+	return _font("number", FONT_BODY_PATH, WEIGHT_NUMBER)
+
+
+## Pokémon-logo look on `l` (yellow fill, thick blue outline, deep blue drop shadow) at outline width `outline`.
+static func apply_logo(l: Label, outline: int = 8) -> void:
+	l.add_theme_font_override("font", font_title())
+	l.add_theme_color_override("font_color", ACCENT_YELLOW)
+	l.add_theme_color_override("font_outline_color", LOGO_BLUE)
+	l.add_theme_constant_override("outline_size", outline)
+	l.add_theme_color_override("font_shadow_color", LOGO_SHADOW)
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", LOGO_SHADOW_OFFSET)
+	l.add_theme_constant_override("shadow_outline_size", outline + 2)
 
 
 ## Generated UI / card texture `assets/art/ui/<tex_name>.png` (null when missing). Cached.
@@ -119,10 +182,12 @@ static func _font(key: String, path: String, weight: int) -> Font:
 	if ResourceLoader.exists(path):
 		var base: FontFile = load(path) as FontFile
 		if base != null:
-			var v := FontVariation.new()
-			v.base_font = base
-			v.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): weight}
-			f = v
+			f = base
+			if weight > 0:
+				var v := FontVariation.new()
+				v.base_font = base
+				v.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): weight}
+				f = v
 	_fonts[key] = f
 	return f
 
@@ -234,7 +299,15 @@ static func apply_button(b: Button, base: Color = ACCENT_BLUE) -> void:
 static func apply_label(l: Label, role: String) -> void:
 	var spec: Array = LABEL_ROLES.get(role, LABEL_ROLES["body"])
 	l.add_theme_font_size_override("font_size", int(spec[0]))
-	l.add_theme_font_override("font", font_title() if TITLE_ROLES.has(role) else font_body())
+	if role == "title":
+		apply_logo(l, int(spec[1]))
+		return
+	var font: Font = font_body()
+	if TITLE_ROLES.has(role):
+		font = font_title()
+	elif role == "number":
+		font = font_number()
+	l.add_theme_font_override("font", font)
 	l.add_theme_constant_override("outline_size", int(spec[1]))
 	l.add_theme_color_override("font_outline_color", OUTLINE)
 	l.add_theme_color_override("font_color", spec[2])
@@ -289,7 +362,8 @@ static func _load_type_colors() -> void:
 ## Story 020 (screens pass): gives `root` the art-bible theme and keeps re-skinning its subtree as it is built:
 ## plain Buttons get the bright outlined buttons (theme), custom StyleBoxFlat panels / buttons get rounded
 ## corners, a dark outline when they had none, a palette background when theirs was a plain dark grey and a soft
-## shadow; big labels (>= 24 px) get a dark text outline. Card buttons (CardFace child) are left untouched.
+## shadow; big labels (>= 24 px) get the title font and a dark text outline; very big labels (>= LOGO_MIN_SIZE) with no
+## colour of their own get the Pokémon-logo look (apply_logo). Card buttons (CardFace child) are left untouched.
 ## Display only; the helper node is internal, so get_children() of the screen is unchanged.
 static func style_screen(root: Control) -> void:
 	root.theme = make_theme()
@@ -305,6 +379,9 @@ static func polish_node(n: Node) -> void:
 		if l.has_theme_font_size_override("font_size") and not l.has_theme_font_override("font") \
 				and l.get_theme_font_size("font_size") >= TITLE_FONT_MIN_SIZE:
 			l.add_theme_font_override("font", font_title())  # story 020b
+			if l.get_theme_font_size("font_size") >= LOGO_MIN_SIZE and not l.has_theme_color_override("font_color"):
+				apply_logo(l, 8)
+				return
 		if l.has_theme_font_size_override("font_size") and not l.has_theme_constant_override("outline_size"):
 			var fs: int = l.get_theme_font_size("font_size")
 			if fs >= 24:

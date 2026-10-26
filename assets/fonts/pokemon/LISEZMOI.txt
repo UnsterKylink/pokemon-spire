@@ -1,0 +1,3 @@
+Déposez ici une police de titre (.ttf / .otf), par ex. « Pokemon Solid.ttf ».
+Elle remplace automatiquement Lilita One pour les grands titres (UiStyle.font_title) ;
+Lilita One reste en secours pour les glyphes manquants (accents). Voir design/art-bible.md §3.

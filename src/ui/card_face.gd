@@ -8,9 +8,11 @@ extends Control
 ## Implements: story-020 (style graphique).
 ## Story 020b (premium): textured frame whose material follows the rarity (starter / common = slate, uncommon = brushed
 ## silver, rare = gold, legendary = gold + gems), body still tinted by the type, inner bevel, parchment banner and text
-## box, soft drop shadow, animated holographic foil on rare / legendary (card_holo.gdshader), Kreon / Nunito fonts,
+## box, soft drop shadow, animated holographic foil on rare / legendary (card_holo.gdshader), Pokémon-style fonts,
 ## and a hover that scales the face up and tilts it toward the cursor (visual only: the Button keeps its rect, so
 ## layout and clicks are unchanged).
+## Story 020b follow-up: cards without a carrier Pokémon show an EffectArt illustration of their main effect (Abri
+## shield, heart, status symbol...) instead of a Poké Ball; card name in the bold UI font (Jost), cost in Jost ExtraBold.
 
 ## Distance (px) between the button edge and the face, so the caller's border ring shows around the card.
 const INSET: float = 3.0
@@ -87,7 +89,7 @@ var _type_label: Label
 var _carrier_label: Label
 var _desc_label: Label
 var _art_rect: TextureRect
-var _ball: BallIcon
+var _effect: EffectArt
 var _tab: Label
 # Rects computed by _layout (local px), used by _draw.
 var _s: float = 1.0
@@ -208,9 +210,8 @@ func _build() -> void:
 		_art_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if art_is_pixel else CanvasItem.TEXTURE_FILTER_LINEAR
 		_add(_art_rect)
 	elif card.pokemon_id.is_empty():
-		_ball = BallIcon.make("poke_ball", 32.0)
-		_ball.size_flags_vertical = Control.SIZE_FILL
-		_add(_ball)
+		_effect = EffectArt.create(card)
+		_add(_effect)
 	_name_label = _make_label("CardName", UiStyle.TEXT_DARK, 0)
 	_name_label.text = card.display_name
 	_cost_label = _make_label("CardCost", UiStyle.TEXT, 5)
@@ -230,8 +231,8 @@ func _build() -> void:
 		_tab = _make_label("LegendaryTab", UiStyle.TEXT_DARK, 0)
 		_tab.text = CardView.TEXT_LEGENDARY
 		_tab.add_theme_stylebox_override("normal", _pill(UiStyle.LEGENDARY, UiStyle.OUTLINE))
-	_name_label.add_theme_font_override("font", UiStyle.font_title())
-	_cost_label.add_theme_font_override("font", UiStyle.font_title())
+	_name_label.add_theme_font_override("font", UiStyle.font_bold())
+	_cost_label.add_theme_font_override("font", UiStyle.font_number())
 	_desc_label.add_theme_font_override("font", UiStyle.font_body())
 	for l: Label in [_type_label, _carrier_label, _tab]:
 		if l != null:
@@ -307,11 +308,11 @@ func _layout() -> void:
 	if _art_rect != null:
 		_art_rect.position = art_area.position
 		_art_rect.size = art_area.size
-	if _ball != null:
-		var side: float = minf(art_area.size.y * 0.72, art_area.size.x * 0.6)
-		_ball.custom_minimum_size = Vector2(side, side)
-		_ball.position = art_area.get_center() - Vector2(side, side) * 0.5
-		_ball.size = Vector2(side, side)
+	if _effect != null:
+		# Above the carrier strip, clear of the type pill.
+		var ea := Rect2(art_area.position + Vector2(0, 2.0 * s), Vector2(art_area.size.x, art_area.size.y - pill_h - 2.0 * s))
+		_effect.position = ea.position
+		_effect.size = ea.size
 	if _type_label != null:
 		var font: Font = _type_label.get_theme_font("font")
 		var tw: float = font.get_string_size(type_name, HORIZONTAL_ALIGNMENT_LEFT, -1, small).x + 10.0 * s
