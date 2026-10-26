@@ -27,7 +27,7 @@
 | 015 | Sauvegarde en cours de partie | Integration | Ready | N/A |
 | 016 | Statuts : brûlure, poison, paralysie, sommeil, gel | Logic | Ready | N/A |
 | 017 | Capture avec Poké Balls | Integration | Ready | N/A |
-| 018 | Rival et nouveaux événements | Integration | Ready | N/A |
+| 018 | Rival et nouveaux événements | Integration | Complete | N/A |
 | 019 | Équilibrage et cartes manquantes | Config/Data | Ready | N/A |
 | 020 | Style graphique, fonds de combat et cartes | Visual/Feel | Ready | N/A |
 | 021 | Animations d'attaque et de combat | Visual/Feel | Ready | N/A |
