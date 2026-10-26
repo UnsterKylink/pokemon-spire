@@ -482,9 +482,12 @@ func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -
 			sb.bg_color = UiStyle.ACCENT_BLUE
 			sb.border_color = UiStyle.ACCENT_YELLOW
 		var art: ItemIcon = ItemIcon.make(p.id, POTION_ICON_SIDE, false)
-		art.set_anchors_preset(Control.PRESET_CENTER)
-		art.position = (POTION_SLOT_SIZE - Vector2(POTION_ICON_SIDE, POTION_ICON_SIDE)) * 0.5
-		art.size = Vector2(POTION_ICON_SIDE, POTION_ICON_SIDE)
+		art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var inset: Vector2 = (POTION_SLOT_SIZE - Vector2(POTION_ICON_SIDE, POTION_ICON_SIDE)) * 0.5
+		art.offset_left = inset.x
+		art.offset_top = inset.y
+		art.offset_right = -inset.x
+		art.offset_bottom = -inset.y
 		b.add_child(art)
 		b.pressed.connect(press_potion.bind(index))
 	var hover: StyleBoxFlat = sb.duplicate()

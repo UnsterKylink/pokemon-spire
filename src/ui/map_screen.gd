@@ -112,7 +112,7 @@ func setup(data: GameData, run: RunState) -> void:
 	if _banner.visible:
 		_banner_tex.modulate_color = Color.WHITE.lerp(zone_color, SHEET_TINT * 2.0)
 		_banner_title.text = TEXT_BANNER % [int(zone["number"]), String(zone["type_name"])]
-		_banner_title.add_theme_color_override("font_color", zone_color.darkened(0.55).lerp(INK, 0.35))
+		_banner_title.add_theme_color_override("font_color", INK.lerp(zone_color.darkened(0.35), 0.4))
 		_banner_sub.text = (TEXT_BANNER_SUB_FIRST if int(zone["index"]) == 0 else TEXT_BANNER_SUB_NEXT) % String(zone["leader"])
 	var rival_tip: String = ""
 	if not run.rival_name.is_empty():
@@ -177,7 +177,7 @@ func _build_ui() -> void:
 	_header = PanelContainer.new()
 	_header.name = "Header"
 	_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_header_style = _parchment_box(PARCHMENT_STRIP, 18.0, 22.0, 8.0)
+	_header_style = _parchment_box(PARCHMENT_STRIP, 16.0, 22.0, 10.0)
 	_header.add_theme_stylebox_override("panel", _header_style)
 	root.add_child(_header)
 	var header := HBoxContainer.new()
@@ -225,7 +225,7 @@ func _build_ui() -> void:
 	_banner = PanelContainer.new()
 	_banner.name = "ZoneBanner"
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_banner_tex = _parchment_box(PARCHMENT_STRIP, 14.0, 18.0, 4.0)
+	_banner_tex = _parchment_box(PARCHMENT_STRIP, 14.0, 18.0, 11.0)
 	_banner.add_theme_stylebox_override("panel", _banner_tex)
 	root.add_child(_banner)
 	var banner_box := VBoxContainer.new()
@@ -282,6 +282,7 @@ func _build_ui() -> void:
 	_scroll.name = "MapScroll"
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER  # wheel still scrolls; no bar on the paper
 	sheet_col.add_child(_scroll)
 	_canvas = MapCanvas.new()
 	_canvas.name = "MapCanvas"

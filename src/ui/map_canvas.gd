@@ -43,7 +43,7 @@ const PAPER: Color = Color("#EEDFBC")
 const GLOW: Color = Color("#FFE58A")
 ## Alpha of the ink of rooms not reachable yet / of the faint corridors.
 const FUTURE_ALPHA: float = 0.5
-const WASH_ALPHA: float = 0.5
+const WASH_ALPHA: float = 0.42
 const DASH_LEN: float = 7.0
 const DASH_GAP: float = 6.0
 const TRAIL_WIDTH: float = 3.6
@@ -176,14 +176,14 @@ static func _draw_gym_emblem(ci: CanvasItem, c: Vector2, r: float, accent: Color
 		var stem := PackedVector2Array()
 		for k: int in 9:
 			var a: float = deg_to_rad(110.0 - k * 17.0)
-			stem.append(c + Vector2(side * cos(a) * (r + 9.0) * -1.0, sin(a) * (r + 9.0) * 0.95 + 3.0))
-		ci.draw_polyline(stem, ink, 2.0, true)
+			stem.append(c + Vector2(side * cos(a) * (r * 1.3) * -1.0, sin(a) * (r * 1.3) * 0.95 + r * 0.1))
+		ci.draw_polyline(stem, ink, maxf(1.0, r * 0.07), true)
 		for k: int in range(1, 9):
 			var p: Vector2 = stem[k]
 			var dir: Vector2 = (stem[k] - stem[k - 1]).normalized()
 			var nrm: Vector2 = Vector2(-dir.y, dir.x) * side * -1.0
-			var tip: Vector2 = p + dir * 7.0 + nrm * 6.0
-			var leaf := PackedVector2Array([p, p + dir * 3.5 + nrm * 4.5, tip, p + dir * 5.0 - nrm * 0.5])
+			var tip: Vector2 = p + dir * r * 0.23 + nrm * r * 0.2
+			var leaf := PackedVector2Array([p, p + dir * r * 0.12 + nrm * r * 0.15, tip, p + dir * r * 0.17 - nrm * r * 0.02])
 			ci.draw_colored_polygon(leaf, ink)
 	ci.draw_colored_polygon(_ngon(c + Vector2(2, 3), r + 3.0, 8, PI / 8.0), Color(INK, 0.25 * ink.a))
 	ci.draw_colored_polygon(_ngon(c, r + 3.0, 8, PI / 8.0), ink)
@@ -457,5 +457,5 @@ class RoomIcon extends Control:
 	func _draw() -> void:
 		var r: float = minf(size.x, size.y) * 0.5 - 3.0
 		if room_type == "boss":
-			r -= 4.0  # room for the laurels
+			r = (minf(size.x, size.y) * 0.5 - 1.0) / 1.55  # room for the laurels
 		MapCanvas.draw_room_icon(self, size * 0.5, r, room_type, MapCanvas.IconState.NORMAL, accent)

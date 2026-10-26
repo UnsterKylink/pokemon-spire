@@ -1593,10 +1593,50 @@ func _premium_map_shots() -> void:
 			await _shot("2x-carte-zone-%d" % (zone + 1))
 
 
+## Story 020b: premium cards and finish (filter `story-020b`): a hand with a starter / common / uncommon / rare /
+## legendary card, the rare and the legendary card hovered (lift, tilt, foil), deck overlay, reward screen and the
+## starter (title) screen; files 3x-*.png.
+func _premium_card_shots() -> void:
+	_main.qa_set_autosave(false)  # never touch the real save
+	_main.start_new_run(STYLE_SEED, "salameche")
+	_main.start_encounter("trio_vol")
+	var bs: BattleScreen = _main.get_battle_screen()
+	var premium_hand: Array[String] = ["flammette", "vive_attaque", "danse_flamme", "lance_flammes", "feu_sacre"]
+	bs.qa_force_hand(premium_hand)
+	await create_timer(FLOAT_WAIT).timeout
+	await _shot("3x-main-raretes")
+	var faces: Array[CardFace] = []
+	for n: Node in _main.find_children("Content", "", true, false):
+		if n is CardFace and (n as CardFace).is_visible_in_tree():
+			faces.append(n as CardFace)
+	print("3x hand faces=%d" % faces.size())
+	for idx: int in [3, 4]:
+		if idx >= faces.size():
+			continue
+		var f: CardFace = faces[idx]
+		var rect: Rect2 = f.get_global_rect()
+		Input.warp_mouse(rect.position + rect.size * Vector2(0.7, 0.35))
+		f.hover(true, true)
+		await create_timer(0.5).timeout
+		print("3x hover card=%s scale=%s rot=%.3f z=%d" % [f.card.id, f.scale, f.rotation, f.z_index])
+		await _shot("3x-carte-survolee-" + f.card.id)
+		f.hover(false, false)
+		await create_timer(0.3).timeout
+	_main.open_deck("deck")
+	await _shot("3x-deck")
+	_main.close_deck()
+	await _win_battle(true)
+	await _shot("3x-recompense")
+	_main.reward_skip()
+	_main.qa_quit_to_title()
+	await _shot("3x-titre")
+
+
 func _run() -> void:
 	if _filter == "story-020b":
 		await _premium_battle_shots()
 		await _premium_map_shots()
+		await _premium_card_shots()
 		quit(0)
 		return
 	if _filter == "story-020":
