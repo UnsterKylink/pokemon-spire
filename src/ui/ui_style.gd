@@ -1,0 +1,219 @@
+class_name UiStyle
+extends RefCounted
+## Shared look of the game (« Cartoon vectoriel lumineux »): palette, type / rarity colours, StyleBoxFlat
+## factories and a Theme. Values mirror design/art-bible.md; type colours come from assets/data/types.json.
+## Display only: owns no game state. Implements: story-020 (style graphique).
+
+# --- Palette (art bible §2) -------------------------------------------------------------------------
+const BG_DEEP: Color = Color("#161B33")
+const BG_PANEL: Color = Color("#252E5A")
+const BG_PANEL_LIGHT: Color = Color("#34407A")
+const OUTLINE: Color = Color("#11142A")
+const CREAM: Color = Color("#FFF6E0")
+const TEXT: Color = Color("#FFFFFF")
+const TEXT_MUTED: Color = Color("#B4BEDD")
+const TEXT_DARK: Color = Color("#1E2233")
+const ACCENT_RED: Color = Color("#E8402A")
+const ACCENT_BLUE: Color = Color("#3B78E7")
+const ACCENT_YELLOW: Color = Color("#FFCB05")
+const HP_GREEN: Color = Color("#4CD964")
+const HP_ORANGE: Color = Color("#FFA53A")
+const HP_RED: Color = Color("#FF4F45")
+const BLOCK_BLUE: Color = Color("#5AB4FF")
+const SUCCESS: Color = Color("#5BD16E")
+const SKILL: Color = Color("#7E9CCF")
+const DISABLED_BG: Color = Color("#5A6078")
+const DISABLED_TEXT: Color = Color("#A0A6BC")
+const SHADOW: Color = Color(0, 0, 0, 0.35)
+
+## Rarity colours (art bible §2); legendary cards use LEGENDARY (+ LEGENDARY_INNER for the inner trim).
+const RARITY_COLORS: Dictionary = {
+	"starter": Color("#A7B0C0"), "common": Color("#E8ECF4"), "uncommon": Color("#3FD0C0"), "rare": Color("#FFAA2B")}
+const LEGENDARY: Color = Color("#FFD23F")
+const LEGENDARY_INNER: Color = Color("#FF7AD9")
+
+# --- Frames / typography (art bible §3-4) -----------------------------------------------------------
+const PANEL_RADIUS: int = 14
+const PANEL_BORDER: int = 3
+const BUTTON_RADIUS: int = 12
+const BUTTON_BORDER: int = 2
+const BUTTON_BOTTOM: int = 5
+const BUTTON_BOTTOM_PRESSED: int = 2
+const BADGE_RADIUS: int = 9
+## Label roles -> [font size, outline size, colour].
+const LABEL_ROLES: Dictionary = {
+	"title": [40, 8, TEXT], "heading": [28, 6, TEXT], "number": [22, 6, TEXT],
+	"body": [18, 0, TEXT], "caption": [15, 0, TEXT_MUTED], "dark": [16, 0, TEXT_DARK]}
+const DEFAULT_FONT_SIZE: int = 18
+
+const TYPES_PATH: String = "res://assets/data/types.json"
+
+## types.json colour cache (type id -> Color), filled on first use. Pure display cache.
+static var _type_colors: Dictionary = {}
+static var _types_loaded: bool = false
+
+
+## Display colour of a Pokémon type: from `chart` when given, else from types.json "types.<id>.color".
+## Unknown / empty type ids give SKILL (the neutral card colour).
+static func type_color(type_id: String, chart: TypeChart = null) -> Color:
+	if type_id.is_empty():
+		return SKILL
+	if chart != null:
+		return chart.get_type_color(type_id) if chart.is_known_type(type_id) else SKILL
+	_load_type_colors()
+	return _type_colors.get(type_id, SKILL)
+
+
+## Rarity colour (art bible §2); `legendary` overrides the rarity with the legendary gold.
+static func rarity_color(rarity: String, legendary: bool = false) -> Color:
+	if legendary:
+		return LEGENDARY
+	return RARITY_COLORS.get(rarity, Color.WHITE)
+
+
+## Readable text colour on top of `bg` (dark on light colours, white otherwise).
+static func text_on(bg: Color) -> Color:
+	return TEXT_DARK if bg.get_luminance() > 0.6 else TEXT
+
+
+## Rounded panel (art bible §4): `bg` fill, dark outline, soft drop shadow, inner margins 12/10.
+static func panel(bg: Color = BG_PANEL, radius: int = PANEL_RADIUS, border: int = PANEL_BORDER) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = OUTLINE
+	sb.set_border_width_all(border)
+	sb.set_corner_radius_all(radius)
+	sb.shadow_color = SHADOW
+	sb.shadow_size = 6
+	sb.shadow_offset = Vector2(0, 3)
+	sb.content_margin_left = 12.0
+	sb.content_margin_right = 12.0
+	sb.content_margin_top = 10.0
+	sb.content_margin_bottom = 10.0
+	sb.anti_aliasing = true
+	return sb
+
+
+## Button style for one state ("normal", "hover", "pressed", "disabled", "focus") on base colour `base`:
+## chunky darker bottom edge, pressed = shallower edge, disabled = grey, focus = yellow ring (no fill).
+static func button_box(state: String, base: Color = ACCENT_BLUE) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.set_corner_radius_all(BUTTON_RADIUS)
+	sb.anti_aliasing = true
+	sb.content_margin_left = 14.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_top = 6.0
+	sb.content_margin_bottom = 6.0
+	if state == "focus":
+		sb.draw_center = false
+		sb.border_color = ACCENT_YELLOW
+		sb.set_border_width_all(3)
+		return sb
+	var fill: Color = base
+	match state:
+		"hover":
+			fill = base.lightened(0.12)
+		"pressed":
+			fill = base.darkened(0.08)
+		"disabled":
+			fill = DISABLED_BG
+	sb.bg_color = fill
+	sb.border_color = OUTLINE
+	sb.set_border_width_all(BUTTON_BORDER)
+	sb.border_width_bottom = BUTTON_BOTTOM_PRESSED if state == "pressed" else BUTTON_BOTTOM
+	sb.content_margin_top += 3.0 if state == "pressed" else 0.0
+	sb.content_margin_bottom += 0.0 if state == "pressed" else 3.0
+	sb.shadow_color = SHADOW
+	sb.shadow_size = 0 if state == "pressed" else 3
+	sb.shadow_offset = Vector2(0, 2)
+	return sb
+
+
+## Card frame (art bible §7): `color` gradient-less fill with a thick dark outline; legendary = gold outline.
+static func card_frame(color: Color, legendary: bool = false) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.border_color = LEGENDARY if legendary else OUTLINE
+	sb.set_border_width_all(3 if legendary else 2)
+	sb.set_corner_radius_all(8)
+	sb.anti_aliasing = true
+	return sb
+
+
+## Small rounded badge (type / status chip) filled with `color`, dark outline.
+static func badge(color: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.border_color = OUTLINE
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(BADGE_RADIUS)
+	sb.content_margin_left = 9.0
+	sb.content_margin_right = 9.0
+	sb.content_margin_top = 1.0
+	sb.content_margin_bottom = 1.0
+	sb.anti_aliasing = true
+	return sb
+
+
+## Applies the five button states + white outlined text to `b` (base colour `base`).
+static func apply_button(b: Button, base: Color = ACCENT_BLUE) -> void:
+	for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(state, button_box(state, base))
+	var text: Color = text_on(base)
+	for key: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(key, text)
+	b.add_theme_color_override("font_disabled_color", DISABLED_TEXT)
+	b.add_theme_color_override("font_outline_color", OUTLINE)
+	b.add_theme_constant_override("outline_size", 4 if text == TEXT else 0)
+
+
+## Applies a typography role ("title", "heading", "number", "body", "caption", "dark") to `l`.
+static func apply_label(l: Label, role: String) -> void:
+	var spec: Array = LABEL_ROLES.get(role, LABEL_ROLES["body"])
+	l.add_theme_font_size_override("font_size", int(spec[0]))
+	l.add_theme_constant_override("outline_size", int(spec[1]))
+	l.add_theme_color_override("font_outline_color", OUTLINE)
+	l.add_theme_color_override("font_color", spec[2])
+
+
+## Theme for a screen root: buttons, panels, labels and tooltips in the art-bible look. Set it on the
+## root Control (`root.theme = UiStyle.make_theme()`); explicit overrides on children still win.
+static func make_theme() -> Theme:
+	var t := Theme.new()
+	t.default_font_size = DEFAULT_FONT_SIZE
+	for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
+		t.set_stylebox(state, "Button", button_box(state))
+	t.set_color("font_color", "Button", TEXT)
+	t.set_color("font_hover_color", "Button", TEXT)
+	t.set_color("font_pressed_color", "Button", TEXT)
+	t.set_color("font_focus_color", "Button", TEXT)
+	t.set_color("font_disabled_color", "Button", DISABLED_TEXT)
+	t.set_color("font_outline_color", "Button", OUTLINE)
+	t.set_constant("outline_size", "Button", 4)
+	t.set_color("font_color", "Label", TEXT)
+	t.set_color("font_outline_color", "Label", OUTLINE)
+	t.set_stylebox("panel", "PanelContainer", panel())
+	t.set_stylebox("panel", "Panel", panel())
+	var tip: StyleBoxFlat = panel(BG_PANEL_LIGHT, 8, 2)
+	tip.content_margin_top = 6.0
+	tip.content_margin_bottom = 6.0
+	t.set_stylebox("panel", "TooltipPanel", tip)
+	t.set_color("font_color", "TooltipLabel", TEXT)
+	return t
+
+
+static func _load_type_colors() -> void:
+	if _types_loaded:
+		return
+	_types_loaded = true
+	var f: FileAccess = FileAccess.open(TYPES_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var root: Variant = JSON.parse_string(f.get_as_text())
+	if not (root is Dictionary) or not ((root as Dictionary).get("types", null) is Dictionary):
+		return
+	var types: Dictionary = (root as Dictionary)["types"]
+	for id: Variant in types:
+		var def: Variant = types[id]
+		if def is Dictionary and String((def as Dictionary).get("color", "")).begins_with("#"):
+			_type_colors[String(id)] = Color(String((def as Dictionary)["color"]))
