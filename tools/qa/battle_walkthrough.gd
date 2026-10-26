@@ -1536,9 +1536,67 @@ func _premium_battle_shots() -> void:
 	await _shot("1x-solo-dragon")
 
 
+## Story 020b: parchment map (zone start, travelled path, other zone types), a reward and an event with item art,
+## the top bar with held items + potions + balls, and the Poké Mart with item / potion / ball art; files 2x-*.png
+## (filter `story-020b`).
+func _premium_map_shots() -> void:
+	_main.qa_set_autosave(false)  # never touch the real save
+	_main.start_new_run(STYLE_SEED, "salameche")
+	await _shot("2x-carte-zone-1-debut")
+	var reward_done: bool = false
+	for step: int in 3:  # walk three rooms so the ink trail shows
+		var ids: Array[String] = _main.map_reachable_ids()
+		if ids.is_empty():
+			break
+		_main.map_choose(ids[0])
+		match _main.get_current_screen_name():
+			"battle":
+				await _win_battle(true)
+				if not reward_done:
+					reward_done = true
+					var data: GameData = _main.get("_data") as GameData
+					_main.get_reward_screen().set_loot({"money": 25, "item": data.get_item("restes"),
+							"potion": data.get_potion("super_potion"), "ball": data.get_ball("super_ball")})
+					await _shot("2x-recompense-objet")
+				_main.reward_skip()
+			"event":
+				_main.event_choose(0)
+				_main.event_continue()
+			"center":
+				_main.center_continue()
+			"mart":
+				_main.shop_leave()
+			_:
+				_main.room_continue()
+		print("2x premium walk step %d -> screen=%s" % [step, _main.get_current_screen_name()])
+	for id: String in ["restes", "bandeau", "orbe_vie", "lunettes_choix", "cloche_eclat"]:
+		_main.qa_give_item(id)
+	_main.qa_give_potion("potion")
+	_main.qa_give_potion("anti_brule")
+	_main.qa_give_ball("poke_ball")
+	_main.qa_give_ball("poke_ball")
+	_main.qa_give_ball("super_ball")
+	print("2x premium hud items=%s potions=%s balls=%s" % [_main.get_hud().get_item_names(),
+			_main.get_hud().get_potion_texts(), _main.get_hud().get_balls_tooltip().replace("\n", " / ")])
+	await _shot("2x-carte-chemin-parcouru")
+	_main.qa_set_money(MART_MONEY)
+	_main.qa_open_room("mart")
+	await _shot("2x-mart")
+	_main.shop_leave()
+	_main.qa_show_event("sac_abandonne")
+	_main.event_choose(0)
+	await _shot("2x-evenement-objet")
+	_main.event_continue()
+	for zone: int in [4, 6]:
+		if _main.qa_set_zone(zone):
+			print("2x premium zone %d type=%s" % [zone + 1, _main.get_zone().get("type_id", "")])
+			await _shot("2x-carte-zone-%d" % (zone + 1))
+
+
 func _run() -> void:
 	if _filter == "story-020b":
 		await _premium_battle_shots()
+		await _premium_map_shots()
 		quit(0)
 		return
 	if _filter == "story-020":
