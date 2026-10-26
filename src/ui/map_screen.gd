@@ -361,9 +361,16 @@ class MapBackdrop extends Control:
 							Vector2(x + 26 * s, base - 120 * s), Vector2(x + 110 * s, base + 20)]), col)
 					draw_circle(Vector2(x, base - 128 * s), 14 * s, Color(tint.lightened(0.2), 0.35))
 				"waves":
-					for k: int in 3:
-						draw_arc(Vector2(x, base - 20 - k * 40), 40 * s, PI * 1.1, PI * 1.9, 16, Color(tint.lightened(0.4), 0.18), 5.0, true)
-					draw_circle(Vector2(x + 30, base + 6), 28 * s, col)
+					if i == 0:
+						for k: int in 4:
+							var line := PackedVector2Array()
+							var y0: float = base - 30.0 - k * 46.0
+							for step: int in 65:
+								var px: float = w * step / 64.0
+								line.append(Vector2(px, y0 + sin(px / 38.0 + k * 1.7) * 7.0))
+							draw_polyline(line, Color(tint.lightened(0.4), 0.14), 4.0, true)
+					draw_circle(Vector2(x + 30, base + 6), 30 * s, col)
+					draw_circle(Vector2(x + 58, base + 14), 18 * s, col)
 				"pylons":
 					draw_rect(Rect2(x - 4, base - 170 * s, 8, 190 * s), col)
 					draw_rect(Rect2(x - 30 * s, base - 160 * s, 60 * s, 7), col)

@@ -1480,9 +1480,31 @@ func _screens_style_shots() -> void:
 	await _shot("2x-fin-de-partie")
 
 
+## Story 020: battle backdrops (filter `story-020`): the zone's real Champion fight (backdrop chosen by Main from the
+## gym type), then the same 3-enemy fight on forced backdrops, plus a selected card; files 1x-combat-<backdrop>.png.
+func _backdrop_shots() -> void:
+	_main.start_new_run(STYLE_SEED, "salameche")
+	_main.qa_start_gym()
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	print("backdrop gym zone_type=%s backdrop=%s" % [_main.get_zone().get("type_id", ""), bs.get_backdrop_id()])
+	await _shot("1x-combat-champion-" + bs.get_backdrop_id())
+	_main.start_encounter("trio_vol")
+	bs = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	for id: String in ["route", "fire", "water", "ghost", "electric", "ice", "grass", "psychic", "league", "ethernatos", "legendary"]:
+		bs.set_backdrop(id)
+		print("backdrop forced=%s shown=%s" % [id, bs.get_backdrop_id()])
+		await _shot("1x-combat-" + id)
+	bs.set_backdrop("route")
+	bs.select_card(0)
+	await _shot("1x-combat-carte-selectionnee")
+
+
 func _run() -> void:
 	if _filter == "story-020":
 		await _style_shots()
+		await _backdrop_shots()
 		await _screens_style_shots()
 		quit(0)
 		return

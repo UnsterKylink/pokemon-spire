@@ -240,17 +240,17 @@ func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent:
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 8)
+		margin.add_theme_constant_override("margin_" + side, 8 if side == "left" or side == "right" else 5)
 	b.add_child(margin)
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_theme_constant_override("separation", 2)
+	box.add_theme_constant_override("separation", 0)
 	margin.add_child(box)
 	var n: Label = CardView.make_label(18)
 	n.text = e.get_name()
 	n.add_theme_color_override("font_color", accent.lerp(Color.WHITE, 0.3))
 	box.add_child(n)
-	var d: Label = CardView.make_label(14)
+	var d: Label = CardView.make_label(13)  # story 020: 3-line descriptions fit the 118 px tile
 	d.text = e.get_description()
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.size_flags_vertical = Control.SIZE_EXPAND_FILL

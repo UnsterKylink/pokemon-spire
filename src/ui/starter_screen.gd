@@ -53,6 +53,7 @@ func _make_choice_widget(data: GameData, pokemon_id: String, index: int) -> Butt
 	b.name = "Choice%d" % index
 	b.custom_minimum_size = CARD_SIZE
 	b.focus_mode = Control.FOCUS_NONE
+	UiStyle.apply_button(b, UiStyle.BG_PANEL_LIGHT)  # story 020: raised panel-coloured choice
 	b.pressed.connect(choose.bind(index))
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)

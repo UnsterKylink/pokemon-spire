@@ -130,6 +130,7 @@ func _init() -> void:
 	row.add_child(_caption(TEXT_ITEMS))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_CENTER  # story 020: chips centred in the bar
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -434,7 +435,7 @@ func _make_potion_slot(potions: Array[PotionData], index: int, battle: Battle) -
 			sb.bg_color = UiStyle.ACCENT_BLUE
 			b.add_theme_constant_override("outline_size", 4)
 		b.add_theme_color_override("font_color", UiStyle.TEXT)
-		b.add_theme_color_override("font_disabled_color", COLOR_POTION.darkened(0.15))
+		b.add_theme_color_override("font_disabled_color", UiStyle.TEXT_MUTED)
 		b.pressed.connect(press_potion.bind(index))
 	var hover: StyleBoxFlat = sb.duplicate()
 	hover.bg_color = COLOR_CHIP_BG.lightened(0.15)
