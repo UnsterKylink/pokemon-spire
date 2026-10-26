@@ -1,6 +1,6 @@
 # Décors peints — prompts d'images (story 020b)
 
-Ce fichier contient un prompt par décor de combat, plus le fond de la carte (parchemin) et l'écran titre. Tu peux
+Ce fichier contient un prompt par décor de combat, plus l'écran titre. Tu peux
 coller chaque prompt dans un générateur d'images (Midjourney, DALL·E, Stable Diffusion, Leonardo…). Les prompts sont
 en anglais : les générateurs les comprennent mieux. **Colle toujours le « préambule de style » avant le prompt du
 décor**, pour que toutes les images aient le même style.
@@ -19,7 +19,7 @@ ne casse.
 
 Conseils : le sol en bas au centre doit rester **vide et assez plat** (les Pokémon s'y tiennent, sur des ovales
 ajoutés par le jeu) ; l'horizon doit être vers **47 % de la hauteur** ; le bas de l'image est assombri sous les
-cartes, donc n'y mets rien d'important. Les fichiers carte / titre sont prêts pour une intégration future (le code
+cartes, donc n'y mets rien d'important. Le fichier titre est prêt pour une intégration future (le code
 de ces écrans appartient à une autre story).
 
 ---
@@ -27,12 +27,12 @@ de ces écrans appartient à une autre story).
 ## Préambule de style (à coller avant chaque prompt)
 
 ```
-Painterly digital illustration in the spirit of Slay the Spire background art: hand-painted look, visible soft brush
-strokes, rich but slightly muted colours, strong atmospheric perspective (far shapes fade into haze), gentle rim
-lighting, subtle film grain. A landscape from the Pokémon world, wide establishing shot, side-on battle-stage
-composition. The horizon line sits at about 47% of the image height. The centre-bottom ground area is an empty, mostly
+Official Pokémon video game battle background art, in the style of the backgrounds of the Pokémon anime and of
+Pokémon Scarlet & Violet / Pokémon Legends key art: bright, clean and colourful, soft cel shading, smooth gradients,
+crisp shapes, friendly and adventurous mood, gentle depth with lighter far layers. Side-on battle-stage composition,
+wide shot. The horizon line sits at about 47% of the image height. The centre-bottom ground area is an empty, mostly
 flat clearing (two fighters will stand there: one on the left third, two or three on the right half), with no
-objects, no strong contrast and no detail in it. The bottom 25% of the image is simple ground that can be darkened.
+objects and little detail in it. The bottom 25% of the image is simple ground that can be darkened.
 No characters, no creatures, no Pokémon, no people, no animals, no text, no letters, no logos, no UI, no frame,
 no border. 16:9, 1920x1080.
 ```
@@ -41,7 +41,7 @@ no border. 16:9, 1920x1080.
 
 ```
 characters, creatures, pokemon, people, animals, monsters, text, letters, watermark, signature, logo, UI, frame,
-border, photorealistic, photo, 3D render, CGI, pixel art, low poly, anime screenshot, cluttered foreground, objects in
+border, photorealistic, photo, gritty, dark fantasy, painterly brush strokes, pixel art, low poly, cluttered foreground, objects in
 the centre, tilted horizon, fisheye, blurry, jpeg artifacts, oversaturated neon
 ```
 
@@ -74,20 +74,11 @@ the centre, tilted horizon, fisheye, blurry, jpeg artifacts, oversaturated neon
 | `ethernatos.png` | Éthernatos (boss final) | `A cosmic final-boss arena: near-black sky with deep crimson and magenta nebula glow, huge glowing red energy rings in the sky, dark red crystals at mid-distance, a flat obsidian platform in the foreground, red sparks, ominous apocalyptic light.` |
 | `legendary.png` | Légendaire | `A sacred legendary shrine: indigo to violet sky with golden aurora, floating ancient stone fragments, glowing crystals, a flat ancient stone altar floor in the foreground, golden motes, awe-inspiring holy light.` |
 
-## Fond de la carte → `assets/art/map/parchment.png`
-
-```
-Top-down view of an old fantasy parchment sheet, aged paper texture with stains, burnt and torn edges, faint ink
-compass rose in a corner, very light hand-drawn terrain hints (tiny hills, trees) only near the edges, the whole centre
-left almost blank for paths and icons drawn by the game. Warm beige and sepia tones. No text, no letters, no
-characters. Vertical 9:16 or 16:9, 1920x1080.
-```
-
 ## Écran titre → `assets/art/title/title.png`
 
 ```
-Painterly key art for a roguelike card game set in the Pokémon world: a winding path climbing toward a tall mysterious
+Key art for a roguelike card game set in the Pokémon world: a winding path climbing toward a tall mysterious
 spire on a distant mountain, under a dramatic dawn sky with golden light shafts, layered hills and forest in haze,
-the upper centre left calm and empty for the game title added later. Slay the Spire style hand-painted look,
-rich colours, atmospheric perspective. No characters, no creatures, no text, no logos. 16:9, 1920x1080.
+the upper centre left calm and empty for the game title added later. Official Pokémon key-art style: bright,
+clean, cel-shaded, colourful, adventurous. No characters, no creatures, no text, no logos. 16:9, 1920x1080.
 ```
