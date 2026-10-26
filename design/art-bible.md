@@ -59,18 +59,20 @@ Le texte posé sur une couleur de type est blanc **avec contour sombre**, ou som
 
 ## 3. Typographie
 
-**Story 020b — polices libres (SIL OFL 1.1, licences à côté des fichiers)** :
-- **Kreon** Bold (graisse 700, `assets/fonts/kreon/`) — empattements doux, la famille de Slay the Spire : titres, en-têtes, nombres, **noms de carte**, coût. `UiStyle.font_title()`.
-- **Nunito** (`assets/fonts/nunito/`) — arrondie, très lisible : SemiBold 600 pour le texte et les descriptions de carte (`font_body()`, police par défaut du thème), ExtraBold 800 pour les boutons et pastilles (`font_bold()`).
-- Les rôles `title` / `heading` / `number` utilisent Kreon ; un Label d'écran de taille ≥ 24 reçoit Kreon automatiquement (`style_screen`).
+**Story 020b (suite) — polices « esprit Pokémon » (SIL OFL 1.1, licences `OFL.txt` à côté des fichiers)** :
+- **Lilita One** (`assets/fonts/lilita_one/`) — display ronde et massive, proche du logo Pokémon : titres d'écran et en-têtes (`UiStyle.font_title()`). Les grands titres (rôle `title`, ou Label d'écran ≥ 36 px sans couleur propre) prennent le **look du logo** : remplissage jaune `#FFCB05`, contour bleu épais `#2A62B8`, ombre portée bleu nuit `#16245E` (`UiStyle.apply_logo`).
+- **Jost** (`assets/fonts/jost/`, variable) — sans-serif géométrique façon Futura, proche des jeux Pokémon récents et du JCC : Medium 500 pour le texte et les descriptions (`font_body()`, police par défaut du thème), Bold 700 pour boutons, pastilles et **noms de carte** (`font_bold()`), ExtraBold 800 pour les nombres — PV, énergie, **coût** (`font_number()`, rôle `number`).
+- Un Label d'écran de taille ≥ 24 reçoit la police de titre automatiquement (`style_screen`).
+- **Police de fan (optionnelle)** : déposez `Pokemon Solid.ttf` (ou n'importe quel `.ttf` / `.otf`) dans `assets/fonts/pokemon/` ; elle remplace automatiquement Lilita One pour tous les titres, sans toucher au code (`UiStyle.fan_font_path()`). Lilita One reste en secours pour les glyphes absents (accents É, é…). Attention : ces polices de fan ne sont pas libres — à n'utiliser que pour un usage personnel.
+- Kreon / Nunito (story 020b initiale) ne sont plus utilisées ; leurs dossiers `assets/fonts/kreon/` et `assets/fonts/nunito/` peuvent être supprimés.
 
 Hiérarchie par taille et contour (`UiStyle.apply_label`) :
 
 | Rôle | Taille | Contour | Couleur |
 |---|---|---|---|
-| `title` (titre d'écran) | 40 | 8 px `OUTLINE` | `TEXT` |
+| `title` (titre d'écran) — look logo | 40 | 8 px bleu `#2A62B8` + ombre | jaune `#FFCB05` |
 | `heading` (titre de panneau) | 28 | 6 px | `TEXT` |
-| `number` (PV, énergie, coût) | 22 | 6 px | `TEXT` / accent |
+| `number` (PV, énergie, coût) — Jost ExtraBold | 22 | 6 px | `TEXT` / accent |
 | `body` | 18 | 0 | `TEXT` |
 | `caption` (aide, légende) | 15 | 0 | `TEXT_MUTED` |
 | `dark` (texte sur crème) | 14–18 | 0 | `TEXT_DARK` |
@@ -154,7 +156,7 @@ Le bouton appelant garde son anneau extérieur (rareté, sélection, état) ; la
 │(2) [  Nom de la carte  ]│  contour 2,5 px OUTLINE, rayon 8 ; légendaire : contour or 3 px + liseré rose
 │ ┌─────────────[Type]──┐ │  coût : gemme jaune (2) ; nom : bandeau crème, texte sombre, rétrécit pour tenir
 │ │      artwork du      │ │  fenêtre d'illustration : fond clair du type + halo, artwork officiel
-│ │   Pokémon porteur    │ │  (repli : sprite ; sinon rien) ; compétence : Poké Ball + « Équipe »
+│ │   Pokémon porteur    │ │  (repli : sprite ; sinon rien) ; sans porteur : illustration de l'effet (voir plus bas)
 │ │▓▓▓▓ Nom Pokémon ▓▓▓▓▓│ │  pastille de type en haut à droite ; nom du porteur en bas (bande sombre)
 │ └─────────────────────┘ │
 │ ┌─────────────────────┐ │  description : cartouche crème, texte sombre centré,
@@ -167,10 +169,27 @@ Survol : liseré blanc lumineux. Carte injouable : face à 45 % d'opacité (gér
 ### Carte premium (story 020b, `CardFace`)
 - **Cadre en matière selon la rareté** : bande de 6 px (réf. 194 px de haut) en ardoise (Départ / Commune), argent brossé (Peu commune), or (Rare), **or + deux gemmes taillées magenta** sur les côtés (Légendaire, + liseré rose interne). Matière teintée à 10 % par la couleur du type ; le **corps** reste à la couleur du type (dégradé sur grain).
 - **Biseau** : liseré clair sur la bande, ombre interne sombre là où le corps passe sous le cadre ; ombre interne en haut de la fenêtre d'illustration et de la description.
-- **Bandeau de nom et description en parchemin** (or brossé pour le bandeau légendaire) ; nom en Kreon, description en Nunito.
+- **Bandeau de nom et description en parchemin** (or brossé pour le bandeau légendaire) ; nom en Jost Bold, coût en Jost ExtraBold, description en Jost Medium.
 - **Ombre portée douce** sous la carte (3 couches, 4 px ; 9 px au survol).
 - **Holo animé** (`card_holo.gdshader`, superposition additive) sur Rare (0,30) et Légendaire (0,40) : bandes arc-en-ciel diagonales qui glissent avec le temps et la souris + étincelles ; atténué à 20 % sur la description pour garder le texte lisible.
 - **Survol** (toutes les cartes, jouables ou non) : la face grandit à **×1,08** (pivot en bas au centre, tween 0,14 s), s'**incline jusqu'à 2,5°** vers le curseur, passe au premier plan (z 10) et reçoit un reflet discret qui suit la souris ; le liseré lumineux reste réservé aux cartes jouables. Purement visuel : le bouton garde sa taille, sa place et ses clics.
+
+### Illustration des cartes sans Pokémon porteur (story 020b suite, `EffectArt`)
+Plus de Poké Ball : la fenêtre montre l'**effet principal** de la carte, dessiné en code façon effets d'attaque Pokémon (couleurs vives, dégradé doux, contour sombre épais, reflet blanc), déduit des données de la carte (aucun code par carte). Priorité si plusieurs effets : statut > soin > protection > pioche > énergie > force > dégâts. La bande du bas affiche le mot de l'effet au lieu de « Équipe ».
+
+| Effet (donnée) | Dessin | Bande |
+|---|---|---|
+| `block` > 0 | bulle hexagonale verte à facettes (Abri) | Protection |
+| `heal` > 0 | cœur rose + étincelles | Soin |
+| `draw` > 0 | trois cartes en éventail | Pioche |
+| `energy` > 0 | orbe jaune + éclair | Énergie |
+| statut `sleep` | « Zzz » lavande (couleur de `statuses.json`) | Sommeil |
+| statut `paralysis` | éclair jaune + étincelles | Paralysie |
+| statut `poison` | goutte violette + bulles | Poison |
+| statut `burn` | flamme orange à cœur jaune | Brûlure |
+| statut `freeze` | cristaux de glace | Gel |
+| autre statut / `strength` | flèche rouge montante + étoiles | Renfort |
+| `damage` > 0 seul | étoile d'impact orange | Attaque |
 
 ## 8. Finition d'image (story 020b, `PostFx`)
 
