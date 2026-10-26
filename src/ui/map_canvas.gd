@@ -510,7 +510,7 @@ func _rebuild_region() -> void:
 		hi = hi.max(c)
 		if node.room_type == "boss":
 			boss_c = c
-			_islands.append(Vector3(c.x, c.y, 50.0))
+			_islands.append(Vector3(c.x, c.y, 44.0))
 		else:
 			_islands.append(Vector3(c.x, c.y, 46.0))
 		for next_id: String in node.next:
