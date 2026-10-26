@@ -75,7 +75,7 @@ void fragment() {
 	float halo = rays * 0.45 * exp(-r * r * 14.0);
 
 	float keep = 1.0 - smoothstep(hand_top - 0.05, hand_top, uv.y);
-	float a = clamp(fog + mist + cl * 0.8, 0.0, 0.8) * keep;
+	float a = clamp(fog + mist + cl * 0.8, 0.0, 0.45) * keep;
 	vec3 add = glow_color.rgb * (g + shaft + halo) * keep;
 
 	// Film grain + static brush mottling: positive = lighten, negative = darken (premultiplied output cannot go below 0).

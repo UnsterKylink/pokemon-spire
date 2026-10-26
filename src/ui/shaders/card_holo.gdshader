@@ -38,6 +38,6 @@ void fragment() {
 	// Glare: soft white spot following the cursor, plus a sweeping stripe.
 	float spot = exp(-dot(UV - mouse, UV - mouse) * 6.0);
 	float stripe = exp(-pow((UV.x + UV.y * 0.6) - (mouse.x * 1.6 - 0.1), 2.0) * 40.0);
-	vec3 shine = vec3(1.0, 0.97, 0.9) * (spot * 0.55 + stripe * 0.35) * glare;
+	vec3 shine = vec3(1.0, 0.97, 0.9) * (spot * 0.4 + stripe * 0.3) * glare;
 	COLOR = vec4((foil * 0.55 + shine) * calm * inside, 1.0);
 }

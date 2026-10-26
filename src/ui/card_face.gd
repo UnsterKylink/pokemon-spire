@@ -18,7 +18,7 @@ const INSET: float = 3.0
 const BASE_H: float = 194.0
 const RADIUS: float = 8.0
 const OUTLINE_W: float = 2.5
-const PAD: float = 6.0
+const PAD: float = 7.0
 const GEM_R: float = 12.5
 const BANNER_Y: float = 5.0
 const BANNER_H: float = 23.0
@@ -38,14 +38,14 @@ const BANNER_GOLD_TOP: Color = Color("#FFF1A8")
 const STRIP_BG: Color = Color(0.07, 0.08, 0.16, 0.72)
 const HOVER_GLOW: Color = Color(1, 1, 1, 0.9)
 ## Story 020b: frame band width (reference px), frame material texture per rarity, gem colour of legendary frames.
-const FRAME_BAND: float = 4.5
+const FRAME_BAND: float = 6.0
 const RARITY_MATERIAL: Dictionary = {
 	"starter": "card_stone", "common": "card_stone", "uncommon": "card_silver", "rare": "card_gold"}
 const LEGENDARY_GEM: Color = Color("#E0307A")
 ## Generated textures are 512 px; UVs = local px / TEX_SIZE (+ a per-card offset so cards do not look stamped).
 const TEX_SIZE: float = 512.0
 ## How much of the type colour tints the frame material (0 = raw metal / stone).
-const FRAME_TYPE_TINT: float = 0.2
+const FRAME_TYPE_TINT: float = 0.1
 ## Drop shadow: offset (reference px) and alpha of the three soft layers; hovered = longer shadow.
 const SHADOW_OFFSET: float = 4.0
 const SHADOW_OFFSET_HOVER: float = 9.0
@@ -57,9 +57,9 @@ const HOVER_TIME: float = 0.14
 const HOVER_Z: int = 10
 const TILT_FOLLOW: float = 12.0
 ## Holographic foil strength (card_holo.gdshader `holo`) and hover glare.
-const HOLO_RARE: float = 0.28
+const HOLO_RARE: float = 0.3
 const HOLO_LEGENDARY: float = 0.4
-const GLARE_HOVER: float = 0.3
+const GLARE_HOVER: float = 0.16
 ## Foil strength kept over the description box (fraction), so the text stays readable.
 const HOLO_CALM: float = 0.2
 const HOLO_SHADER_PATH: String = "res://src/ui/shaders/card_holo.gdshader"

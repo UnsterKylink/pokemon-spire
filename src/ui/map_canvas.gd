@@ -16,9 +16,9 @@ signal node_pressed(node_id: String)
 enum IconState { NORMAL, FUTURE, REACHABLE, VISITED, CURRENT }
 
 const COL_SPACING: float = 150.0
-const ROW_SPACING: float = 66.0
-const PAD_TOP: float = 58.0
-const PAD_BOTTOM: float = 36.0
+const ROW_SPACING: float = 62.0
+const PAD_TOP: float = 54.0
+const PAD_BOTTOM: float = 32.0
 ## Radius of a room icon / of the gym emblem.
 const ICON_RADIUS: float = 21.0
 const BOSS_RADIUS: float = 30.0

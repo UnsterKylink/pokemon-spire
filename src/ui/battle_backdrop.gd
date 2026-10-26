@@ -104,7 +104,8 @@ func set_platforms(rects: Array[Rect2]) -> void:
 	if rects == _platforms:
 		return
 	_platforms = rects.duplicate()
-	queue_redraw()
+	if _particle_layer != null:
+		_particle_layer.queue_redraw()
 
 
 ## Top of the hand area (local y); below it the backdrop is darkened by `hand_shade`. -1 = no band.
@@ -251,7 +252,6 @@ func _draw() -> void:
 	_gradient_rect(Rect2(0, hy, w, h - hy), ground[0], ground[1])
 	draw_line(Vector2(0, hy), Vector2(w, hy), ground[0].darkened(0.25), 2.0)
 	_draw_ground_detail(String(_def.get("ground_detail", "none")), ground[0], hy)
-	_draw_platforms(ground[0])
 	_draw_hand_band()
 
 
@@ -263,7 +263,6 @@ func _draw_painted(ground_top: Color) -> void:
 	var k: float = maxf(size.x / ts.x, size.y / ts.y)
 	var ds: Vector2 = ts * k
 	draw_texture_rect(_painted, Rect2((size - ds) * 0.5, ds), false)
-	_draw_platforms(ground_top, _num("painted_platform_alpha", 0.55))
 	_draw_hand_band()
 
 
@@ -304,30 +303,29 @@ func _fill(pts: PackedVector2Array, c: Color) -> void:
 	draw_polygon(pts, cols)
 
 
-## Ellipse shaded from a light centre to a darker rim (triangle fan with vertex colours).
-func _fill_radial(center: Vector2, rx: float, ry: float, inner: Color, outer: Color) -> void:
-	var pts := PackedVector2Array([center])
-	var cols := PackedColorArray([inner])
-	for i: int in ELLIPSE_POINTS + 1:
-		var a: float = TAU * i / ELLIPSE_POINTS
-		pts.append(center + Vector2(cos(a) * rx, sin(a) * ry))
-		cols.append(outer)
-	for i: int in ELLIPSE_POINTS:
-		draw_polygon(PackedVector2Array([pts[0], pts[i + 1], pts[i + 2]]), PackedColorArray([cols[0], cols[i + 1], cols[i + 2]]))
-
-
-func _draw_platforms(ground_top: Color, alpha: float = 1.0) -> void:
+## Story 020b: drawn on the particle layer, ABOVE the atmosphere shader, so the haze never veils the platforms.
+func _draw_platforms(ci: CanvasItem, ground_top: Color, alpha: float = 1.0) -> void:
 	var fill: Color = ground_top.lightened(_num("platform_lighten", 0.18))
 	var rim: Color = ground_top.darkened(_num("platform_rim_darken", 0.4))
 	for r: Rect2 in _platforms:
 		var c := Vector2(r.position.x + r.size.x * 0.5, r.position.y)
 		var rx: float = r.size.x * 0.5
 		var ry: float = maxf(rx * 0.22, 10.0)
-		_fill_radial(c + Vector2(0, 6), rx + 14.0, ry + 7.0, Color(0, 0, 0, 0.3 * alpha), Color(0, 0, 0, 0.0))
-		_fill(_ellipse(c, rx, ry), Color(rim, alpha))
-		_fill_radial(c - Vector2(0, 3), rx - 5.0, ry - 4.0, Color(fill.lightened(0.12), alpha), Color(fill.darkened(0.12), alpha))
-		_fill(_ellipse(c - Vector2(rx * 0.15, ry * 0.35), rx * 0.45, ry * 0.25), Color(1, 1, 1, 0.14 * alpha))
-		draw_arc(c - Vector2(0, 3), rx - 5.0, PI * 1.05, PI * 1.95, 24, Color(1, 1, 1, 0.12 * alpha), 1.5, true)
+		_radial_on(ci, c + Vector2(0, 6), rx + 14.0, ry + 7.0, Color(0, 0, 0, 0.3 * alpha), Color(0, 0, 0, 0.0))
+		ci.draw_colored_polygon(_ellipse(c, rx, ry), Color(rim, alpha))
+		_radial_on(ci, c - Vector2(0, 3), rx - 5.0, ry - 4.0, Color(fill.lightened(0.12), alpha), Color(fill.darkened(0.12), alpha))
+		ci.draw_colored_polygon(_ellipse(c - Vector2(rx * 0.15, ry * 0.35), rx * 0.45, ry * 0.25), Color(1, 1, 1, 0.14 * alpha))
+		ci.draw_arc(c - Vector2(0, 3), rx - 5.0, PI * 1.05, PI * 1.95, 24, Color(1, 1, 1, 0.12 * alpha), 1.5, true)
+
+
+## Ellipse shaded from a light centre to a darker rim on canvas `ci` (triangle fan with vertex colours).
+func _radial_on(ci: CanvasItem, center: Vector2, rx: float, ry: float, inner: Color, outer: Color) -> void:
+	var prev := center + Vector2(rx, 0)
+	for i: int in ELLIPSE_POINTS:
+		var a: float = TAU * (i + 1) / ELLIPSE_POINTS
+		var p := center + Vector2(cos(a) * rx, sin(a) * ry)
+		ci.draw_polygon(PackedVector2Array([center, prev, p]), PackedColorArray([inner, outer, outer]))
+		prev = p
 
 
 func _draw_ground_detail(kind: String, top: Color, hy: float) -> void:
@@ -616,6 +614,9 @@ func _seed_particles() -> void:
 
 
 func _draw_particles() -> void:
+	if not _def.is_empty():
+		var painted_alpha: float = _num("painted_platform_alpha", 0.55) if _painted != null else 1.0
+		_draw_platforms(_particle_layer, _ground_colors()[0], painted_alpha)
 	if _particles.is_empty():
 		return
 	var col: Color = _color(_particle_def.get("color", null), Color.WHITE)

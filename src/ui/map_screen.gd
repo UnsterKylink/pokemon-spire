@@ -43,7 +43,7 @@ const INK_RED: Color = MapCanvas.INK_RED
 const SHEET_TINT: float = 0.12
 ## Inner margins of the sheet (keep the ink off the burnt edges).
 const SHEET_MARGIN_X: int = 40
-const SHEET_MARGIN_Y: int = 22
+const SHEET_MARGIN_Y: int = 18
 ## Where the "next floor" row sits in the visible map area when scrolling to it (0 = top, 1 = bottom).
 const FOCUS_RATIO: float = 0.5
 

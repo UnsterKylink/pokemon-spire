@@ -64,7 +64,7 @@ const TITLE_FONT_MIN_SIZE: int = 24
 const UI_TEXTURE_DIR: String = "res://assets/art/ui/"
 const SHEEN_SHADER_PATH: String = "res://src/ui/shaders/ui_sheen.gdshader"
 ## Sheen strengths: [grain, mottling, top_light, bottom_shade, highlight_line] for panels and buttons.
-const SHEEN_PANEL: Array[float] = [0.06, 0.07, 0.07, 0.14, 0.18]
+const SHEEN_PANEL: Array[float] = [0.06, 0.03, 0.07, 0.14, 0.18]
 const SHEEN_BUTTON: Array[float] = [0.05, 0.03, 0.16, 0.2, 0.42]
 ## Below this fill alpha a box is a see-through overlay: no sheen.
 const SHEEN_MIN_ALPHA: float = 0.5
