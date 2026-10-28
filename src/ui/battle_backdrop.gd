@@ -85,8 +85,14 @@ func set_backdrop(id: String) -> void:
 	_particle_def = _def.get("particles", {}) if _def.get("particles", null) is Dictionary else {}
 	_painted = null
 	var painted_path: String = String(_data().get("painted_path", ""))
-	if painted_path.contains("%s") and ResourceLoader.exists(painted_path % _id):
-		_painted = load(painted_path % _id) as Texture2D
+	if painted_path.contains("%s"):
+		# The image may be saved as PNG or JPG (painted_extensions); the first one found wins.
+		var base: String = (painted_path % _id).get_basename()
+		for ext in _data().get("painted_extensions", ["png"]):
+			var path: String = "%s.%s" % [base, String(ext)]
+			if ResourceLoader.exists(path):
+				_painted = load(path) as Texture2D
+				break
 	_seed_particles()
 	_update_atmosphere()
 	queue_redraw()

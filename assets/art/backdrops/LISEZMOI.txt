@@ -1,7 +1,7 @@
 Dossier des décors de combat peints (story 020b).
 
-Range ici tes images PNG (16:9, idéalement 1920x1080), avec EXACTEMENT ces noms
-(minuscules, sans accent) :
+Range ici tes images PNG ou JPG (16:9, idéalement 1920x1080), avec EXACTEMENT ces noms
+(minuscules, sans accent ; .png ou .jpg) :
 
 route.png       normal.png      fire.png        water.png       electric.png
 grass.png       ice.png         fighting.png    poison.png      ground.png
