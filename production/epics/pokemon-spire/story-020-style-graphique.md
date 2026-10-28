@@ -1,12 +1,12 @@
 # Story 020: Style graphique, fonds de combat et cartes
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Presentation
 > **Type**: Visual/Feel
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: 2026-10-26
+> **Last Updated**: 2026-10-28
 
 ## Context
 
@@ -28,11 +28,11 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 5), scoped to this story:*
 
-- [ ] Une bible artistique définit le style (palette, typographie, cadres, icônes) et est appliquée à tous les écrans.
-- [ ] Chaque zone a un fond de combat propre (selon le type de l'arène / l'environnement).
-- [ ] Les cartes sont redessinées : cadre selon le type et la rareté, illustration du Pokémon porteur, lisibilité conservée.
-- [ ] La carte d'avancement (map) est plus belle : décor de zone, icônes de salles, chemin parcouru visible.
-- [ ] Tous les écrans gardent 1280×720 sans coupure ni chevauchement.
+- [x] Une bible artistique définit le style (palette, typographie, cadres, icônes) et est appliquée à tous les écrans.
+- [x] Chaque zone a un fond de combat propre (selon le type de l'arène / l'environnement).
+- [x] Les cartes sont redessinées : cadre selon le type et la rareté, illustration du Pokémon porteur, lisibilité conservée.
+- [x] La carte d'avancement (map) est plus belle : décor de zone, icônes de salles, chemin parcouru visible.
+- [x] Tous les écrans gardent 1280×720 sans coupure ni chevauchement.
 
 ---
 
@@ -67,7 +67,7 @@
 **Required evidence**:
 - Visual/Feel : a retained screenshot in `production/qa/evidence/` + sign-off in `production/qa/evidence/[story-slug]-evidence.md`
 
-**Status**: [ ] Not yet created
+**Status**: [x] Captures et validation dans `production/qa/evidence/story-020-style-graphique/` + `story-020-style-graphique-evidence.md`
 
 ---
 
@@ -75,3 +75,10 @@
 
 - Depends on: Story 019
 - Unlocks: Story 021
+
+## Completion Notes
+**Completed**: 2026-10-28
+**Criteria**: 5/5 passing (validé par le joueur en jeu ; captures 01–06, 1x-, 2x- conservées)
+**Deviations**: Advisory only — le style a été retouché ensuite en story 020b (polices Pokémon, carte de région illustrée, décors peints fournis par le joueur) ; liseré de la carte sélectionnée en combat et écran du choix du starter encore en sprites pixelisés
+**Test Evidence**: Visual/Feel — captures dans `production/qa/evidence/story-020-style-graphique/` ; validation joueur dans `production/qa/evidence/story-020-style-graphique-evidence.md`
+**Code Review**: Skipped — Solo mode
