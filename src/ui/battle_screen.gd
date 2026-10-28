@@ -1764,9 +1764,11 @@ func _sprite_of(c: Combatant) -> AnimatedPokemon:
 	return null
 
 
+## Centre of the drawn frame of `spr`, in _fx_layer coordinates (every effect is parented to that layer, which does
+## not sit at the screen origin: the run's top bar pushes the battle screen down).
 func _center_of(spr: AnimatedPokemon) -> Vector2:
-	var r: Rect2 = spr.get_global_rect()
-	return r.position + spr.get_drawn_rect().get_center()
+	var g: Vector2 = spr.get_global_rect().position + spr.get_drawn_rect().get_center()
+	return _fx_layer.get_global_transform().affine_inverse() * g
 
 
 func _view_of(c: Combatant) -> EnemyView:
@@ -1881,8 +1883,11 @@ func _charge(from_spr: AnimatedPokemon, to_spr: AnimatedPokemon, type_id: String
 	var to_c: Vector2 = _center_of(to_spr)
 	var dir: Vector2 = (to_c - from_c).normalized()
 	var dist: float = minf(BattleFxDirector.cfg_f("lunge", "distance", 120.0), from_c.distance_to(to_c) * 0.6)
+	var gen: int = _fx.generation()
 	var out_s: float = _fx.lunge(from_spr, dir, dist)
 	await _fx.wait(out_s)
+	if _fx.is_stale(gen):
+		return  # skipped meanwhile (maybe a newer queue runs): no projectile into it
 	var d: float = _fx.fx_projectile(_fx_layer, type_id, from_c + dir * dist, to_c)
 	await _fx.wait(d)
 
@@ -1936,7 +1941,10 @@ func _play_hit(ev: Dictionary) -> void:
 			color = BattleFxDirector.cfg_color("number", "color_resisted", Color(0.7, 0.7, 0.75))
 			size = int(BattleFxDirector.cfg_f("number", "font_size_resisted", 24.0))
 		dur = maxf(dur, _fx.number(_fx_layer, text, color, size, at + Vector2(0, BattleFxDirector.cfg_f("number", "start_offset_y", -34.0))))
+		var gen: int = _fx.generation()
 		await _fx.wait(_fx.t(0.12))  # the bar moves right after the impact starts
+		if _fx.is_stale(gen):
+			return  # skipped meanwhile: the real state is shown by _on_fx_finished
 	dur = maxf(dur, _apply_snaps(ev))
 	_show_effectiveness(tgt, mult)
 	await _fx.wait(maxf(dur - _fx.t(0.12), 0.0))

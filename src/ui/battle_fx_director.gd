@@ -229,6 +229,17 @@ func is_busy() -> bool:
 	return _busy
 
 
+## Id of the current queue (bumped by every run). A handler that awaited compares it after the await: a different
+## value means its queue was skipped and a newer one started, so it must not spawn effects into the new queue.
+func generation() -> int:
+	return _gen
+
+
+## True when `gen` (read before an await) is no longer the live, unskipped queue.
+func is_stale(gen: int) -> bool:
+	return gen != _gen or _skip or not _busy
+
+
 ## True from skip() until the next run (fx helpers are no-ops, waits return immediately).
 func is_skipping() -> bool:
 	return _skip
@@ -342,7 +353,7 @@ func _call_fx(method: String, args: Array) -> float:
 	return float(r) if r is float or r is int else 0.0
 
 
-## Projectile of attack type `type_id` from -> to (global positions). Returns its duration.
+## Projectile of attack type `type_id` from -> to (positions in `parent` coordinates). Returns its duration.
 func fx_projectile(parent: Control, type_id: String, from_pos: Vector2, to_pos: Vector2) -> float:
 	return _call_fx("play_projectile", [parent, type_id, from_pos, to_pos, speed_scale()])
 
@@ -483,7 +494,7 @@ func slide_in(node: Control, dx: float, seconds: float, pop: float) -> float:
 	return secs
 
 
-## Floating number / word at global `at` (centre of the text), popping then rising and fading. Returns the pop time.
+## Floating number / word at `at` (in `parent` coordinates) (centre of the text), popping then rising and fading. Returns the pop time.
 func number(parent: Control, text: String, color: Color, font_size: int, at: Vector2) -> float:
 	if not _active():
 		return 0.0
@@ -496,7 +507,7 @@ func number(parent: Control, text: String, color: Color, font_size: int, at: Vec
 	l.size = l.get_minimum_size()
 	var screen_w: float = parent.get_viewport_rect().size.x
 	var x: float = clampf(at.x - l.size.x * 0.5, 8.0, maxf(8.0, screen_w - l.size.x - 8.0))
-	l.global_position = Vector2(x, at.y - l.size.y * 0.5)
+	l.position = Vector2(x, at.y - l.size.y * 0.5)
 	l.pivot_offset = l.size * 0.5
 	l.scale = Vector2.ONE * cfg_f("number", "pop_scale", 1.5)
 	var secs: float = t(cfg_f("number", "seconds", 1.05))
@@ -504,7 +515,7 @@ func number(parent: Control, text: String, color: Color, font_size: int, at: Vec
 	var pop: float = t(cfg_f("number", "pop_seconds", 0.14))
 	var tw: Tween = new_tween(l).set_parallel(true)
 	tw.tween_property(l, "scale", Vector2.ONE, pop).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(l, "global_position:y", l.global_position.y - cfg_f("number", "rise", 64.0), secs)
+	tw.tween_property(l, "position:y", l.position.y - cfg_f("number", "rise", 64.0), secs)
 	tw.tween_property(l, "modulate:a", 0.0, fade).set_delay(maxf(0.0, secs - fade))
 	tw.chain().tween_callback(l.queue_free)
 	return pop
@@ -523,11 +534,11 @@ func burst(parent: Control, at: Vector2, color: Color, count: int, radius: float
 		d.pivot_offset = d.size * 0.5
 		d.rotation = PI * 0.25
 		parent.add_child(d)
-		d.global_position = at - d.size * 0.5
+		d.position = at - d.size * 0.5
 		var a: float = TAU * float(i) / float(maxi(count, 1))
 		var dist: float = radius * (0.65 + 0.35 * float(i % 3) / 2.0)
 		var tw: Tween = new_tween(d).set_parallel(true)
-		tw.tween_property(d, "global_position", at - d.size * 0.5 + Vector2(cos(a), sin(a)) * dist, secs).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(d, "position", at - d.size * 0.5 + Vector2(cos(a), sin(a)) * dist, secs).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(d, "modulate:a", 0.0, secs).set_delay(secs * 0.4)
 		tw.tween_property(d, "scale", Vector2.ONE * 0.3, secs)
 		tw.chain().tween_callback(d.queue_free)
@@ -536,12 +547,12 @@ func burst(parent: Control, at: Vector2, color: Color, count: int, radius: float
 
 func _ball_arc(p: float, ball: Control, from: Vector2, to: Vector2, arc: float) -> void:
 	if is_instance_valid(ball):
-		ball.global_position = from.lerp(to, p) - Vector2(0, sin(p * PI) * arc) - ball.size * 0.5
+		ball.position = from.lerp(to, p) - Vector2(0, sin(p * PI) * arc) - ball.size * 0.5
 		ball.rotation = p * TAU * 2.0
 
 
 ## Capture throw (await it): a ball arcs from `from` to `to`, `target` is absorbed, the ball wobbles, then sparkles
-## (success) or a poof and the target pops back (failure). Positions are global.
+## (success) or a poof and the target pops back (failure). Positions are in `parent` coordinates.
 func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, success: bool, target: Control) -> void:
 	if not _active():
 		return
@@ -551,7 +562,7 @@ func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, su
 	ball.size = Vector2.ONE * size_px
 	ball.pivot_offset = ball.size * 0.5
 	parent.add_child(ball)
-	ball.global_position = from - ball.size * 0.5
+	ball.position = from - ball.size * 0.5
 	var arc: float = cfg_f("capture", "arc_height", 150.0)
 	var ts: float = t(cfg_f("capture", "throw_seconds", 0.55))
 	var tw: Tween = new_tween(ball)
@@ -567,7 +578,7 @@ func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, su
 		at.tween_property(target, "scale", Vector2.ONE * 0.12, absorb).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		at.tween_property(target, "modulate", Color(1, 1, 1, 0.0), absorb)
 	var drop: Tween = new_tween(ball)
-	drop.tween_property(ball, "global_position:y", ball.global_position.y + 24.0, absorb).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	drop.tween_property(ball, "position:y", ball.position.y + 24.0, absorb).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	await wait(absorb + t(0.05))
 	var wob: float = t(cfg_f("capture", "wobble_seconds", 0.28))
 	var deg: float = deg_to_rad(cfg_f("capture", "wobble_degrees", 24.0))
@@ -583,7 +594,7 @@ func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, su
 		await wait((wob * 1.3) * float(count))
 	if _skip or not is_instance_valid(ball):
 		return
-	var centre: Vector2 = ball.global_position + ball.size * 0.5
+	var centre: Vector2 = ball.position + ball.size * 0.5
 	var burst_s: float = cfg_f("capture", "burst_seconds", 0.55)
 	var n: int = int(cfg_f("capture", "sparkle_count", 14.0))
 	var radius: float = cfg_f("capture", "sparkle_radius", 70.0)
