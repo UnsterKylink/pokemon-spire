@@ -108,6 +108,10 @@ func setup(data: GameData, run: RunState, summary: Dictionary, offers: Array[Car
 	if not evolved and not upgraded.is_empty():
 		_bonus_label.text += "\n" + TEXT_UPGRADED % [String(summary.get("to_name", "")), upgraded.trim_suffix("+")]
 	_set_step(Step.REVEAL)
+	# Story 021: white flash and grow on the new form (display only; no-op with Instantané / headless).
+	if evolved and _forms_row.get_child_count() > 0:
+		var after_panel: Node = _forms_row.get_child(_forms_row.get_child_count() - 1)
+		BattleFxDirector.evolve_pop(after_panel.find_child("Sprite", true, false) as Control)
 
 
 ## Story 014: the team evolution summary. `rows` = RunState.evolve_team() (already applied by Main); `run` is read for

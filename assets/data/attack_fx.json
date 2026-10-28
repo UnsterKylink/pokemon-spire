@@ -1,0 +1,265 @@
+{
+	"_doc": "Effets visuels d'attaque (story 021), dessines en code par src/ui/attack_fx.gd (aucune image). 'types': id de type (les 18 de types.json + 'default', utilise pour un type inconnu) -> {colors, projectile, impact}. colors: {main (defaut = couleur du type dans types.json), light (defaut main eclairci), dark (defaut main assombri)}, '#RRGGBB'. Les cles de couleur 'main'/'light'/'dark'/'white' ou un '#RRGGBB' sont acceptees partout ou une couleur est demandee. PROJECTILE (partie qui voyage de l'attaquant vers la cible): style (ball|stream|bolt|leaves|shards|crescents|rings|fist|swarm|boulders|sparkles|streaks), size (px, rayon de la tete), duration (s, a vitesse 1), count (nombre d'elements), sparks/spark_shape/spark_colors/spark_size/spark_back/spark_gravity (particules semees derriere la tete; formes: ember, drop, star4, leaf, shard, bubble, rock, feather, cross, arrow, zee, bolt, crystal, streak, flame, circle), plus les extras du style: tail/tail_len (ball: queue de comete), cluster/look(cel|soft)/orbit (ball), jet_len (stream), metal (shards), radius/thick/fill/edge/inner (crescents), arc (boulders), ball_color (ball). IMPACT (explosion sur la cible): duration (s), size (px de reference, x force 0.6..1.6), layers: liste de couches dessinees dans l'ordre, chacune avec delay et life (fractions 0..1 de la duree). Couches: flash {radius,color}; ring {radius,width,color,squash,oy}; burst {shape,count<=60,speed,size,gravity,dir(deg, 0=droite, -90=haut),spread(deg),spin,colors[],alpha,stagger,rot_mode(dir|upright),glow,oy}; star {points,radius,inner,color,inner_color,rot}; claws {count,length,width,angle,spacing,color,edge}; bolts {count,length,color}; spikes {count,radius,spacing,color,oy}; hex {radius,color,edge,fill}. Toutes les distances sont des fractions de 'size'. 'status': id de statut -> {duration,size,layers} (couleur = statuses.json). 'buff': block|heal|strength|energy -> {colors,duration,size,layers}. Toutes les durees sont en secondes a vitesse 1 (le jeu les divise par le facteur de vitesse).",
+	"types": {
+		"normal": {
+			"colors": {"light": "#FFFFFF", "dark": "#6E6D4F"},
+			"projectile": {"style": "streaks", "size": 17, "duration": 0.35, "sparks": 6, "spark_shape": "star4", "spark_colors": ["light", "main"], "spark_size": 0.28},
+			"impact": {"duration": 0.5, "size": 74, "layers": [
+				{"kind": "flash", "radius": 1.0, "color": "light", "life": 0.5},
+				{"kind": "star", "points": 8, "radius": 0.9, "inner": 0.5, "color": "light", "inner_color": "white", "life": 0.7},
+				{"kind": "ring", "radius": 1.15, "width": 0.1, "color": "light", "life": 0.6},
+				{"kind": "burst", "shape": "streak", "count": 10, "speed": 1.3, "size": 0.12, "colors": ["light", "main"]}
+			]}
+		},
+		"fire": {
+			"colors": {"light": "#FFE27A", "dark": "#B8300E"},
+			"projectile": {"style": "ball", "size": 19, "duration": 0.5, "tail": true, "tail_len": 3.4, "sparks": 12, "spark_shape": "ember", "spark_colors": ["light", "main"], "spark_size": 0.28, "spark_gravity": -1.0},
+			"impact": {"duration": 0.65, "size": 70, "layers": [
+				{"kind": "flash", "radius": 1.2, "color": "light", "life": 0.5},
+				{"kind": "star", "points": 8, "radius": 0.85, "inner": 0.55, "color": "main", "inner_color": "light", "life": 0.6},
+				{"kind": "ring", "radius": 1.3, "width": 0.12, "color": "main", "life": 0.55},
+				{"kind": "burst", "shape": "flame", "count": 7, "speed": 0.8, "size": 0.2, "gravity": -0.7, "colors": ["main", "light", "#FFB02E"], "rot_mode": "upright", "dir": -90, "spread": 200},
+				{"kind": "burst", "shape": "ember", "count": 16, "speed": 1.5, "size": 0.08, "gravity": -0.5, "colors": ["light", "main"]}
+			]}
+		},
+		"water": {
+			"colors": {"light": "#BFE0FF", "dark": "#2A52B8"},
+			"projectile": {"style": "stream", "size": 18, "duration": 0.45, "jet_len": 10, "sparks": 10, "spark_shape": "drop", "spark_colors": ["main", "light"], "spark_size": 0.34, "spark_gravity": 2.0, "spark_back": 2.5},
+			"impact": {"duration": 0.65, "size": 66, "layers": [
+				{"kind": "flash", "radius": 0.9, "color": "light", "life": 0.4},
+				{"kind": "ring", "radius": 1.3, "width": 0.1, "color": "light", "squash": 0.55, "oy": 0.2, "life": 0.6},
+				{"kind": "burst", "shape": "drop", "count": 20, "speed": 1.3, "size": 0.1, "gravity": 1.1, "dir": -90, "spread": 150, "colors": ["main", "light", "white"]},
+				{"kind": "burst", "shape": "bubble", "count": 7, "speed": 0.7, "size": 0.12, "gravity": -0.3, "colors": ["light", "main"], "dir": -90, "spread": 220},
+				{"kind": "ring", "radius": 0.8, "width": 0.08, "color": "main", "delay": 0.1, "life": 0.5}
+			]}
+		},
+		"electric": {
+			"colors": {"light": "#FFF7B0", "dark": "#B58A00"},
+			"projectile": {"style": "bolt", "size": 11, "duration": 0.3},
+			"impact": {"duration": 0.55, "size": 70, "layers": [
+				{"kind": "flash", "radius": 1.3, "color": "light", "life": 0.35},
+				{"kind": "bolts", "count": 8, "length": 1.25, "color": "main"},
+				{"kind": "star", "points": 6, "radius": 0.7, "inner": 0.35, "color": "light", "inner_color": "white", "life": 0.5},
+				{"kind": "burst", "shape": "bolt", "count": 5, "speed": 1.0, "size": 0.17, "colors": ["main", "light"], "spin": 3},
+				{"kind": "burst", "shape": "star4", "count": 10, "speed": 1.4, "size": 0.07, "colors": ["white", "light"]}
+			]}
+		},
+		"grass": {
+			"colors": {"light": "#C9F59A", "dark": "#2F7A22"},
+			"projectile": {"style": "leaves", "size": 15, "duration": 0.55, "count": 8, "sparks": 6, "spark_shape": "star4", "spark_colors": ["light"], "spark_size": 0.2},
+			"impact": {"duration": 0.65, "size": 66, "layers": [
+				{"kind": "flash", "radius": 0.9, "color": "light", "life": 0.4},
+				{"kind": "burst", "shape": "leaf", "count": 16, "speed": 1.3, "size": 0.15, "gravity": 0.6, "spin": 7, "colors": ["main", "light", "dark"]},
+				{"kind": "ring", "radius": 1.1, "width": 0.09, "color": "light", "life": 0.55},
+				{"kind": "burst", "shape": "star4", "count": 7, "speed": 0.8, "size": 0.08, "colors": ["white", "light"], "delay": 0.05}
+			]}
+		},
+		"ice": {
+			"colors": {"light": "#E8FBFF", "dark": "#3F8EA8"},
+			"projectile": {"style": "shards", "size": 17, "duration": 0.45, "count": 5, "sparks": 8, "spark_shape": "star4", "spark_colors": ["white", "light"], "spark_size": 0.22},
+			"impact": {"duration": 0.65, "size": 68, "layers": [
+				{"kind": "flash", "radius": 1.2, "color": "light", "life": 0.45},
+				{"kind": "star", "points": 6, "radius": 0.95, "inner": 0.32, "color": "light", "inner_color": "white", "life": 0.7},
+				{"kind": "burst", "shape": "shard", "count": 16, "speed": 1.3, "size": 0.14, "gravity": 0.4, "colors": ["light", "main", "white"]},
+				{"kind": "ring", "radius": 1.25, "width": 0.09, "color": "white", "life": 0.55},
+				{"kind": "burst", "shape": "star4", "count": 9, "speed": 0.9, "size": 0.07, "colors": ["white"], "delay": 0.1}
+			]}
+		},
+		"fighting": {
+			"colors": {"light": "#FFC9A8", "dark": "#7A1612"},
+			"projectile": {"style": "fist", "size": 26, "duration": 0.35},
+			"impact": {"duration": 0.5, "size": 72, "layers": [
+				{"kind": "flash", "radius": 1.1, "color": "light", "life": 0.35},
+				{"kind": "star", "points": 10, "radius": 1.05, "inner": 0.55, "color": "#FFE45C", "inner_color": "white", "life": 0.65},
+				{"kind": "ring", "radius": 1.3, "width": 0.14, "color": "main", "life": 0.5},
+				{"kind": "burst", "shape": "star4", "count": 8, "speed": 1.5, "size": 0.11, "colors": ["#FFE45C", "white"]},
+				{"kind": "burst", "shape": "circle", "count": 8, "speed": 1.0, "size": 0.07, "colors": ["main", "light"], "alpha": 0.9, "gravity": 0.5}
+			]}
+		},
+		"poison": {
+			"colors": {"light": "#E7A6E5", "dark": "#5A1A58"},
+			"projectile": {"style": "ball", "size": 17, "duration": 0.55, "cluster": 5, "sparks": 7, "spark_shape": "bubble", "spark_colors": ["light", "main"], "spark_size": 0.34, "spark_gravity": -0.8},
+			"impact": {"duration": 0.65, "size": 64, "layers": [
+				{"kind": "flash", "radius": 1.0, "color": "main", "life": 0.45},
+				{"kind": "ring", "radius": 1.1, "width": 0.12, "color": "main", "squash": 0.7, "life": 0.6},
+				{"kind": "burst", "shape": "drop", "count": 14, "speed": 1.2, "size": 0.12, "gravity": 0.8, "colors": ["main", "dark", "light"]},
+				{"kind": "burst", "shape": "bubble", "count": 9, "speed": 0.8, "size": 0.13, "gravity": -0.6, "colors": ["light", "main"], "dir": -90, "spread": 200}
+			]}
+		},
+		"ground": {
+			"colors": {"light": "#F6E3A6", "dark": "#8C6B22"},
+			"projectile": {"style": "boulders", "size": 14, "duration": 0.55, "count": 6, "arc": 0.12, "sparks": 10, "spark_shape": "puff", "spark_colors": ["light", "main"], "spark_size": 0.3, "spark_gravity": 1.0},
+			"impact": {"duration": 0.7, "size": 68, "layers": [
+				{"kind": "ring", "radius": 1.5, "width": 0.12, "color": "light", "squash": 0.35, "oy": 0.3, "life": 0.6},
+				{"kind": "spikes", "count": 5, "radius": 1.1, "color": "main", "life": 0.8},
+				{"kind": "burst", "shape": "rock", "count": 9, "speed": 1.1, "size": 0.14, "gravity": 1.3, "dir": -90, "spread": 130, "colors": ["main", "dark"], "spin": 5},
+				{"kind": "burst", "shape": "puff", "count": 12, "speed": 1.0, "size": 0.16, "gravity": -0.1, "colors": ["light"], "alpha": 0.75, "oy": 0.25}
+			]}
+		},
+		"flying": {
+			"colors": {"light": "#E6DFFF", "dark": "#5B3FB0"},
+			"projectile": {"style": "crescents", "size": 24, "radius": 36, "thick": 0.42, "duration": 0.38, "count": 3, "fill": "light", "edge": "main", "inner": "white", "sparks": 7, "spark_shape": "feather", "spark_colors": ["white", "light"], "spark_size": 0.38, "spark_gravity": 0.6},
+			"impact": {"duration": 0.6, "size": 64, "layers": [
+				{"kind": "flash", "radius": 1.0, "color": "light", "life": 0.4},
+				{"kind": "claws", "count": 2, "length": 1.5, "width": 0.11, "angle": -35, "spacing": 0.45, "color": "light", "edge": "main"},
+				{"kind": "ring", "radius": 1.2, "width": 0.08, "color": "white", "life": 0.5},
+				{"kind": "burst", "shape": "feather", "count": 11, "speed": 1.1, "size": 0.13, "gravity": 0.4, "spin": 3, "colors": ["white", "light"]}
+			]}
+		},
+		"psychic": {
+			"colors": {"light": "#FFC1D6", "dark": "#A8204F"},
+			"projectile": {"style": "rings", "size": 17, "duration": 0.5, "count": 4, "sparks": 8, "spark_shape": "star4", "spark_colors": ["white", "light"], "spark_size": 0.24},
+			"impact": {"duration": 0.65, "size": 66, "layers": [
+				{"kind": "flash", "radius": 1.1, "color": "light", "life": 0.45},
+				{"kind": "ring", "radius": 1.3, "width": 0.1, "color": "main", "life": 0.6},
+				{"kind": "ring", "radius": 1.0, "width": 0.09, "color": "light", "delay": 0.12, "life": 0.6},
+				{"kind": "ring", "radius": 0.7, "width": 0.08, "color": "white", "delay": 0.24, "life": 0.6},
+				{"kind": "star", "points": 4, "radius": 0.8, "inner": 0.25, "color": "light", "inner_color": "white", "life": 0.6, "rot": 45},
+				{"kind": "burst", "shape": "star4", "count": 10, "speed": 1.2, "size": 0.08, "colors": ["white", "light"]}
+			]}
+		},
+		"bug": {
+			"colors": {"light": "#E2F27A", "dark": "#5A6A08"},
+			"projectile": {"style": "swarm", "size": 15, "duration": 0.55, "count": 13},
+			"impact": {"duration": 0.55, "size": 74, "layers": [
+				{"kind": "flash", "radius": 0.9, "color": "light", "life": 0.4},
+				{"kind": "burst", "shape": "shard", "count": 12, "speed": 1.4, "size": 0.12, "colors": ["main", "light", "#2B2B12"]},
+				{"kind": "star", "points": 6, "radius": 0.85, "inner": 0.4, "color": "main", "inner_color": "light", "life": 0.5},
+				{"kind": "ring", "radius": 1.1, "width": 0.08, "color": "main", "life": 0.5},
+				{"kind": "burst", "shape": "circle", "count": 8, "speed": 0.7, "size": 0.05, "colors": ["white", "light"]}
+			]}
+		},
+		"rock": {
+			"colors": {"light": "#E6D88A", "dark": "#6E5F14"},
+			"projectile": {"style": "boulders", "size": 26, "duration": 0.55, "count": 3, "arc": 0.2, "sparks": 7, "spark_shape": "rock", "spark_colors": ["main", "dark"], "spark_size": 0.18, "spark_gravity": 1.5},
+			"impact": {"duration": 0.65, "size": 70, "layers": [
+				{"kind": "flash", "radius": 0.9, "color": "light", "life": 0.35},
+				{"kind": "burst", "shape": "rock", "count": 11, "speed": 1.2, "size": 0.2, "gravity": 1.3, "spin": 6, "colors": ["main", "dark", "light"]},
+				{"kind": "ring", "radius": 1.4, "width": 0.12, "color": "light", "squash": 0.45, "oy": 0.25, "life": 0.55},
+				{"kind": "burst", "shape": "puff", "count": 10, "speed": 0.9, "size": 0.15, "colors": ["light"], "alpha": 0.7, "oy": 0.2}
+			]}
+		},
+		"ghost": {
+			"colors": {"light": "#D9C8FF", "dark": "#2E1A4D"},
+			"projectile": {"style": "ball", "size": 16, "duration": 0.6, "cluster": 3, "orbit": true, "look": "soft", "sparks": 10, "spark_shape": "ember", "spark_colors": ["light", "main"], "spark_size": 0.26, "spark_gravity": -1.2, "spark_back": 3.5},
+			"impact": {"duration": 0.7, "size": 66, "layers": [
+				{"kind": "flash", "radius": 1.2, "color": "main", "life": 0.5},
+				{"kind": "claws", "count": 3, "length": 1.5, "width": 0.13, "angle": 50, "color": "light", "edge": "main"},
+				{"kind": "ring", "radius": 1.2, "width": 0.09, "color": "light", "life": 0.6},
+				{"kind": "burst", "shape": "ember", "count": 13, "speed": 0.9, "size": 0.12, "gravity": -0.8, "colors": ["light", "main"], "glow": true, "dir": -90, "spread": 250}
+			]}
+		},
+		"dragon": {
+			"colors": {"light": "#4FE6F2", "dark": "#2B0F94"},
+			"projectile": {"style": "crescents", "size": 26, "radius": 34, "thick": 0.55, "duration": 0.5, "count": 3, "fill": "main", "edge": "dark", "inner": "light", "sparks": 10, "spark_shape": "ember", "spark_colors": ["light", "main"], "spark_size": 0.2, "spark_gravity": -0.6},
+			"impact": {"duration": 0.7, "size": 72, "layers": [
+				{"kind": "flash", "radius": 1.3, "color": "light", "life": 0.5},
+				{"kind": "claws", "count": 3, "length": 1.6, "width": 0.15, "angle": 45, "color": "main", "edge": "light"},
+				{"kind": "ring", "radius": 1.4, "width": 0.12, "color": "light", "life": 0.6},
+				{"kind": "ring", "radius": 1.0, "width": 0.1, "color": "main", "delay": 0.1, "life": 0.6},
+				{"kind": "burst", "shape": "flame", "count": 8, "speed": 1.0, "size": 0.17, "gravity": -0.5, "colors": ["light", "main"], "rot_mode": "upright", "dir": -90, "spread": 220}
+			]}
+		},
+		"dark": {
+			"colors": {"main": "#3A1F55", "light": "#C070FF", "dark": "#0E0716"},
+			"projectile": {"style": "crescents", "size": 22, "radius": 30, "thick": 0.45, "duration": 0.36, "count": 3, "fill": "dark", "edge": "light", "sparks": 8, "spark_shape": "ember", "spark_colors": ["light", "main"], "spark_size": 0.2},
+			"impact": {"duration": 0.6, "size": 68, "layers": [
+				{"kind": "flash", "radius": 1.1, "color": "light", "life": 0.4},
+				{"kind": "claws", "count": 3, "length": 1.6, "width": 0.15, "angle": 40, "color": "dark", "edge": "light", "core": "main"},
+				{"kind": "ring", "radius": 1.25, "width": 0.1, "color": "light", "life": 0.55},
+				{"kind": "burst", "shape": "shard", "count": 11, "speed": 1.2, "size": 0.12, "colors": ["dark", "main", "light"]}
+			]}
+		},
+		"steel": {
+			"colors": {"light": "#F4F7FF", "dark": "#6C6C86"},
+			"projectile": {"style": "shards", "size": 16, "duration": 0.36, "count": 5, "metal": true, "sparks": 6, "spark_shape": "star4", "spark_colors": ["white", "light"], "spark_size": 0.2},
+			"impact": {"duration": 0.55, "size": 68, "layers": [
+				{"kind": "flash", "radius": 1.4, "color": "white", "life": 0.35},
+				{"kind": "star", "points": 4, "radius": 1.3, "inner": 0.12, "color": "light", "inner_color": "white", "life": 0.6},
+				{"kind": "claws", "count": 1, "length": 1.8, "width": 0.12, "angle": 35, "color": "light", "edge": "dark"},
+				{"kind": "ring", "radius": 1.2, "width": 0.08, "color": "white", "life": 0.5},
+				{"kind": "burst", "shape": "shard", "count": 12, "speed": 1.4, "size": 0.12, "colors": ["main", "light", "white"]}
+			]}
+		},
+		"fairy": {
+			"colors": {"light": "#FFD6EA", "dark": "#B2487E"},
+			"projectile": {"style": "sparkles", "size": 19, "duration": 0.55, "sparks": 14, "spark_shape": "star4", "spark_colors": ["main", "light", "white"], "spark_size": 0.34, "spark_back": 4.0},
+			"impact": {"duration": 0.65, "size": 66, "layers": [
+				{"kind": "flash", "radius": 1.2, "color": "light", "life": 0.45},
+				{"kind": "star", "points": 5, "radius": 0.7, "inner": 0.45, "color": "main", "inner_color": "light", "life": 0.6},
+				{"kind": "ring", "radius": 1.2, "width": 0.09, "color": "light", "life": 0.55},
+				{"kind": "burst", "shape": "star4", "count": 18, "speed": 1.4, "size": 0.12, "colors": ["main", "light", "white"], "spin": 2}
+			]}
+		},
+		"default": {
+			"colors": {"main": "#A8A77A", "light": "#FFFFFF", "dark": "#6E6D4F"},
+			"projectile": {"style": "streaks", "size": 17, "duration": 0.35, "sparks": 6, "spark_shape": "star4", "spark_colors": ["light", "main"], "spark_size": 0.28},
+			"impact": {"duration": 0.5, "size": 74, "layers": [
+				{"kind": "flash", "radius": 1.0, "color": "light", "life": 0.5},
+				{"kind": "star", "points": 8, "radius": 0.9, "inner": 0.5, "color": "light", "inner_color": "white", "life": 0.7},
+				{"kind": "ring", "radius": 1.15, "width": 0.1, "color": "light", "life": 0.6},
+				{"kind": "burst", "shape": "streak", "count": 10, "speed": 1.3, "size": 0.12, "colors": ["light", "main"]}
+			]}
+		}
+	},
+	"status": {
+		"sleep": {"duration": 1.0, "size": 68, "layers": [
+			{"kind": "flash", "radius": 0.9, "color": "main", "life": 0.5},
+			{"kind": "burst", "shape": "zee", "count": 3, "speed": 1.3, "size": 0.27, "dir": -70, "spread": 40, "colors": ["main", "light", "main"], "rot_mode": "upright", "stagger": 0.5, "gravity": -0.3},
+			{"kind": "burst", "shape": "star4", "count": 6, "speed": 0.9, "size": 0.07, "dir": -90, "spread": 200, "colors": ["white", "light"], "stagger": 0.4}
+		]},
+		"paralysis": {"duration": 0.8, "size": 56, "layers": [
+			{"kind": "flash", "radius": 1.0, "color": "main", "life": 0.4},
+			{"kind": "bolts", "count": 5, "length": 0.9, "color": "main"},
+			{"kind": "burst", "shape": "bolt", "count": 6, "speed": 0.8, "size": 0.17, "colors": ["main", "light"], "stagger": 0.3, "spin": 3},
+			{"kind": "ring", "radius": 1.0, "width": 0.07, "color": "main", "life": 0.6}
+		]},
+		"poison": {"duration": 0.95, "size": 70, "layers": [
+			{"kind": "flash", "radius": 0.9, "color": "main", "life": 0.5},
+			{"kind": "burst", "shape": "bubble", "count": 10, "speed": 1.0, "size": 0.18, "gravity": -0.7, "dir": -90, "spread": 140, "colors": ["main", "light"], "stagger": 0.5},
+			{"kind": "burst", "shape": "drop", "count": 5, "speed": 0.5, "size": 0.1, "gravity": 0.9, "dir": -90, "spread": 160, "colors": ["main", "dark"], "stagger": 0.3}
+		]},
+		"burn": {"duration": 0.9, "size": 56, "layers": [
+			{"kind": "flash", "radius": 1.0, "color": "light", "life": 0.4},
+			{"kind": "burst", "shape": "flame", "count": 9, "speed": 0.9, "size": 0.2, "gravity": -0.8, "dir": -90, "spread": 150, "colors": ["main", "light", "#FFB02E"], "rot_mode": "upright", "stagger": 0.45},
+			{"kind": "burst", "shape": "ember", "count": 10, "speed": 1.2, "size": 0.07, "gravity": -0.8, "dir": -90, "spread": 200, "colors": ["light", "main"], "stagger": 0.4}
+		]},
+		"freeze": {"duration": 0.95, "size": 56, "layers": [
+			{"kind": "flash", "radius": 1.1, "color": "light", "life": 0.45},
+			{"kind": "star", "points": 6, "radius": 0.85, "inner": 0.32, "color": "white", "inner_color": "light", "life": 0.7},
+			{"kind": "burst", "shape": "crystal", "count": 8, "speed": 0.95, "size": 0.17, "gravity": 0.2, "colors": ["light", "main", "white"], "stagger": 0.3},
+			{"kind": "ring", "radius": 1.1, "width": 0.07, "color": "white", "life": 0.6}
+		]},
+		"default": {"duration": 0.8, "size": 56, "layers": [
+			{"kind": "flash", "radius": 1.0, "color": "main", "life": 0.5},
+			{"kind": "burst", "shape": "star4", "count": 8, "speed": 1.0, "size": 0.1, "colors": ["main", "light", "white"]},
+			{"kind": "ring", "radius": 1.0, "width": 0.08, "color": "main", "life": 0.6}
+		]}
+	},
+	"buff": {
+		"block": {"duration": 0.85, "size": 72, "colors": {"main": "#4FE070", "light": "#C8FFD6", "dark": "#23A04E"}, "layers": [
+			{"kind": "flash", "radius": 1.1, "color": "main", "life": 0.5},
+			{"kind": "hex", "radius": 0.95, "color": "main", "edge": "light", "fill": 0.32},
+			{"kind": "hex", "radius": 1.3, "color": "main", "edge": "white", "fill": 0.0, "delay": 0.12, "life": 0.7},
+			{"kind": "burst", "shape": "star4", "count": 9, "speed": 1.1, "size": 0.07, "colors": ["white", "light"], "delay": 0.1}
+		]},
+		"heal": {"duration": 1.0, "size": 76, "colors": {"main": "#5CE08A", "light": "#FFC4DC", "dark": "#1F9A55"}, "layers": [
+			{"kind": "flash", "radius": 1.0, "color": "light", "life": 0.5},
+			{"kind": "ring", "radius": 1.0, "width": 0.09, "color": "main", "life": 0.6},
+			{"kind": "burst", "shape": "cross", "count": 10, "speed": 1.1, "size": 0.21, "gravity": -0.35, "dir": -90, "spread": 110, "colors": ["main", "light", "#FF8FBF"], "rot_mode": "upright", "stagger": 0.45},
+			{"kind": "burst", "shape": "star4", "count": 8, "speed": 0.9, "size": 0.06, "dir": -90, "spread": 200, "colors": ["white", "light"], "stagger": 0.4}
+		]},
+		"strength": {"duration": 0.8, "size": 74, "colors": {"main": "#FF5A4A", "light": "#FFD0A0", "dark": "#C21F2A"}, "layers": [
+			{"kind": "flash", "radius": 1.1, "color": "main", "life": 0.45},
+			{"kind": "ring", "radius": 1.1, "width": 0.1, "color": "main", "life": 0.55},
+			{"kind": "burst", "shape": "arrow", "count": 7, "speed": 1.2, "size": 0.26, "dir": -90, "spread": 75, "colors": ["main", "light"], "stagger": 0.25},
+			{"kind": "burst", "shape": "ember", "count": 8, "speed": 1.0, "size": 0.06, "dir": -90, "spread": 160, "colors": ["light"], "stagger": 0.3}
+		]},
+		"energy": {"duration": 0.75, "size": 62, "colors": {"main": "#F7D02C", "light": "#FFF6A8", "dark": "#B58A00"}, "layers": [
+			{"kind": "flash", "radius": 1.1, "color": "light", "life": 0.4},
+			{"kind": "bolts", "count": 5, "length": 0.8, "color": "main"},
+			{"kind": "burst", "shape": "star4", "count": 14, "speed": 1.1, "size": 0.12, "colors": ["main", "light", "white"]},
+			{"kind": "ring", "radius": 1.0, "width": 0.08, "color": "main", "life": 0.55}
+		]}
+	}
+}

@@ -9,6 +9,9 @@ extends Control
 ## Story 004: the screen no longer owns game state; Main gives it a Battle (built from RunState) via
 ## setup() and listens to battle_won / defeat_acknowledged.
 ## Interaction: click an attack card to select it, then click a living enemy; skill cards play on click.
+## Story 021 (animations): the logic is synchronous, so the signals of one logic call are RECORDED (_recording) as visual events
+## and played afterwards by the BattleFxDirector on top of the final logic state (HP bars / numbers tween from the old value;
+## input is locked meanwhile, a click or Space skips, data caps the duration). Instantané = nothing recorded, as before.
 ## Story 017 (capture): in wild fights with balls, "Capturer" (info row) toggles a capture mode where each capturable enemy
 ## shows one button per ball carried with its success chance ("Poké Ball 34 %"); a click throws it (throw_ball, the one
 ## path also used by Main.battle_use_ball). "Capturé !" / "Raté… (34 %)" float over the target; a captured enemy leaves
@@ -170,6 +173,8 @@ class EnemyView extends RefCounted:
 	## Story 017: the enemy shown in this slot, and the capture overlay over its sprite (capture mode only).
 	var combatant: Combatant
 	var capture_box: VBoxContainer
+	## Story 021: the K.O. fade-out ran (the sprite stays invisible, the "K.O." label remains).
+	var ko_faded: bool = false
 
 
 ## Story 013: league trainer header colours.
@@ -241,6 +246,22 @@ var _capture_button: Button
 var _capture_mode: bool = false
 var _capture_float: FloatText
 var _last_throw_chance: float = 0.0
+## Story 021: director, effects layer (above the fighters), speed button and the recording / playback state.
+var _fx: BattleFxDirector
+var _fx_layer: Control
+var _speed_button: Button
+var _recording: bool = false
+var _hold_fighters: bool = false
+var _queue: Array[Dictionary] = []
+var _shown: Dictionary = {}
+var _rec_card: CardData = null
+var _rec_first_hit: bool = true
+var _rec_fizzled: bool = false
+var _ev_wait: float = 0.0
+const TEXT_SPEED: String = "Animations : %s"
+const TEXT_SPEED_TIP: String = "Vitesse des animations de combat. Un clic ou Espace passe l'animation en cours."
+const TEXT_BLOCKED: String = "Bloqué"
+const TEXT_IMMUNE_SHORT: String = "Immunisé"
 
 
 func _ready() -> void:
@@ -249,6 +270,77 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_update_backdrop_layout()
+
+
+## Story 021: a click anywhere or Space while an animation plays skips it (and is consumed).
+func _input(event: InputEvent) -> void:
+	if _fx == null or not _fx.is_busy():
+		return
+	var mb := event as InputEventMouseButton
+	var key := event as InputEventKey
+	if (mb != null and mb.pressed) or (key != null and key.pressed and not key.echo and key.keycode == KEY_SPACE):
+		_fx.skip()
+		get_viewport().set_input_as_handled()
+
+
+## Story 021: the speed preset ("normal" | "fast" | "instant"); not saved (the button saves).
+func set_fx_speed(preset: String) -> void:
+	_fx.set_speed(preset)
+	_speed_button.text = TEXT_SPEED % BattleFxDirector.speed_label(_fx.get_speed())
+	if not _fx.is_enabled():
+		_fx.skip()
+
+
+## Story 021: current speed preset id.
+func get_fx_speed() -> String:
+	return _fx.get_speed()
+
+
+## Story 021: true while visual events play (input is locked).
+func is_fx_busy() -> bool:
+	return _fx != null and _fx.is_busy()
+
+
+## Story 021: fast-forwards the running animation to its end state.
+func skip_animations() -> void:
+	if _fx != null:
+		_fx.skip()
+
+
+## Story 021, QA: the director.
+func get_fx_director() -> BattleFxDirector:
+	return _fx
+
+
+## Story 021, QA: text of the speed button.
+func get_speed_button_text() -> String:
+	return _speed_button.text
+
+
+func _on_speed_pressed() -> void:
+	var preset: String = _fx.cycle_speed()
+	BattleFxDirector.save_speed(preset)
+	set_fx_speed(preset)
+
+
+func _on_card_pressed(index: int) -> void:
+	if _fx.is_busy():
+		_fx.skip()
+		return
+	select_card(index)
+
+
+func _on_end_turn_pressed() -> void:
+	if _fx.is_busy():
+		_fx.skip()
+		return
+	press_end_turn()
+
+
+## Programmatic callers (QA, Main) never wait: a running animation is fast-forwarded first.
+func _auto_skip() -> void:
+	if _fx != null and _fx.is_busy():
+		_fx.skip()
 
 
 ## Story 020: shows battle backdrop `id` (type id of the zone's gym, "route", "league", "ethernatos", "legendary";
@@ -371,6 +463,7 @@ func is_capture_mode() -> bool:
 
 ## Story 017: presses "Capturer" / "Annuler" (same path as the mouse). Ignored while the button is hidden / disabled.
 func toggle_capture_mode() -> void:
+	_auto_skip()
 	if _battle == null or not _capture_button.visible or _capture_button.disabled:
 		return
 	_capture_mode = not _capture_mode
@@ -381,10 +474,11 @@ func toggle_capture_mode() -> void:
 ## Story 017: throws `ball` (id or index into Battle.ball_ids()) at enemies[enemy_index] -- the ball buttons of the capture
 ## mode and Main.battle_use_ball both come here. Returns Battle.use_ball's result ({used: false, ...} when refused).
 func throw_ball(ball: Variant, enemy_index: int) -> Dictionary:
+	_auto_skip()
 	if _battle == null or not _battle.can_use_ball(ball, enemy_index):
 		return {"used": false, "success": false, "chance": 0.0, "roll": 1.0}
 	_selected_index = -1
-	return _battle.use_ball(ball, enemy_index)
+	return _logic(func() -> Variant: return _battle.use_ball(ball, enemy_index)) as Dictionary
 
 
 ## Story 017, QA: state of the capture button {visible, disabled, text, tooltip}.
@@ -414,10 +508,11 @@ func get_capture_float_text() -> String:
 
 ## Drinks potion `index` of the battle (player's turn only, no energy cost). False if not possible.
 func use_potion(index: int) -> bool:
+	_auto_skip()
 	if _battle == null or not _battle.can_use_potion(index):
 		return false
 	_selected_index = -1
-	return _battle.use_potion(index)
+	return bool(_logic(func() -> Variant: return _battle.use_potion(index)))
 
 
 ## Displays `battle` (built by Main from RunState) and starts it. Call once, after add_child.
@@ -459,6 +554,11 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.ball_thrown.connect(_on_ball_thrown)
 	_battle.capture_succeeded.connect(_on_capture_succeeded)
 	_battle.capture_failed.connect(_on_capture_failed)
+	_battle.enemy_acted.connect(_on_enemy_acted)
+	_battle.card_played.connect(_on_card_played)
+	_recording = false
+	_hold_fighters = false
+	_fx.skip()
 	_battle.start()
 	_refresh_active_pokemon(player)
 	_refresh()
@@ -505,6 +605,8 @@ func press_restart() -> void:
 
 
 func _on_battle_won() -> void:
+	if _defer(_on_battle_won):
+		return
 	var ids: Array[String] = []
 	for e: Combatant in _battle.enemies:
 		ids.append(e.id)
@@ -513,13 +615,14 @@ func _on_battle_won() -> void:
 
 ## Selects (or deselects if already selected) hand card index; cards without target play immediately.
 func select_card(index: int) -> void:
+	_auto_skip()
 	if _battle == null or not _battle.can_play(index):
 		return
 	var card: CardData = _battle.hand[index]
 	_capture_mode = false
 	if not card.needs_target():
 		_selected_index = -1
-		_battle.play_card(index)
+		_play_logic(index, -1)
 		return
 	_selected_index = -1 if _selected_index == index else index
 	_refresh()
@@ -527,27 +630,30 @@ func select_card(index: int) -> void:
 
 ## Clicks enemy enemy_index: plays the selected attack card on it, if any. Dead enemies ignore clicks.
 func click_enemy(enemy_index: int) -> void:
+	_auto_skip()
 	if _battle == null or _selected_index < 0 or not _battle.is_valid_target(enemy_index):
 		return
 	var index: int = _selected_index
 	_selected_index = -1
-	if not _battle.play_card(index, enemy_index):
+	if not _play_logic(index, enemy_index):
 		_refresh()
 
 
 ## Plays hand card index directly (QA harness, bypasses selection). Targets enemy_index,
 ## or the first living enemy when -1.
 func play_card_direct(index: int, enemy_index: int = -1) -> bool:
+	_auto_skip()
 	_selected_index = -1
 	if _battle == null:
 		return false
 	var target: int = enemy_index if enemy_index >= 0 else _battle.first_living_enemy()
-	return _battle.play_card(index, target)
+	return _play_logic(index, target)
 
 
 ## QA-ONLY CHEAT: applies `value` of status `status_id` through Battle.apply_status (immunities and feedback
 ## included) to enemy `target_index`, or to the player when -1. Returns false when refused. Never called by the game.
 func qa_apply_status(target_index: int, status_id: String, value: int) -> bool:
+	_auto_skip()
 	if _battle == null:
 		return false
 	var target: Combatant = _battle.player
@@ -563,6 +669,7 @@ func qa_apply_status(target_index: int, status_id: String, value: int) -> bool:
 ## QA-ONLY: replaces the hand with the given card ids (and refills energy) so a walkthrough
 ## can stage a matchup. Never called by the game itself.
 func qa_force_hand(card_ids: Array[String]) -> void:
+	_auto_skip()
 	if _battle == null:
 		return
 	_battle.hand.clear()
@@ -577,14 +684,16 @@ func qa_force_hand(card_ids: Array[String]) -> void:
 
 ## Presses the "Fin de tour" button.
 func press_end_turn() -> void:
+	_auto_skip()
 	if _battle == null:
 		return
 	_selected_index = -1
-	_battle.end_turn()
+	_logic(func() -> Variant: return _battle.end_turn(), "max_end_turn_seconds")
 
 
 ## Clicks empty background: deselects.
 func click_background() -> void:
+	_auto_skip()
 	_selected_index = -1
 	_capture_mode = false
 	_refresh()
@@ -593,6 +702,11 @@ func click_background() -> void:
 # --- UI construction -------------------------------------------------------
 
 func _build_ui() -> void:
+	_fx = BattleFxDirector.new()
+	_fx.name = "FxDirector"
+	add_child(_fx)
+	_fx.set_speed(BattleFxDirector.load_saved_speed())
+	_fx.finished.connect(_on_fx_finished)
 	_background = BattleBackdrop.new()
 	_background.name = "Backdrop"
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -724,7 +838,17 @@ func _build_ui() -> void:
 	_end_turn_button.custom_minimum_size = END_TURN_SIZE
 	_end_turn_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	UiStyle.apply_button(_end_turn_button)
-	_end_turn_button.pressed.connect(press_end_turn)
+	_end_turn_button.pressed.connect(_on_end_turn_pressed)
+	_speed_button = Button.new()
+	_speed_button.name = "SpeedButton"
+	_speed_button.text = TEXT_SPEED % BattleFxDirector.speed_label(_fx.get_speed())
+	_speed_button.tooltip_text = TEXT_SPEED_TIP
+	_speed_button.add_theme_font_size_override("font_size", 14)
+	_speed_button.custom_minimum_size = Vector2(0, 32)
+	_speed_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_button(_speed_button)
+	_speed_button.pressed.connect(_on_speed_pressed)
+	info.add_child(_speed_button)
 	info.add_child(_end_turn_button)
 
 	# Hand.
@@ -797,6 +921,12 @@ func _build_ui() -> void:
 	_potion_float = _make_float_text()
 	_player_status_float = _make_float_text()
 	_capture_float = _make_float_text()
+	_fx_layer = Control.new()
+	_fx_layer.name = "FxLayer"
+	_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_fx_layer)
+	move_child(_fx_layer, _end_dim.get_index())
 
 
 func _make_label(font_size: int) -> Label:
@@ -958,13 +1088,22 @@ func _refresh_active_pokemon(p: Combatant) -> void:
 ## A card brought another Pokémon in (fired before the hit): update the left panel, show
 ## "<Nom>, à toi !" over it (never blocks input) and redraw the enemy intents (recomputed by Battle).
 func _on_active_pokemon_changed(_old_id: String, _new_id: String) -> void:
+	if _recording:
+		_push({"kind": "switch_out"})
+		_push({"kind": "switch_in"})
+		return
+	_do_active_changed()
+
+
+func _do_active_changed() -> void:
 	var p: Combatant = _battle.player
 	_refresh_active_pokemon(p)
 	_show_float(_switch_float, _player_sprite, TEXT_SWITCH % p.display_name, COLOR_SWITCH)
 	if _views_stale():
 		_build_enemy_views(_battle.enemies)
-	for i: int in _enemy_views.size():
-		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
+	if not _hold_fighters:
+		for i: int in _enemy_views.size():
+			_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 
 
 # --- Item / potion feedback (story 006) ------------------------------------------
@@ -972,6 +1111,8 @@ func _on_active_pokemon_changed(_old_id: String, _new_id: String) -> void:
 ## Several items can fire on the same action (e.g. Bandeau + Lunettes Choix): their names are gathered and
 ## shown once, at the end of the frame.
 func _on_item_triggered(item: ItemData) -> void:
+	if _defer(_on_item_triggered.bind(item)):
+		return
 	if _pending_items.is_empty():
 		_flush_item_float.call_deferred()
 	if not _pending_items.has(item.display_name):
@@ -987,12 +1128,17 @@ func _flush_item_float() -> void:
 
 
 func _on_potion_used(potion: PotionData) -> void:
+	if _defer(_on_potion_used.bind(potion)):
+		return
 	_show_float(_potion_float, _player_sprite, TEXT_POTION % potion.display_name, COLOR_POTION, POTION_FLOAT_Y)
 
 
 # --- Status feedback (story 016) --------------------------------------------------
 
 func _on_status_applied(target: Combatant, status_id: String, value: int) -> void:
+	if _defer(_on_status_applied.bind(target, status_id, value)):
+		return
+	_fx_status_at(target, status_id)
 	var def: StatusData = _data.get_status(status_id)
 	if def == null:
 		return
@@ -1001,6 +1147,9 @@ func _on_status_applied(target: Combatant, status_id: String, value: int) -> voi
 
 
 func _on_status_ticked(target: Combatant, status_id: String, amount: int) -> void:
+	if _defer(_on_status_ticked.bind(target, status_id, amount)):
+		return
+	_fx_status_at(target, status_id)
 	var def: StatusData = _data.get_status(status_id)
 	if def != null:
 		_queue_status_float(target, TEXT_STATUS_TICK % [amount, def.display_name], def.color)
@@ -1008,6 +1157,10 @@ func _on_status_ticked(target: Combatant, status_id: String, amount: int) -> voi
 
 ## Immunity, or (player only) a card that fizzled because of paralysis: the player still has the status and is not immune.
 func _on_status_blocked(target: Combatant, status_id: String) -> void:
+	if _recording and target == _battle.player and _rec_card != null:
+		_rec_fizzled = true
+	if _defer(_on_status_blocked.bind(target, status_id)):
+		return
 	var def: StatusData = _data.get_status(status_id)
 	if def == null:
 		return
@@ -1018,6 +1171,8 @@ func _on_status_blocked(target: Combatant, status_id: String) -> void:
 
 
 func _on_turn_skipped(target: Combatant, status_id: String) -> void:
+	if _defer(_on_turn_skipped.bind(target, status_id)):
+		return
 	var def: StatusData = _data.get_status(status_id)
 	if def == null:
 		return
@@ -1031,6 +1186,8 @@ func _on_turn_skipped(target: Combatant, status_id: String) -> void:
 
 
 func _on_status_unchanged(target: Combatant, status_id: String) -> void:
+	if _defer(_on_status_unchanged.bind(target, status_id)):
+		return
 	var def: StatusData = _data.get_status(status_id)
 	if def != null:
 		_queue_status_float(target, TEXT_STATUS_UNCHANGED % def.display_name, COLOR_IMMUNE)
@@ -1038,6 +1195,8 @@ func _on_status_unchanged(target: Combatant, status_id: String) -> void:
 
 ## Only waking up and thawing get a message; expiries and cures just remove the chip.
 func _on_status_removed(target: Combatant, status_id: String) -> void:
+	if _defer(_on_status_removed.bind(target, status_id)):
+		return
 	var def: StatusData = _data.get_status(status_id)
 	if def == null or _battle.state != Battle.State.PLAYER_TURN:
 		return
@@ -1048,6 +1207,8 @@ func _on_status_removed(target: Combatant, status_id: String) -> void:
 
 
 func _on_turn_started() -> void:
+	if _defer(_on_turn_started):
+		return
 	_lost_turn_status = _pending_lost_turn
 	_pending_lost_turn = ""
 
@@ -1106,12 +1267,20 @@ func _flush_status_float(f: FloatText, target: Combatant) -> void:
 
 # --- Capture (story 017) ------------------------------------------------------------
 
-func _on_ball_thrown(_target: Combatant, _ball: BallData, chance: float) -> void:
+func _on_ball_thrown(target: Combatant, ball: BallData, chance: float) -> void:
 	_last_throw_chance = chance
+	if _recording:
+		_push({"kind": "ball", "target": target, "ball_id": String(ball.get("id")), "success": false})
 
 
 ## The target already left Battle.enemies: the float goes where its sprite was, then the slots are rebuilt.
 func _on_capture_succeeded(target: Combatant) -> void:
+	if _recording:
+		for ev: Dictionary in _queue:
+			if ev["kind"] == "ball" and ev["target"] == target:
+				ev["success"] = true
+		_defer(_on_capture_succeeded.bind(target))
+		return
 	var rect := Rect2()
 	for v: EnemyView in _enemy_views:
 		if v.combatant == target:
@@ -1121,6 +1290,8 @@ func _on_capture_succeeded(target: Combatant) -> void:
 
 
 func _on_capture_failed(target: Combatant) -> void:
+	if _defer(_on_capture_failed.bind(target)):
+		return
 	for v: EnemyView in _enemy_views:
 		if v.combatant == target:
 			_show_float(_capture_float, v.sprite, TEXT_CAPTURE_FAILED % roundi(_last_throw_chance * 100.0), COLOR_CAPTURE_FAILED,
@@ -1226,7 +1397,21 @@ func _refresh_capture_box(v: EnemyView, enemy_index: int) -> void:
 
 # --- Effectiveness feedback ------------------------------------------------
 
-func _on_hit_resolved(target: Combatant, _amount: int, multiplier: float) -> void:
+func _on_hit_resolved(target: Combatant, amount: int, multiplier: float) -> void:
+	if _recording:
+		var ev: Dictionary = {"kind": "hit", "target": target, "amount": amount, "mult": multiplier, "type_id": "",
+				"enemy_hit": target == _battle.player, "attacker": null}
+		if target != _battle.player and _rec_card != null:
+			ev["type_id"] = _rec_card.type_id
+			if _rec_first_hit:
+				_rec_first_hit = false
+				_push({"kind": "attack", "target": target, "type_id": _rec_card.type_id})
+		_push(ev)
+		return
+	_show_effectiveness(target, multiplier)
+
+
+func _show_effectiveness(target: Combatant, multiplier: float) -> void:
 	if is_equal_approx(multiplier, 1.0):
 		return
 	var f: FloatText = null
@@ -1333,12 +1518,13 @@ func _intent_color(intent: EnemyIntent, enemy: Combatant = null) -> Color:
 # --- Refresh ---------------------------------------------------------------
 
 func _refresh() -> void:
-	if _battle == null:
+	if _battle == null or _recording:
 		return
 	var p: Combatant = _battle.player
-	_set_hp(_player_hp_bar, p.hp, p.max_hp)
-	_player_hp_label.text = "PV %d/%d" % [p.hp, p.max_hp]
-	_player_block.text = "Protection %d" % p.block
+	if not _hold_fighters:
+		_set_hp(_player_hp_bar, p.hp, p.max_hp)
+		_player_hp_label.text = "PV %d/%d" % [p.hp, p.max_hp]
+		_player_block.text = "Protection %d" % p.block
 	var count: int = _battle.enemies.size()
 	_encounter_label.text = "Combat : %d ennemi%s" % [count, "s" if count > 1 else ""]
 	_energy_label.text = "%d/%d" % [_battle.energy, _battle.max_energy]
@@ -1356,19 +1542,20 @@ func _refresh() -> void:
 		_hint_label.add_theme_color_override("font_color", COLOR_LOST_TURN)
 	elif _selected_index < 0 and _battle.turn_damage_bonus > 0 and not over:
 		_hint_label.text = TEXT_TURN_BONUS % _battle.turn_damage_bonus
-	if _views_stale():
+	if _views_stale() and not _hold_fighters:
 		_build_enemy_views(_battle.enemies)
 	_refresh_capture_button()
 	if _capture_mode:
 		_hint_label.text = TEXT_CAPTURE_HINT % _battle.ball_energy_cost()
 		_hint_label.add_theme_color_override("font_color", COLOR_CAPTURE)
-	for i: int in _enemy_views.size():
-		_refresh_enemy(_enemy_views[i], _battle.enemies[i])
-		_refresh_capture_box(_enemy_views[i], i)
+	if not _hold_fighters:
+		for i: int in _enemy_views.size():
+			_refresh_enemy(_enemy_views[i], _battle.enemies[i])
+			_refresh_capture_box(_enemy_views[i], i)
 	_player_chips.refresh()
 	_rebuild_hand()
 	# Victory goes straight to the reward screen (Main); the overlay is for defeat only.
-	if _battle.state == Battle.State.LOST:
+	if _battle.state == Battle.State.LOST and not _hold_fighters:
 		_end_box.visible = true
 		_end_dim.visible = true
 		_message_label.text = "Défaite…"
@@ -1389,6 +1576,8 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 		v.intent_label.add_theme_color_override("font_color", COLOR_KO)
 		_fit_intent_font(v.intent_label)
 	v.intent_label.self_modulate = Color.WHITE if not v.intent_label.text.is_empty() else Color.TRANSPARENT
+	if v.ko_faded:
+		v.sprite.modulate = Color(1, 1, 1, 0)
 	if not e.is_alive():
 		v.panel.modulate = MODULATE_KO
 	elif _selected_index >= 0:
@@ -1469,7 +1658,7 @@ func _rebuild_hand() -> void:
 		b.add_theme_stylebox_override("hover", sb_hover)
 		b.add_theme_stylebox_override("pressed", sb)
 		b.add_theme_stylebox_override("disabled", sb_disabled)
-		b.pressed.connect(select_card.bind(i))
+		b.pressed.connect(_on_card_pressed.bind(i))
 		var content: Control = b.get_node("Content") as Control
 		content.modulate = Color(1, 1, 1, 0.45) if b.disabled else Color.WHITE
 		_hand_box.add_child(b)
@@ -1478,6 +1667,312 @@ func _rebuild_hand() -> void:
 ## Builds the visual content of a card button (shared look, see CardView).
 func _fill_card_content(b: Button, card: CardData) -> void:
 	CardView.fill_card_content(b, card, _data.get_type_chart(), _data.get_pokemon_info)
+
+
+
+# --- Story 021: recording and playing visual events ------------------------------------------------------
+
+## Runs one logic call. With animations on, the signals it emits are recorded (handlers push events, _refresh waits)
+## and played afterwards; the logic result is returned unchanged. Instantané / headless: a plain call.
+func _logic(fn: Callable, limit_key: String = "max_action_seconds") -> Variant:
+	if _fx == null or not _fx.is_enabled():
+		return fn.call()
+	_queue.clear()
+	_snapshot_shown()
+	_rec_first_hit = true
+	_rec_fizzled = false
+	_recording = true
+	var result: Variant = fn.call()
+	_recording = false
+	_rec_card = null
+	if _queue.is_empty():
+		_refresh()
+		return result
+	_hold_fighters = true
+	_refresh()
+	var events: Array[Dictionary] = _queue.duplicate()
+	_queue.clear()
+	_fx.run(events, _play_event, BattleFxDirector.cfg_f("", limit_key, 4.0))
+	return result
+
+
+func _play_logic(index: int, target: int) -> bool:
+	_rec_card = _battle.hand[index] if index >= 0 and index < _battle.hand.size() else null
+	var ok: bool = bool(_logic(func() -> Variant: return _battle.play_card(index, target)))
+	_rec_card = null
+	return ok
+
+
+## While recording: queues `fn` (a handler call) as an event and returns true; otherwise false (the caller runs).
+func _defer(fn: Callable) -> bool:
+	if not _recording:
+		return false
+	_push({"kind": "call", "fn": fn})
+	return true
+
+
+func _push(ev: Dictionary) -> void:
+	ev["snaps"] = _snapshot()
+	_queue.append(ev)
+
+
+func _snap_of(c: Combatant) -> Dictionary:
+	return {"c": c, "hp": c.hp, "max": c.max_hp, "block": c.block}
+
+
+func _snapshot() -> Array:
+	var out: Array = [_snap_of(_battle.player)]
+	for v: EnemyView in _enemy_views:
+		out.append(_snap_of(v.combatant))
+	return out
+
+
+func _snapshot_shown() -> void:
+	_shown.clear()
+	for s: Dictionary in _snapshot():
+		_shown[s["c"]] = {"hp": s["hp"], "block": s["block"]}
+
+
+func _on_enemy_acted(enemy: Combatant, intent: EnemyIntent) -> void:
+	if not _recording:
+		return
+	var type_id: String = intent.attack_type if not intent.attack_type.is_empty() else enemy.get_primary_type()
+	var act: Dictionary = {"kind": "enemy_act", "enemy": enemy, "intent_type": intent.type, "type_id": type_id, "snaps": []}
+	if intent.type == EnemyIntent.TYPE_BLOCK:
+		act["snaps"] = [_snap_of(enemy)]
+	var at: int = _queue.size()
+	for i: int in _queue.size():
+		var q: Dictionary = _queue[i]
+		if q["kind"] == "hit" and q["enemy_hit"] and q["attacker"] == null:
+			q["attacker"] = enemy
+			q["type_id"] = type_id
+			at = mini(at, i)
+	_queue.insert(at, act)
+
+
+func _on_card_played(card: CardData) -> void:
+	if _recording and not _rec_fizzled and card != null and (card.block > 0 or card.heal > 0):
+		_push({"kind": "gain", "block": card.block, "heal": card.heal})
+
+
+func _sprite_of(c: Combatant) -> AnimatedPokemon:
+	if c == _battle.player:
+		return _player_sprite
+	for v: EnemyView in _enemy_views:
+		if v.combatant == c:
+			return v.sprite
+	return null
+
+
+func _center_of(spr: AnimatedPokemon) -> Vector2:
+	var r: Rect2 = spr.get_global_rect()
+	return r.position + spr.get_drawn_rect().get_center()
+
+
+func _view_of(c: Combatant) -> EnemyView:
+	for v: EnemyView in _enemy_views:
+		if v.combatant == c:
+			return v
+	return null
+
+
+func _note(d: float) -> void:
+	_ev_wait = maxf(_ev_wait, d)
+
+
+## Status effect + chip pop at the target (played when the status event runs; also for direct calls).
+func _fx_status_at(target: Combatant, status_id: String) -> void:
+	if not _fx.is_enabled() or _fx.is_skipping():
+		return
+	var spr: AnimatedPokemon = _sprite_of(target)
+	if spr == null:
+		return
+	_note(_fx.fx_status(_fx_layer, status_id, _center_of(spr)))
+	var chips: Control = _player_chips if target == _battle.player else (_view_of(target).status_chips if _view_of(target) != null else null)
+	if chips != null:
+		_note(_fx.pulse(chips, BattleFxDirector.cfg_f("chip_pop", "scale", 1.4), BattleFxDirector.cfg_f("chip_pop", "seconds", 0.3)))
+
+
+## Applies the HP / block snapshots of an event to the bars (HP tweens down/up, K.O. fades). Returns the time it takes.
+func _apply_snaps(ev: Dictionary) -> float:
+	if _fx.is_skipping():
+		return 0.0
+	var longest: float = 0.0
+	for s: Dictionary in ev["snaps"]:
+		var c: Combatant = s["c"]
+		var old: Dictionary = _shown.get(c, {})
+		var hp: int = s["hp"]
+		var blk: int = s["block"]
+		if old.is_empty():
+			_shown[c] = {"hp": hp, "block": blk}
+			continue
+		if int(old["hp"]) == hp and int(old["block"]) == blk:
+			continue
+		longest = maxf(longest, _show_values(c, int(old["hp"]), hp, blk, int(s["max"])))
+		_shown[c] = {"hp": hp, "block": blk}
+	return longest
+
+
+func _show_values(c: Combatant, from_hp: int, to_hp: int, blk: int, max_hp: int) -> float:
+	var bar: ProgressBar = _player_hp_bar
+	var label: Label = _player_hp_label
+	var block_label: Label = _player_block
+	var view: EnemyView = null
+	var is_player: bool = c == _battle.player
+	if not is_player:
+		view = _view_of(c)
+		if view == null:
+			return 0.0
+		bar = view.hp_bar
+		label = view.hp_label
+		block_label = view.block_label
+	block_label.text = ("Protection %d" % blk) if (is_player or blk > 0) else ""
+	var dur: float = 0.0
+	if from_hp != to_hp:
+		dur = _fx.t(BattleFxDirector.cfg_f("", "hp_bar_seconds", 0.5))
+		var tw: Tween = _fx.new_tween(bar)
+		tw.tween_method(_set_hp_step.bind(bar, label, max_hp), float(from_hp), float(to_hp), dur)
+	if view != null and to_hp <= 0 and from_hp > 0 and not view.ko_faded:
+		view.ko_faded = true
+		dur = maxf(dur, _fx.ko_fade(view.sprite, dur))
+	return dur
+
+
+func _set_hp_step(v: float, bar: ProgressBar, label: Label, max_hp: int) -> void:
+	if is_instance_valid(bar) and is_instance_valid(label):
+		_set_hp(bar, roundi(v), max_hp)
+		label.text = "PV %d/%d" % [roundi(v), max_hp]
+
+
+func _play_event(ev: Dictionary, _instant: bool) -> void:
+	_ev_wait = 0.0
+	match String(ev["kind"]):
+		"call":
+			var dur: float = _apply_snaps(ev)
+			(ev["fn"] as Callable).call()
+			await _fx.wait(maxf(dur, _ev_wait))
+		"switch_out":
+			await _fx.wait(_fx.slide_out(_player_sprite, -BattleFxDirector.cfg_f("switch", "slide", 200.0),
+					BattleFxDirector.cfg_f("switch", "out_seconds", 0.2)))
+		"switch_in":
+			_do_active_changed()
+			await _fx.wait(_fx.slide_in(_player_sprite, -BattleFxDirector.cfg_f("switch", "slide", 200.0),
+					BattleFxDirector.cfg_f("switch", "in_seconds", 0.28), BattleFxDirector.cfg_f("switch", "pop_scale", 1.15)))
+		"attack":
+			var tspr: AnimatedPokemon = _sprite_of(ev["target"] as Combatant)
+			if tspr != null:
+				await _charge(_player_sprite, tspr, String(ev["type_id"]))
+		"enemy_act":
+			await _play_enemy_act(ev)
+		"hit":
+			await _play_hit(ev)
+		"gain":
+			await _play_gain(ev)
+		"ball":
+			var target: Combatant = ev["target"]
+			var tsp: AnimatedPokemon = _sprite_of(target)
+			await _fx.capture_throw(_fx_layer, _center_of(_player_sprite), _center_of(tsp) if tsp != null else _center_of(_player_sprite),
+					BallIcon.color_of(String(ev["ball_id"])), bool(ev["success"]), tsp)
+
+
+## The attacker dashes toward the target, then the projectile of `type_id` flies; the dash back runs on its own.
+func _charge(from_spr: AnimatedPokemon, to_spr: AnimatedPokemon, type_id: String) -> void:
+	var from_c: Vector2 = _center_of(from_spr)
+	var to_c: Vector2 = _center_of(to_spr)
+	var dir: Vector2 = (to_c - from_c).normalized()
+	var dist: float = minf(BattleFxDirector.cfg_f("lunge", "distance", 120.0), from_c.distance_to(to_c) * 0.6)
+	var out_s: float = _fx.lunge(from_spr, dir, dist)
+	await _fx.wait(out_s)
+	var d: float = _fx.fx_projectile(_fx_layer, type_id, from_c + dir * dist, to_c)
+	await _fx.wait(d)
+
+
+func _play_enemy_act(ev: Dictionary) -> void:
+	var spr: AnimatedPokemon = _sprite_of(ev["enemy"] as Combatant)
+	if spr == null:
+		return
+	if String(ev["intent_type"]) == EnemyIntent.TYPE_ATTACK:
+		await _charge(spr, _player_sprite, String(ev["type_id"]))
+		return
+	var is_block: bool = String(ev["intent_type"]) == EnemyIntent.TYPE_BLOCK
+	var dur: float = _fx.lunge(spr, Vector2.UP, BattleFxDirector.cfg_f("lunge", "hop_distance", 18.0))
+	dur = maxf(dur, _fx.fx_buff(_fx_layer, "block" if is_block else "strength", _center_of(spr)))
+	dur = maxf(dur, _apply_snaps(ev))
+	await _fx.wait(dur)
+
+
+func _play_hit(ev: Dictionary) -> void:
+	var tgt: Combatant = ev["target"]
+	var spr: AnimatedPokemon = _sprite_of(tgt)
+	var mult: float = ev["mult"]
+	var old_hp: int = int((_shown.get(tgt, {}) as Dictionary).get("hp", tgt.hp))
+	var new_hp: int = old_hp
+	for s: Dictionary in ev["snaps"]:
+		if s["c"] == tgt:
+			new_hp = s["hp"]
+	var lost: int = maxi(0, old_hp - new_hp)
+	var dur: float = 0.0
+	if spr != null:
+		var at: Vector2 = _center_of(spr)
+		var key: String = "super" if mult > 1.0 else ("resisted" if mult < 1.0 else "normal")
+		if mult > 0.0:
+			dur = maxf(dur, _fx.fx_impact(_fx_layer, String(ev["type_id"]), at, BattleFxDirector.cfg_f("impact_strength", key, 1.0)))
+			if lost > 0:
+				dur = maxf(dur, _fx.shake(spr))
+				_fx.flash(spr)
+		var text: String = str(lost)
+		var color: Color = BattleFxDirector.cfg_color("number", "color_normal", Color.WHITE)
+		var size: int = int(BattleFxDirector.cfg_f("number", "font_size", 30.0))
+		if mult <= 0.0:
+			text = TEXT_IMMUNE_SHORT
+			color = BattleFxDirector.cfg_color("number", "color_immune", Color(0.6, 0.65, 0.8))
+		elif lost <= 0:
+			text = TEXT_BLOCKED
+			color = BattleFxDirector.cfg_color("number", "color_block", Color(0.45, 0.7, 1.0))
+		elif mult > 1.0:
+			color = BattleFxDirector.cfg_color("number", "color_super", Color(1, 0.84, 0.15))
+			size = int(BattleFxDirector.cfg_f("number", "font_size_super", 46.0))
+		elif mult < 1.0:
+			color = BattleFxDirector.cfg_color("number", "color_resisted", Color(0.7, 0.7, 0.75))
+			size = int(BattleFxDirector.cfg_f("number", "font_size_resisted", 24.0))
+		dur = maxf(dur, _fx.number(_fx_layer, text, color, size, at + Vector2(0, BattleFxDirector.cfg_f("number", "start_offset_y", -34.0))))
+		await _fx.wait(_fx.t(0.12))  # the bar moves right after the impact starts
+	dur = maxf(dur, _apply_snaps(ev))
+	_show_effectiveness(tgt, mult)
+	await _fx.wait(maxf(dur - _fx.t(0.12), 0.0))
+
+
+func _play_gain(ev: Dictionary) -> void:
+	var at: Vector2 = _center_of(_player_sprite)
+	var dur: float = 0.0
+	var num_y: float = BattleFxDirector.cfg_f("number", "start_offset_y", -34.0)
+	var gsize: int = int(BattleFxDirector.cfg_f("number", "font_size_gain", 30.0))
+	if int(ev["block"]) > 0:
+		dur = maxf(dur, _fx.fx_buff(_fx_layer, "block", at))
+		dur = maxf(dur, _fx.pulse(_player_block, BattleFxDirector.cfg_f("block_pulse", "scale", 1.3), BattleFxDirector.cfg_f("block_pulse", "seconds", 0.4)))
+		_fx.flash(_player_sprite, BattleFxDirector.cfg_color("flash", "block_modulate", Color(0.8, 1.4, 2.6)))
+		dur = maxf(dur, _fx.number(_fx_layer, "+%d" % int(ev["block"]), BattleFxDirector.cfg_color("number", "color_block", Color(0.45, 0.7, 1)), gsize, at + Vector2(0, num_y)))
+	if int(ev["heal"]) > 0:
+		dur = maxf(dur, _fx.fx_buff(_fx_layer, "heal", at))
+		dur = maxf(dur, _fx.number(_fx_layer, "+%d" % int(ev["heal"]), BattleFxDirector.cfg_color("number", "color_heal", Color(0.4, 1, 0.55)), gsize, at + Vector2(0, num_y - 30.0)))
+	dur = maxf(dur, _apply_snaps(ev))
+	await _fx.wait(dur)
+
+
+## End of a queue (played or skipped): sprites back to rest, effects cleared, the real state shown.
+func _on_fx_finished() -> void:
+	_hold_fighters = false
+	if _fx_layer != null:
+		for child: Node in _fx_layer.get_children():
+			child.queue_free()
+	_fx.reset_node(_player_sprite)
+	for v: EnemyView in _enemy_views:
+		_fx.reset_node(v.sprite)
+		if not v.combatant.is_alive() and _fx.is_enabled():
+			v.ko_faded = true
+	_fx.reset_node(_player_block)
+	_fx.reset_node(_player_chips)
+	_refresh()
 
 
 # --- Input -----------------------------------------------------------------

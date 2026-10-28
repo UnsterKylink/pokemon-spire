@@ -44,6 +44,8 @@ const SKILL_CARD: String = "abri"
 const MAX_INTENT_TURNS: int = 8
 ## Seconds to wait so the "<Nom>, à toi !" float has faded (FLOAT_DURATION is 1.2 s).
 const FLOAT_WAIT: float = 1.6
+## Story 021: seconds to wait after starting an animation before the shot (the shot adds ~10 frames).
+const FX_SHOT_DELAY: float = 0.05
 ## Story 006: run seed, items / potions / money given through the QA cheats, encounter of the potion shot.
 const ITEMS_SEED: int = 2026
 const ITEMS_GIVEN: Array[String] = ["peau_metal", "bandeau", "restes"]
@@ -1673,7 +1675,77 @@ func _premium_card_shots() -> void:
 	await _shot("3x-titre")
 
 
+## Story 021: attack / combat animation shots, mid-animation frames (filter `story-021`): player charge + projectile,
+## impact + super effective number, block pulse, status, enemy charge, K.O. fade, switch slide, capture ball arc.
+func _fx_battle_shots() -> void:
+	_main.start_new_run(2021, "salameche")
+	_main.start_encounter("trio_vol")
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.set_fx_speed("normal")
+	var b: Battle = bs.get_battle()
+	var foe: int = 0
+	for i: int in b.enemies.size():
+		if b.enemies[i].id.contains("aspicot"):
+			foe = i
+	var hand: Array[String] = ["flammette", "abri", "hypnose", "dard_venin", "flammette"]
+	bs.qa_force_hand(hand)
+	bs.play_card_direct(0, foe)
+	await create_timer(FX_SHOT_DELAY).timeout
+	await _shot("1x-01-charge-projectile")
+	bs.skip_animations()
+	bs.qa_force_hand(hand)
+	bs.play_card_direct(0, foe)
+	await create_timer(FX_SHOT_DELAY + 0.45).timeout
+	await _shot("1x-02-impact-super-efficace")
+	bs.skip_animations()
+	bs.qa_force_hand(hand)
+	bs.play_card_direct(1)
+	await create_timer(FX_SHOT_DELAY).timeout
+	await _shot("1x-03-protection")
+	bs.skip_animations()
+	bs.qa_force_hand(hand)
+	bs.play_card_direct(3, foe)
+	await create_timer(FX_SHOT_DELAY + 0.3).timeout
+	await _shot("1x-04-statut")
+	bs.skip_animations()
+	bs.press_end_turn()
+	await create_timer(FX_SHOT_DELAY).timeout
+	await _shot("1x-05-ennemi-charge")
+	bs.skip_animations()
+	if b.enemies[foe].is_alive():
+		b.enemies[foe].hp = 1
+		b.enemies[foe].changed.emit()
+		bs.qa_force_hand(hand)
+		bs.play_card_direct(0, foe)
+		await create_timer(FX_SHOT_DELAY + 0.7).timeout
+		await _shot("1x-06-ko-fondu")
+	bs.skip_animations()
+	_main.start_encounter(SWITCH_ENCOUNTER)
+	bs = _main.get_battle_screen()
+	bs.set_fx_speed("normal")
+	var sw: Array[String] = [SWITCH_CARD, SWITCH_CARD, "abri"]
+	bs.qa_force_hand(sw)
+	bs.play_card_direct(0, 0)
+	await create_timer(0.1).timeout
+	await _shot("1x-07-switch-slide")
+	bs.skip_animations()
+	_main.start_new_run(2022, "salameche")
+	_main.qa_give_ball("poke_ball")
+	_main.qa_give_ball("poke_ball")
+	_main.start_encounter(CAPTURE_TRIO, "wild")
+	bs = _main.get_battle_screen()
+	bs.set_fx_speed("normal")
+	_main.battle_use_ball("poke_ball", 0)
+	await create_timer(FX_SHOT_DELAY + 0.1).timeout
+	await _shot("1x-08-capture-arc")
+	bs.skip_animations()
+
+
 func _run() -> void:
+	if _filter == "story-021":
+		await _fx_battle_shots()
+		quit(0)
+		return
 	if _filter == "story-020b":
 		await _premium_battle_shots()
 		await _premium_map_shots()
