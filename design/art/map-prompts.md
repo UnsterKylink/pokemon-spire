@@ -84,4 +84,4 @@ image. No text, no letters, no numbers, no logos, no frame, no shadow on the bac
 - `mart.png` (Poké Mart) : A small Poké Mart shop building, white walls and blue roof with a shopping-bag emblem, cute and simple.
 - `event.png` (Événement) : A wooden signpost with a big glowing question mark symbol carved on it (the symbol only, no letters).
 - `boss.png` (Arène) : A Pokémon Gym building, grand and imposing, with a dome roof and a golden badge emblem above the entrance.
-- `legend.png` (Ta position) : A red and white Poké Ball, shiny, slightly tilted, simple.
+- `player.png` (Ta position) : A red and white Poké Ball, shiny, slightly tilted, simple.
