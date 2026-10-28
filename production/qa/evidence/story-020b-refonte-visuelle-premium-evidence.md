@@ -17,4 +17,4 @@
 
 | Rôle | Statut |
 |---|---|
-| Joueur / direction artistique | [ ] Approved |
+| Joueur / direction artistique | [x] Approved (2026-10-28) |
