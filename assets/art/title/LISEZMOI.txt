@@ -1,0 +1,3 @@
+Écran titre (story 020b) : range ici title.png (16:9, 1920x1080).
+Prompt dans design/art/backdrop-prompts.md (section « Écran titre »).
+Le jeu ne l'affiche pas encore : l'écran titre sera fait dans la story 023 (menu).

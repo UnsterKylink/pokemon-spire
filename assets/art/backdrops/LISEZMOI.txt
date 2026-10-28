@@ -1,0 +1,18 @@
+Dossier des décors de combat peints (story 020b).
+
+Range ici tes images PNG (16:9, idéalement 1920x1080), avec EXACTEMENT ces noms
+(minuscules, sans accent) :
+
+route.png       normal.png      fire.png        water.png       electric.png
+grass.png       ice.png         fighting.png    poison.png      ground.png
+flying.png      psychic.png     bug.png         rock.png        ghost.png
+dragon.png      dark.png        steel.png       fairy.png
+league.png      (Conseil 4)
+ethernatos.png  (boss final)
+legendary.png   (événements légendaires)
+
+Les prompts à coller dans ton outil d'image sont dans design/art/backdrop-prompts.md.
+
+Dès qu'un fichier est là, ouvre l'éditeur Godot (il importe l'image tout seul) puis
+appuie sur F5 : les combats de ce type utilisent ton image. Une image manquante =
+le jeu garde son décor dessiné. Pour revenir en arrière, supprime le fichier.
