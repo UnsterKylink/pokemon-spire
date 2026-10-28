@@ -88,6 +88,14 @@ const BIOMES: Dictionary = {
 	"flying": {"land": Color("#A6D98C"), "beach": Color("#F2E3A8"), "deco": ["tree", "bush", "flowers"]},
 	"steel": {"land": Color("#BFC7D0"), "beach": Color("#DDE2E8"), "deco": ["house", "rock", "mountain"]}}
 
+## Story 020b (painted art): data file of the region images / room icons (see its _doc). A missing image = the code
+## drawing for that element only.
+const ART_PATH: String = "res://assets/data/map_art.json"
+## Cache of the map art: "r:<type>" region, "i:<room>" icon, "v:<room>" desaturated icon -> Texture2D or null.
+static var _art: Dictionary = {}
+static var _art_loaded: bool = false
+static var _tex_cache: Dictionary = {}
+
 var _graph: MapGraph
 var _progress: ActProgress
 var _room_names: Dictionary = {}
@@ -181,11 +189,85 @@ func node_center(node: MapNode) -> Vector2:
 	return Vector2(x, floor_y(node.floor))
 
 
+## Story 020b: the map art data (assets/data/map_art.json), loaded once; {} if the file is missing.
+static func art() -> Dictionary:
+	if not _art_loaded:
+		_art_loaded = true
+		var f: FileAccess = FileAccess.open(ART_PATH, FileAccess.READ)
+		if f != null:
+			var parsed: Variant = JSON.parse_string(f.get_as_text())
+			if parsed is Dictionary:
+				_art = parsed
+	return _art
+
+
+## Numeric value of the map art data (`fallback` when absent).
+static func art_num(key: String, fallback: float) -> float:
+	return float(art().get(key, fallback))
+
+
+## Colour value of the map art data (`fallback` when absent).
+static func art_color(key: String, fallback: Color) -> Color:
+	return Color.from_string(String(art().get(key, "")), fallback)
+
+
+## Story 020b: painted region image of a gym type (assets/art/map/<type>.jpg|png), null if there is none.
+static func region_texture(type_id: String) -> Texture2D:
+	if type_id.is_empty():
+		return null
+	return _cached_texture("r:" + type_id, String(art().get("region_path", "")), type_id)
+
+
+## Story 020b: room icon image (assets/art/map/icons/<room>.png; "player" = current position), null if there is none.
+static func icon_texture(room_type: String) -> Texture2D:
+	if room_type.is_empty():
+		return null
+	return _cached_texture("i:" + room_type, String(art().get("icon_path", "")), room_type)
+
+
+static func _cached_texture(key: String, pattern: String, id: String) -> Texture2D:
+	if _tex_cache.has(key):
+		return _tex_cache[key] as Texture2D
+	var tex: Texture2D = null
+	if pattern.contains("%s"):
+		var base: String = (pattern % id).get_basename()
+		for ext: Variant in art().get("extensions", ["png", "jpg"]):
+			var path: String = base + "." + String(ext)
+			if ResourceLoader.exists(path):
+				tex = load(path) as Texture2D
+				if tex != null:
+					break
+	_tex_cache[key] = tex
+	return tex
+
+
+## Desaturated copy of a room icon (visited rooms), built once from the image.
+static func _visited_texture(room_type: String, tex: Texture2D) -> Texture2D:
+	var key: String = "v:" + room_type
+	if _tex_cache.has(key):
+		return _tex_cache[key] as Texture2D
+	var out: Texture2D = tex
+	var img: Image = tex.get_image()
+	if img != null:
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		img.adjust_bcs(1.0, 1.0, art_num("visited_saturation", 0.15))
+		out = ImageTexture.create_from_image(img)
+	_tex_cache[key] = out
+	return out
+
+
 ## Draws the Town Map landmark of a `room_type` room centred on `c` (size `r`) on `ci`, then its state: soft yellow
 ## glow + white ring for reachable rooms, greyed + green check for visited ones, red Town Map cursor for the current
-## room. The gym's roof and badge use `accent` (the gym type colour).
+## room. The gym's roof and badge use `accent` (the gym type colour). Story 020b: when the room's icon image exists it
+## is drawn instead (`side` px wide; 0 = 2 * r).
 static func draw_room_icon(ci: CanvasItem, c: Vector2, r: float, room_type: String, state: int,
-		accent: Color = UiStyle.ACCENT_RED) -> void:
+		accent: Color = UiStyle.ACCENT_RED, side: float = 0.0) -> void:
+	var tex: Texture2D = icon_texture(room_type)
+	if tex != null:
+		_draw_icon_image(ci, c, side if side > 0.0 else r * 2.0, room_type, state, tex)
+		return
 	if state == IconState.REACHABLE:
 		for i: int in 6:
 			ci.draw_circle(c, r + 17.0 - i * 3.0, Color(GLOW, 0.06 + i * 0.05))
@@ -217,6 +299,33 @@ static func draw_room_icon(ci: CanvasItem, c: Vector2, r: float, room_type: Stri
 					bc + Vector2(br * 0.55, -br * 0.4)]), Color.WHITE, maxf(1.6, br * 0.3), true)
 		IconState.CURRENT:
 			_draw_cursor(ci, c, r + 8.0)
+
+
+## Story 020b: an icon image as a room marker: drop shadow, soft glow ring when reachable, desaturated + check when
+## visited, Town Map cursor when current.
+static func _draw_icon_image(ci: CanvasItem, c: Vector2, side: float, room_type: String, state: int,
+		tex: Texture2D) -> void:
+	var half: float = side * 0.5
+	var rect := Rect2(c - Vector2(half, half), Vector2(side, side))
+	if state == IconState.REACHABLE:
+		var glow: Color = art_color("glow", GLOW)
+		for i: int in 6:
+			ci.draw_circle(c, half + 13.0 - i * 2.6, Color(glow, 0.05 + i * 0.045))
+		ci.draw_arc(c, half + 3.0, 0.0, TAU, 56, Color(1, 1, 1, 0.9), 2.5, true)
+	ci.draw_texture_rect(tex, Rect2(rect.position + Vector2(side * 0.04, side * 0.07), rect.size), false,
+			Color(0, 0, 0, art_num("icon_shadow", 0.38)))
+	if state == IconState.VISITED:
+		ci.draw_texture_rect(_visited_texture(room_type, tex), rect, false, Color(1, 1, 1, art_num("visited_alpha", 0.82)))
+		var bc: Vector2 = c + Vector2(half * 0.66, half * 0.6)
+		var br: float = maxf(5.5, side * 0.12)
+		ci.draw_circle(bc, br + 1.8, LINE)
+		ci.draw_circle(bc, br, COLOR_VISITED_MARK)
+		ci.draw_polyline(PackedVector2Array([bc + Vector2(-br * 0.5, 0.0), bc + Vector2(-br * 0.12, br * 0.42),
+				bc + Vector2(br * 0.55, -br * 0.4)]), Color.WHITE, maxf(1.6, br * 0.3), true)
+	else:
+		ci.draw_texture_rect(tex, rect, false)
+	if state == IconState.CURRENT:
+		_draw_cursor(ci, c, half + 4.0)
 
 
 ## Draws a small Poké Ball (the "you are here" pin) of radius `r` at `c`.
@@ -583,20 +692,163 @@ func _near_any(p: Vector2, points: Array, segs: Array[PackedVector2Array], dist:
 func _draw() -> void:
 	if _graph == null:
 		return
-	_draw_region()
-	_draw_roads()
+	# Story 020b: over a painted region (drawn by MapScreen's window behind this canvas) no code land / roads.
+	if region_texture(_type_id) != null:
+		_draw_trails()
+	else:
+		_draw_region()
+		_draw_roads()
 	var current: String = _progress.current_node_id
 	for id: String in _graph.nodes.keys():
 		var node: MapNode = _graph.nodes[id]
 		var c: Vector2 = node_center(node)
-		var r: float = _radius(node)
-		draw_room_icon(self, c, r, node.room_type, _state_of(id), _zone_color)
+		draw_room_icon(self, c, _radius(node), node.room_type, _state_of(id), _zone_color, _icon_side(node))
 		if node.room_type == "boss":
-			_draw_boss_label(c, r)
+			_draw_boss_label(c, _visual_radius(node))
 	if not current.is_empty() and _graph.nodes.has(current):
 		var cn: MapNode = _graph.nodes[current]
-		var cr: float = _radius(cn)
-		draw_ball_marker(self, node_center(cn) + Vector2(cr + 11.0, -cr - 12.0), 8.5)
+		var cr: float = _visual_radius(cn)
+		var pin: Vector2 = node_center(cn) + Vector2(cr + 11.0, -cr - 12.0)
+		var player: Texture2D = icon_texture("player")
+		if player != null:
+			var ps: float = art_num("player_icon_size", 30.0)
+			var pr := Rect2(pin - Vector2(ps, ps) * 0.5, Vector2(ps, ps))
+			draw_texture_rect(player, Rect2(pr.position + Vector2(1.5, 2.5), pr.size), false,
+					Color(0, 0, 0, art_num("icon_shadow", 0.38)))
+			draw_texture_rect(player, pr, false)
+		else:
+			draw_ball_marker(self, pin, 8.5)
+
+
+## Story 020b: drawn side of a room's icon image (0 when the room has no image: code landmark).
+func _icon_side(node: MapNode) -> float:
+	if icon_texture(node.room_type) == null:
+		return 0.0
+	return art_num("boss_icon_size", 76.0) if node.room_type == "boss" else art_num("icon_size", 52.0)
+
+
+## Visible radius of a room marker (image half-side or landmark radius).
+func _visual_radius(node: MapNode) -> float:
+	return maxf(_radius(node), _icon_side(node) * 0.5)
+
+
+## Story 020b: paths over a painted region, like Pokémon footstep trails: soft round dots with a dark outline and a
+## slight shadow on gently curved paths; the next choices brighter with a halo; the travelled ones a solid warm line.
+func _draw_trails() -> void:
+	var current: String = _progress.current_node_id
+	var walked: Array[PackedVector2Array] = []
+	var nexts: Array[PackedVector2Array] = []
+	var others: Array[PackedVector2Array] = []
+	for id: String in _graph.nodes.keys():
+		var node: MapNode = _graph.nodes[id]
+		for next_id: String in node.next:
+			var other: MapNode = _graph.get_node(next_id)
+			if other == null:
+				continue
+			var pts: PackedVector2Array = _path_points(node_center(node), node_center(other))
+			# Paths start a little under the icons so even rooms stacked one row apart stay linked.
+			var trimmed: PackedVector2Array = _sub_path(pts, _visual_radius(node) * 0.62, _visual_radius(other) * 0.62)
+			if trimmed.size() < 2:
+				continue
+			if _is_walked(id, next_id):
+				walked.append(trimmed)
+			elif id == current and _reachable.has(next_id):
+				nexts.append(trimmed)
+			else:
+				others.append(trimmed)
+	var spacing: float = art_num("trail_spacing", 13.0)
+	var outline: Color = art_color("trail_outline", LINE)
+	var dot_r: float = art_num("trail_dot_radius", 3.4)
+	var base: Color = Color(art_color("trail_color", ROAD_NEXT), art_num("trail_alpha", 0.8))
+	for pts: PackedVector2Array in others:
+		_draw_dots(pts, spacing, dot_r, base, Color(outline, base.a * 0.85), false)
+	var warm: Color = art_color("walked_color", TRAIL_RED)
+	var ww: float = art_num("walked_width", 6.0)
+	for pts: PackedVector2Array in walked:
+		draw_polyline(_shift(pts, Vector2(0, 2.5)), Color(0, 0, 0, 0.3), ww + 4.0, true)
+		draw_polyline(pts, outline, ww + 3.0, true)
+		draw_polyline(pts, warm, ww, true)
+		draw_polyline(_shift(pts, Vector2(0, -ww * 0.18)), Color(warm.lightened(0.45), 0.6), ww * 0.3, true)
+		for p: Vector2 in [pts[0], pts[pts.size() - 1]]:
+			draw_circle(p, (ww + 3.0) * 0.5, outline)
+			draw_circle(p, ww * 0.5, warm)
+	for pts: PackedVector2Array in nexts:
+		_draw_dots(pts, spacing, art_num("trail_next_radius", 4.4), art_color("trail_next_color", Color.WHITE), outline, true)
+
+
+## Dots every `spacing` px along the polyline `pts`: shadow, dark outline, fill (+ a soft halo when `glow`).
+func _draw_dots(pts: PackedVector2Array, spacing: float, r: float, fill: Color, outline: Color, glow: bool) -> void:
+	var dots: PackedVector2Array = _points_along(pts, spacing)
+	var halo: Color = art_color("glow", GLOW)
+	if glow:
+		for p: Vector2 in dots:
+			draw_circle(p, r + 7.0, Color(halo, 0.22))
+			draw_circle(p, r + 4.0, Color(halo, 0.35))
+	for p: Vector2 in dots:
+		draw_circle(p + Vector2(1.0, 1.8), r + 1.4, Color(0, 0, 0, 0.28 * fill.a))
+		draw_circle(p, r + 1.5, outline)
+		draw_circle(p, r, fill)
+		draw_circle(p - Vector2(r, r) * 0.3, r * 0.4, Color(1, 1, 1, 0.55 * fill.a))
+
+
+## Gently curved path from `a` to `b` (quadratic curve; straight when vertical), sampled as a polyline.
+func _path_points(a: Vector2, b: Vector2) -> PackedVector2Array:
+	var length: float = a.distance_to(b)
+	if length <= 0.0:
+		return PackedVector2Array([a, b])
+	var perp: Vector2 = (b - a).orthogonal() / length
+	var ctrl: Vector2 = (a + b) * 0.5 + perp * length * art_num("path_curve", 0.1) * ((b.x - a.x) / length)
+	var pts := PackedVector2Array()
+	for i: int in 25:
+		var t: float = i / 24.0
+		pts.append(a.lerp(ctrl, t).lerp(ctrl.lerp(b, t), t))
+	return pts
+
+
+## Part of the polyline `pts` from arc length `from_start` to (total - `from_end`).
+static func _sub_path(pts: PackedVector2Array, from_start: float, from_end: float) -> PackedVector2Array:
+	var total: float = 0.0
+	for i: int in range(1, pts.size()):
+		total += pts[i - 1].distance_to(pts[i])
+	var lo: float = from_start
+	var hi: float = total - from_end
+	var out := PackedVector2Array()
+	if hi <= lo:
+		return out
+	var d: float = 0.0
+	for i: int in range(1, pts.size()):
+		var seg: float = pts[i - 1].distance_to(pts[i])
+		if seg <= 0.0:
+			continue
+		var d2: float = d + seg
+		if d2 >= lo and d <= hi:
+			var t0: float = clampf((lo - d) / seg, 0.0, 1.0)
+			var t1: float = clampf((hi - d) / seg, 0.0, 1.0)
+			if out.is_empty():
+				out.append(pts[i - 1].lerp(pts[i], t0))
+			out.append(pts[i - 1].lerp(pts[i], t1))
+		d = d2
+	return out
+
+
+## Points every `spacing` px along the polyline `pts`, centred (equal margins at both ends).
+static func _points_along(pts: PackedVector2Array, spacing: float) -> PackedVector2Array:
+	var total: float = 0.0
+	for i: int in range(1, pts.size()):
+		total += pts[i - 1].distance_to(pts[i])
+	var out := PackedVector2Array()
+	if total <= 0.0 or spacing <= 0.0:
+		return out
+	var n: int = int(total / spacing)
+	var target: float = (total - n * spacing) * 0.5
+	var d: float = 0.0
+	for i: int in range(1, pts.size()):
+		var seg: float = pts[i - 1].distance_to(pts[i])
+		while seg > 0.0 and target <= d + seg + 0.001:
+			out.append(pts[i - 1].lerp(pts[i], clampf((target - d) / seg, 0.0, 1.0)))
+			target += spacing
+		d += seg
+	return out
 
 
 ## Sea features, land mass / islands (shallow water, foam, dark coast, beach, land, cel highlight) and scenery.
@@ -863,6 +1115,10 @@ class RoomIcon extends Control:
 
 	func _draw() -> void:
 		var r: float = minf(size.x, size.y) * 0.5 - 2.0
+		if MapCanvas.icon_texture(room_type) != null:  # story 020b: the icon image fills the swatch (room for its shadow)
+			var side: float = minf(size.x, size.y) - 2.0
+			MapCanvas.draw_room_icon(self, size * 0.5 - Vector2(1, 1), r, room_type, MapCanvas.IconState.NORMAL, accent, side)
+			return
 		if room_type == "boss":
 			r = (minf(size.x, size.y) * 0.5 - 1.0) / 1.15  # the roof is wider than the icon radius
 		MapCanvas.draw_room_icon(self, size * 0.5 + Vector2(0, r * 0.08), r, room_type, MapCanvas.IconState.NORMAL, accent)

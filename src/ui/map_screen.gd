@@ -101,7 +101,7 @@ func setup(data: GameData, run: RunState) -> void:
 		names["boss"] = gym_label
 	_build_legend(names, zone_color)
 	_backdrop.set_zone(String(zone.get("type_id", "")), zone_color if not zone.is_empty() else UiStyle.SUCCESS)
-	_sea.set_zone(zone_color if not zone.is_empty() else FRAME_BLUE)
+	_sea.set_zone(zone_color if not zone.is_empty() else FRAME_BLUE, String(zone.get("type_id", "")))
 	_header_icon.accent = zone_color
 	_header_icon.queue_redraw()
 	_canvas.set_zone_color(zone_color)
@@ -296,6 +296,15 @@ func _build_ui() -> void:
 	_scroll.add_child(_canvas)
 	# Re-apply the focus scroll whenever the scroll range is (re)computed by the layout.
 	_scroll.get_v_scroll_bar().changed.connect(_scroll_to_focus)
+	# Story 020b: the painted region (drawn by the window) scrolls with the map.
+	_scroll.get_v_scroll_bar().value_changed.connect(_sync_sea_scroll)
+	_canvas.resized.connect(_sync_sea_scroll)
+
+
+## Story 020b: tells the window where the scrolling map is, so its painted region moves with the rooms.
+func _sync_sea_scroll(_value: float = 0.0) -> void:
+	if _sea != null and _scroll != null and _canvas != null:
+		_sea.set_scroll(float(_scroll.scroll_vertical), _canvas.size.y + SEA_INSET * 2.0)
 
 
 func _build_legend(names: Dictionary, accent: Color) -> void:
@@ -308,7 +317,10 @@ func _build_legend(names: Dictionary, accent: Color) -> void:
 		var item := HBoxContainer.new()
 		item.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		item.add_theme_constant_override("separation", 6)
-		var icon := MapCanvas.RoomIcon.new(rt, LEGEND_ICON_SIDE, accent)
+		var side: float = LEGEND_ICON_SIDE
+		if MapCanvas.icon_texture(rt) != null:  # story 020b: icon images read better a bit bigger
+			side = MapCanvas.art_num("legend_icon_size", LEGEND_ICON_SIDE)
+		var icon := MapCanvas.RoomIcon.new(rt, side, accent)
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		item.add_child(icon)
 		var l: Label = CardView.make_label(16)
@@ -374,12 +386,27 @@ func _scroll_to_focus() -> void:
 
 ## Story 020b: the Town Map sea (rounded, thin dark rim): bright blue slightly tinted by the zone, soft horizontal
 ## swell bands and little white wave marks (deterministic). The scrolling region (MapCanvas) is drawn over it.
+## When the zone has a painted region image (MapCanvas.region_texture) the window shows it instead, cover-fit over the
+## whole scrollable map (it scrolls with the rooms), with a light veil and a soft vignette (assets/data/map_art.json).
 class SeaView extends Control:
+	const CORNER: float = 12.0
 	var tint: Color = Color("#4F86D9")
+	var type_id: String = ""
+	var scroll_offset: float = 0.0
+	var content_height: float = 0.0
 
-	## Sets the zone colour (slight tint of the sea), then redraws.
-	func set_zone(color: Color) -> void:
+	## Sets the zone colour (slight tint of the sea) and gym type (painted region), then redraws.
+	func set_zone(color: Color, zone_type_id: String = "") -> void:
 		tint = color
+		type_id = zone_type_id
+		queue_redraw()
+
+	## Story 020b: vertical scroll of the map and its full height (window coordinates), for the painted region.
+	func set_scroll(offset: float, height: float) -> void:
+		if is_equal_approx(offset, scroll_offset) and is_equal_approx(height, content_height):
+			return
+		scroll_offset = offset
+		content_height = height
 		queue_redraw()
 
 	func _notification(what: int) -> void:
@@ -387,6 +414,10 @@ class SeaView extends Control:
 			queue_redraw()
 
 	func _draw() -> void:
+		var region: Texture2D = MapCanvas.region_texture(type_id)
+		if region != null:
+			_draw_region_image(region)
+			return
 		var sea: Color = MapCanvas.SEA.lerp(tint, 0.08)
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = sea
@@ -405,6 +436,56 @@ class SeaView extends Control:
 			var p := Vector2(rng.randf_range(20.0, size.x - 20.0), rng.randf_range(16.0, size.y - 14.0))
 			draw_arc(p, 5.0, deg_to_rad(200), deg_to_rad(340), 6, Color(1, 1, 1, 0.45), 1.6, true)
 			draw_arc(p + Vector2(9, 0), 5.0, deg_to_rad(200), deg_to_rad(340), 6, Color(1, 1, 1, 0.45), 1.6, true)
+
+	## Painted region, cover-fit over the full map height and shifted by the scroll, clipped to the rounded window;
+	## then a light veil, the vignette and the dark rim.
+	func _draw_region_image(tex: Texture2D) -> void:
+		var ts: Vector2 = tex.get_size()
+		var outline: PackedVector2Array = _rounded_rect(Rect2(Vector2.ZERO, size), CORNER)
+		if ts.x > 0.0 and ts.y > 0.0:
+			var area := Vector2(size.x, maxf(size.y, content_height))
+			var k: float = maxf(area.x / ts.x, area.y / ts.y)
+			var ds: Vector2 = ts * k
+			var origin: Vector2 = (area - ds) * 0.5 - Vector2(0.0, scroll_offset)
+			var uvs := PackedVector2Array()
+			for p: Vector2 in outline:
+				uvs.append((p - origin) / ds)
+			draw_polygon(outline, PackedColorArray([Color.WHITE]), uvs, tex)
+		var veil: float = MapCanvas.art_num("region_darken", 0.06)
+		if veil > 0.0:
+			draw_colored_polygon(outline, Color(0, 0, 0, veil))
+		var v: float = MapCanvas.art_num("vignette", 0.42)
+		var vw: float = minf(MapCanvas.art_num("vignette_width", 70.0), minf(size.x, size.y) * 0.5)
+		if v > 0.0 and vw > 0.0:
+			var dark := Color(0.05, 0.06, 0.12, v)
+			var clear := Color(0.05, 0.06, 0.12, 0.0)
+			var w: float = size.x
+			var h: float = size.y
+			var c := CORNER * 0.3  # stay inside the rounded corners
+			for quad: Array in [
+					[Vector2(c, c), Vector2(w - c, c), Vector2(w - c, vw), Vector2(c, vw)],
+					[Vector2(c, h - c), Vector2(w - c, h - c), Vector2(w - c, h - vw), Vector2(c, h - vw)],
+					[Vector2(c, c), Vector2(c, h - c), Vector2(vw, h - c), Vector2(vw, c)],
+					[Vector2(w - c, c), Vector2(w - c, h - c), Vector2(w - vw, h - c), Vector2(w - vw, c)]]:
+				draw_polygon(PackedVector2Array(quad), PackedColorArray([dark, dark, clear, clear]))
+		var rim := StyleBoxFlat.new()
+		rim.draw_center = false
+		rim.border_color = Color("#1B2440")
+		rim.set_border_width_all(2)
+		rim.set_corner_radius_all(int(CORNER))
+		rim.anti_aliasing = true
+		draw_style_box(rim, Rect2(Vector2.ZERO, size))
+
+	static func _rounded_rect(r: Rect2, radius: float) -> PackedVector2Array:
+		var pts := PackedVector2Array()
+		var rad: float = minf(radius, minf(r.size.x, r.size.y) * 0.5)
+		var corners: Array[Vector2] = [r.position + Vector2(r.size.x - rad, rad), r.end - Vector2(rad, rad),
+				r.position + Vector2(rad, r.size.y - rad), r.position + Vector2(rad, rad)]
+		for i: int in 4:
+			for s: int in 7:
+				var a: float = -PI / 2.0 + (i + s / 6.0) * PI / 2.0
+				pts.append(corners[i] + Vector2.from_angle(a) * rad)
+		return pts
 
 
 ## Story 020b: screen background behind the Town Map window, like a Pokémon menu backdrop: blue gradient tinted by the

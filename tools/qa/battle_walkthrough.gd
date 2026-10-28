@@ -1542,6 +1542,13 @@ func _premium_battle_shots() -> void:
 func _premium_map_shots() -> void:
 	_main.qa_set_autosave(false)  # never touch the real save
 	_main.start_new_run(STYLE_SEED, "salameche")
+	var icons: Array[String] = []
+	for room: String in ["wild", "elite", "rival", "center", "mart", "event", "boss", "player"]:
+		if MapCanvas.icon_texture(room) != null:
+			icons.append(room)
+	var zone_type: String = String(_main.get_zone().get("type_id", ""))
+	print("2x premium map art zone1 type=%s region_image=%s icons=%s" % [zone_type,
+			MapCanvas.region_texture(zone_type) != null, icons])
 	await _shot("2x-carte-zone-1-debut")
 	var reward_done: bool = false
 	for step: int in 3:  # walk three rooms so the ink trail shows
