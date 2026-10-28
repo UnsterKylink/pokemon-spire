@@ -1,12 +1,12 @@
 # Story 021: Animations d'attaque et de combat
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Presentation
 > **Type**: Visual/Feel
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-10-28
 
 ## Context
 
