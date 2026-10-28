@@ -133,7 +133,7 @@ static func is_headless() -> bool:
 ## Saved speed preset (user://settings.json), or the data default.
 static func load_saved_speed() -> String:
 	var preset: String = String(cfg("", "default_speed", "normal"))
-	var f: FileAccess = FileAccess.open(SETTINGS_PATH, FileAccess.READ)
+	var f: FileAccess = FileAccess.open(SETTINGS_PATH, FileAccess.READ) if FileAccess.file_exists(SETTINGS_PATH) else null
 	if f != null:
 		var parsed: Variant = JSON.parse_string(f.get_as_text())
 		f.close()
@@ -145,7 +145,7 @@ static func load_saved_speed() -> String:
 ## Saves the speed preset next to the other settings (atomic: temp file then rename; failures are ignored).
 static func save_speed(preset: String) -> void:
 	var data: Dictionary = {}
-	var f: FileAccess = FileAccess.open(SETTINGS_PATH, FileAccess.READ)
+	var f: FileAccess = FileAccess.open(SETTINGS_PATH, FileAccess.READ) if FileAccess.file_exists(SETTINGS_PATH) else null
 	if f != null:
 		var parsed: Variant = JSON.parse_string(f.get_as_text())
 		f.close()

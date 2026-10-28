@@ -779,7 +779,7 @@ func _build_ui() -> void:
 	# Info row.
 	var info := HBoxContainer.new()
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	info.add_theme_constant_override("separation", 18)
+	info.add_theme_constant_override("separation", 12)  # story 021: room for the speed button
 	root.add_child(info)
 	info.alignment = BoxContainer.ALIGNMENT_BEGIN
 	_encounter_label = _make_label(20)

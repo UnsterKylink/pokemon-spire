@@ -1685,12 +1685,13 @@ func _fx_battle_shots() -> void:
 	var b: Battle = bs.get_battle()
 	var foe: int = 0
 	for i: int in b.enemies.size():
-		if b.enemies[i].id.contains("aspicot"):
+		if b.enemies[i].display_name == "Aspicot":
 			foe = i
 	var hand: Array[String] = ["flammette", "abri", "hypnose", "dard_venin", "flammette"]
+	await create_timer(0.5).timeout  # layout settled: the effects read the sprite positions
 	bs.qa_force_hand(hand)
 	bs.play_card_direct(0, foe)
-	await create_timer(FX_SHOT_DELAY).timeout
+	await create_timer(FX_SHOT_DELAY + 0.1).timeout
 	await _shot("1x-01-charge-projectile")
 	bs.skip_animations()
 	bs.qa_force_hand(hand)
@@ -1704,12 +1705,12 @@ func _fx_battle_shots() -> void:
 	await _shot("1x-03-protection")
 	bs.skip_animations()
 	bs.qa_force_hand(hand)
-	bs.play_card_direct(3, foe)
-	await create_timer(FX_SHOT_DELAY + 0.3).timeout
+	bs.play_card_direct(2, foe)
+	await create_timer(FX_SHOT_DELAY + 0.4).timeout
 	await _shot("1x-04-statut")
 	bs.skip_animations()
 	bs.press_end_turn()
-	await create_timer(FX_SHOT_DELAY).timeout
+	await create_timer(FX_SHOT_DELAY + 0.3).timeout
 	await _shot("1x-05-ennemi-charge")
 	bs.skip_animations()
 	if b.enemies[foe].is_alive():
@@ -1717,10 +1718,11 @@ func _fx_battle_shots() -> void:
 		b.enemies[foe].changed.emit()
 		bs.qa_force_hand(hand)
 		bs.play_card_direct(0, foe)
-		await create_timer(FX_SHOT_DELAY + 0.7).timeout
+		await create_timer(FX_SHOT_DELAY + 1.0).timeout
 		await _shot("1x-06-ko-fondu")
 	bs.skip_animations()
 	_main.start_encounter(SWITCH_ENCOUNTER)
+	await create_timer(0.5).timeout
 	bs = _main.get_battle_screen()
 	bs.set_fx_speed("normal")
 	var sw: Array[String] = [SWITCH_CARD, SWITCH_CARD, "abri"]
@@ -1733,6 +1735,7 @@ func _fx_battle_shots() -> void:
 	_main.qa_give_ball("poke_ball")
 	_main.qa_give_ball("poke_ball")
 	_main.start_encounter(CAPTURE_TRIO, "wild")
+	await create_timer(0.5).timeout
 	bs = _main.get_battle_screen()
 	bs.set_fx_speed("normal")
 	_main.battle_use_ball("poke_ball", 0)
