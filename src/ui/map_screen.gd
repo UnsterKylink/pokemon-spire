@@ -69,6 +69,8 @@ var _built: bool = false
 
 
 func _ready() -> void:
+	# Smooth downscaling for the painted region maps and room icons (children inherit it).
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_build_ui()
 
 
