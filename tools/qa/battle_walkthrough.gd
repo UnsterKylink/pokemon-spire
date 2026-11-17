@@ -1839,10 +1839,58 @@ func _combat_depth_shots() -> void:
 	panel.close()
 
 
+## Story 029 (filter `story-029`): the Mart with 4 new items, the top bar full of new items, a battle where build items fire
+## (Poudre Éclat at battle start, Charbon on a Feu attack, Griffe Rasoir Force), the reward screen showing an item.
+func _items029_shots() -> void:
+	_main.start_new_run(2029, "salameche")
+	_main.qa_set_money(MART_MONEY)
+	_main.qa_open_room("mart")
+	var shop: ShopInventory = _main.get_shop_inventory()
+	var data: GameData = GameData.new()
+	data.load_all()
+	var prices: Dictionary = data.get_shop_config()["item_prices"]
+	shop.items.clear()
+	for id: String in ["plaque_flamme", "orbe_toxik", "herbe_mental", "roche_lisse"]:
+		var e := ShopEntry.new()
+		e.kind = ShopEntry.KIND_ITEM
+		e.item = data.get_item(id)
+		e.price = int(prices[e.item.rarity])
+		shop.items.append(e)
+	_main.get_shop_screen().refresh()
+	await _shot("01-mart-objets")
+	_main.shop_leave()
+	for id: String in ["charbon", "griffe_rasoir", "poudre_eclat", "scope_lens", "eclat_magique", "cendre_sacree", "bonbon_rare",
+			"miel", "boule_fumee", "lentille_zoom", "casque_brut", "pepite"]:
+		_main.qa_give_item(id)
+	print("029 hud items=%s" % [_main.get_hud().get_item_names()])
+	await _shot("02-barre-objets")
+	_main.start_encounter(ITEMS_ENCOUNTER, "elite")
+	var bs: BattleScreen = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	print("029 battle start: strength=%d weak=%s vuln=%s hand=%d energy=%d float=\"%s\"" % [b.get_strength(),
+			b.enemies[0].has_status("weak"), b.enemies[0].has_status("vulnerable"), b.hand.size(), b.energy, bs.get_item_float_text()])
+	await _shot("03-combat-debut-objets")
+	await create_timer(FLOAT_WAIT).timeout
+	bs.qa_force_hand([ITEMS_ATTACK, ITEMS_ATTACK, "abri"] as Array[String])
+	var foe: Combatant = b.enemies[0]
+	var before: int = foe.hp
+	bs.select_card(0)
+	bs.click_enemy(0)
+	print("029 fire attack: foe hp %d -> %d float=\"%s\"" % [before, foe.hp, bs.get_item_float_text()])
+	await _shot("04-combat-charbon")
+	_win_battle()
+	print("029 loot: %s" % [_main.get_last_loot()])
+	await _shot("05-recompense-objet")
+
+
 func _run() -> void:
 	if _filter == "options":
 		await _options_shots()
 		quit()
+		return
+	if _filter == "story-029":
+		await _items029_shots()
+		quit(0)
 		return
 	if _filter == "story-027":
 		await _combat_depth_shots()

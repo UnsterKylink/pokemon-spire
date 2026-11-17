@@ -203,14 +203,14 @@ func _talent() -> void:
 
 
 func _statuses() -> void:
-	var psn := card("p", "", "normal", "attack", 0, false, {"status": "poison", "status_value": 2})
+	var psn := card("p", "", "normal", "attack", 0, false, {"status": {"id": "poison", "value": 2}})
 	var b := mk([psn], ["orbe_toxik"])
 	play(b, "p")
 	ok(int((b.enemies[0].statuses["poison"] as Dictionary)["value"]) == 4, "orbe_toxik: poison 2 -> 4")
 	var b2 := mk([psn], [])
 	play(b2, "p")
 	ok(int((b2.enemies[0].statuses["poison"] as Dictionary)["value"]) == 2, "no item: poison 2")
-	var brn := card("b", "", "normal", "attack", 0, false, {"status": "burn", "status_value": 2})
+	var brn := card("b", "", "normal", "attack", 0, false, {"status": {"id": "burn", "value": 2}})
 	var b3 := mk([brn], ["orbe_flamme"])
 	play(b3, "b")
 	ok(int((b3.enemies[0].statuses["burn"] as Dictionary)["value"]) == 3, "orbe_flamme: burn 2 -> 3")
