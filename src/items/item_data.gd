@@ -9,19 +9,31 @@ const TRIGGER_TURN_START: String = "turn_start"
 const TRIGGER_TURN_END: String = "turn_end"
 const TRIGGER_CARD_PLAYED: String = "card_played"
 const TRIGGER_ON_PICKUP: String = "on_pickup"
+## Story 029: fires when an enemy dies (not captured) / when one of the player's cards is exhausted.
+const TRIGGER_ON_KILL: String = "on_kill"
+const TRIGGER_ON_EXHAUST: String = "on_exhaust"
 ## Permanent stat modifiers (extra draw / energy): applied when the battle is created, no event.
 const TRIGGER_PASSIVE: String = "passive"
 
 ## Effect types each trigger accepts (engine vocabulary, not gameplay values).
 const EFFECTS_BY_TRIGGER: Dictionary = {
-	"battle_start": ["heal_flat", "heal_percent_max", "block_flat"],
+	"battle_start": ["heal_flat", "heal_percent_max", "block_flat", "strength_start", "draw_first_turn", "energy_first_turn", "apply_all_enemies"],
 	"battle_end": ["heal_flat", "heal_percent_max", "money_bonus_on_win"],
 	"turn_start": ["heal_flat", "heal_percent_max", "block_flat"],
 	"turn_end": ["heal_flat", "heal_percent_max", "block_flat"],
-	"card_played": ["damage_bonus"],
-	"on_pickup": ["max_hp_up", "heal_flat", "heal_percent_max"],
-	"passive": ["draw_up", "energy_up_per_turn", "status_immunity"],
+	"card_played": ["damage_bonus", "damage_bonus_type"],
+	"on_pickup": ["max_hp_up", "heal_flat", "heal_percent_max", "add_ball"],
+	"on_kill": ["heal_flat", "block_flat"],
+	"on_exhaust": ["heal_flat", "block_flat"],
+	"passive": ["draw_up", "energy_up_per_turn", "status_immunity", "first_type_card_free", "elan_cap_up", "elan_keep_percent",
+			"talent_retrigger", "status_bonus", "exhaust_recycle", "block_keep", "capture_bonus", "max_potions_up"],
 }
+## Story 029: effects that need a status id ({status}); those that need a card type id ({card_type}); a ball id ({ball});
+## flags without any number; effects whose number is a `percent` (0 < percent <= 100) instead of a `value`.
+const STATUS_EFFECTS: Array[String] = ["status_immunity", "cure_status", "apply_all_enemies", "status_bonus"]
+const TYPE_EFFECTS: Array[String] = ["damage_bonus_type", "first_type_card_free"]
+const FLAG_EFFECTS: Array[String] = ["status_immunity", "cure_status", "talent_retrigger", "exhaust_recycle", "first_type_card_free"]
+const PERCENT_EFFECTS: Array[String] = ["heal_percent_max", "elan_keep_percent", "block_keep"]
 
 var id: String = ""
 var display_name: String = ""
@@ -33,6 +45,8 @@ var trigger: String = ""
 var first_attack_each_battle: bool = false
 ## [{"type": String, "value": int} or {"type": "heal_percent_max", "percent": float}].
 var effects: Array[Dictionary] = []
+## Story 029: relative draw weight inside its rarity (items.json `weight`, default 1; e.g. berries are drawn less often).
+var weight: float = 1.0
 
 
 ## Builds an ItemData from a JSON dictionary; null (after push_error) if invalid.
@@ -48,6 +62,11 @@ static func from_dict(item_id: String, d: Dictionary) -> ItemData:
 	item.rarity = String(d["rarity"])
 	item.trigger = String(d["trigger"])
 	item.first_attack_each_battle = bool(d.get("first_attack_each_battle", false))
+	var wv: Variant = d.get("weight", 1.0)
+	if not ((wv is int or wv is float) and wv > 0):
+		push_error("ItemData: item '%s' has an invalid 'weight' (must be > 0)" % item_id)
+		return null
+	item.weight = float(wv)
 	if item.rarity not in CardData.RARITIES or item.rarity == CardData.RARITY_STARTER:
 		push_error("ItemData: item '%s' has invalid rarity '%s'" % [item_id, item.rarity])
 		return null
@@ -74,13 +93,24 @@ static func validate_effect(owner_id: String, e: Dictionary, allowed: Array) -> 
 	if t not in allowed:
 		push_error("'%s': effect type '%s' is not allowed here (allowed: %s)" % [owner_id, t, str(allowed)])
 		return false
-	if t == "status_immunity" or t == "cure_status":  # {type, status: statuses.json id (cure_status also accepts "all")}
+	if t in STATUS_EFFECTS:  # {type, status: statuses.json id (cure_status also accepts "all"), value for apply_all_enemies / status_bonus}
 		var sid: Variant = e.get("status", null)
-		if not (sid is String) or String(sid).is_empty() or (String(sid) == "all" and t == "status_immunity"):
+		if not (sid is String) or String(sid).is_empty() or (String(sid) == "all" and t != "cure_status"):
 			push_error("'%s': effect '%s' needs a 'status' id" % [owner_id, t])
 			return false
+	if t in TYPE_EFFECTS:  # {type, card_type: types.json id, value for damage_bonus_type}
+		var cid: Variant = e.get("card_type", null)
+		if not (cid is String) or String(cid).is_empty():
+			push_error("'%s': effect '%s' needs a 'card_type' id" % [owner_id, t])
+			return false
+	if t == "add_ball":  # {type, ball: balls.json id, value = number of balls}
+		var bid: Variant = e.get("ball", null)
+		if not (bid is String) or String(bid).is_empty():
+			push_error("'%s': effect 'add_ball' needs a 'ball' id" % owner_id)
+			return false
+	if t in FLAG_EFFECTS:
 		return true
-	if t == "heal_percent_max":
+	if t in PERCENT_EFFECTS:
 		var p: Variant = e.get("percent", null)
 		if not ((p is int or p is float) and p > 0 and p <= 100):
 			push_error("'%s': effect '%s' needs 0 < percent <= 100" % [owner_id, t])

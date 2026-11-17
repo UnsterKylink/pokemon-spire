@@ -88,6 +88,13 @@ var turn_damage_bonus: int = 0
 ## Energy the player lost at the start of the CURRENT turn because of a status (sleep / freeze); 0 on a normal turn.
 var energy_lost: int = 0
 var _attacks_played: int = 0
+## Story 029 (items): card types whose first card of this turn was already free / once-per-battle item powers used / enemies seen dead.
+var _free_type_used: Dictionary = {}
+var _recycle_used: bool = false
+var _retrigger_used: bool = false
+var _dead_seen: Dictionary = {}
+## Divisor of the `percent` fields of items (percent / PERCENT = fraction).
+const PERCENT: float = 100.0
 ## Story 017: true when balls may be used in this fight (Main sets it for wild fights only, via RunState.create_battle).
 var capture_allowed: bool = false
 ## Balls carried: ball id -> count left (copy; decremented by use_ball). Order = insertion order = index for can_use_ball.
@@ -163,7 +170,23 @@ func start() -> void:
 func can_play(index: int) -> bool:
 	if state != State.PLAYER_TURN or index < 0 or index >= hand.size():
 		return false
-	return hand[index].cost <= energy
+	return card_cost(hand[index]) <= energy
+
+
+## Energy `card` costs NOW: 0 for the first card of a type this turn when a held item says so (first_type_card_free).
+func card_cost(card: CardData) -> int:
+	if card.cost > 0 and not _free_type_used.has(card.type_id) and ItemEffects.free_card_item(items, card.type_id) != null:
+		return 0
+	return card.cost
+
+
+## Pays `card` (energy) and consumes the free-card power of its type when it was used.
+func _pay_card(card: CardData) -> void:
+	var cost: int = card_cost(card)
+	if cost < card.cost:
+		_free_type_used[card.type_id] = true
+		item_triggered.emit(ItemEffects.free_card_item(items, card.type_id))
+	energy -= cost
 
 
 ## True if enemies[index] exists and is alive (a valid target).
@@ -192,7 +215,7 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	# Paralysed player: each played card may fizzle (energy spent, no effect). The RNG is only drawn when paralysed.
 	var fizzle_id: String = _roll_card_fizzle()
 	if not fizzle_id.is_empty():
-		energy -= card.cost
+		_pay_card(card)
 		hand.remove_at(index)
 		discard_pile.append(card)
 		_cards_played_this_turn += 1
@@ -206,14 +229,22 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		var old_id: String = active_pokemon_id
 		active_pokemon_id = card.pokemon_id
 		_apply_identity(card.pokemon_id)
-		_set_elan(0)  # switching loses the Élan...
+		_set_elan(_elan_after_switch())  # switching loses the Élan (items may keep a share of it)...
 		_trigger_talent(card.pokemon_id)  # ...and the newcomer's talent fires
 		refresh_intents()
 		active_pokemon_changed.emit(old_id, active_pokemon_id)
-	energy -= card.cost
+	_pay_card(card)
 	hand.remove_at(index)
+	var recycled: bool = false
 	if card.exhaust:
-		exhaust_pile.append(card)
+		var recycler: ItemData = null if _recycle_used else ItemEffects.first_with(items, "exhaust_recycle")
+		if recycler != null:  # story 029: the first exhausted card of the battle goes back to the discard pile
+			_recycle_used = true
+			recycled = true
+			discard_pile.append(card)
+			item_triggered.emit(recycler)
+		else:
+			exhaust_pile.append(card)
 	else:
 		discard_pile.append(card)
 	# Story 018: a `target_all` card hits every living enemy (left to right), others only enemies[target_index].
@@ -275,7 +306,7 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		if deals and next_attack_bonus != 0:
 			next_attack_bonus = 0
 		if bool(ctx["was_active"]) and _talent_book != null:
-			_set_elan(mini(_talent_book.elan_cap, elan + _talent_book.elan_gain_per_attack))
+			_set_elan(mini(get_elan_cap(), elan + _talent_book.elan_gain_per_attack))
 	_cards_played_this_turn += 1
 	# Status of the card: applied AFTER the damage (a sleeping target is not woken by its own card). A hit that deals
 	# no damage because of a 0x type multiplier inflicts nothing; a status skill always applies.
@@ -283,8 +314,10 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		for rec: Dictionary in per_target:
 			if is_valid_target(int(rec["index"])) and (not deals or float(rec["mult"]) > 0.0):
 				apply_status(enemies[int(rec["index"])], card.status_id, card.status_value)
-	if card.exhaust:
+	if card.exhaust and not recycled:
 		card_exhausted.emit(card)
+		_fire_items(ItemData.TRIGGER_ON_EXHAUST)
+	_check_kills()
 	card_played.emit(card)
 	if first_living_enemy() < 0:
 		_win()
@@ -302,7 +335,9 @@ func get_elan() -> int:
 
 ## Highest Élan reachable (talents.json elan.cap; 0 = Élan disabled).
 func get_elan_cap() -> int:
-	return _talent_book.elan_cap if _talent_book != null else 0
+	if _talent_book == null or _talent_book.elan_cap <= 0:
+		return 0
+	return _talent_book.elan_cap + ItemEffects.passive_total(items, "elan_cap_up")
 
 
 ## Flat damage every hit of an attack card gains from the current Élan.
@@ -345,7 +380,7 @@ func get_talent_id(pokemon_id: String) -> String:
 func would_trigger_talent(card: CardData) -> bool:
 	if not bool(_card_context(card)["entered"]):
 		return false
-	return not get_talent_id(card.pokemon_id).is_empty() and not is_talent_used(card.pokemon_id)
+	return not get_talent_id(card.pokemon_id).is_empty() and (not is_talent_used(card.pokemon_id) or _retrigger_item() != null)
 
 
 ## True if the talent of `pokemon_id` already fired and may not fire again (talents.json talent_trigger:
@@ -354,6 +389,11 @@ func is_talent_used(pokemon_id: String) -> bool:
 	if _talent_book == null or _talent_book.trigger == TalentBook.TRIGGER_EVERY_ENTRY:
 		return false
 	return _talents_fired.has(pokemon_id)
+
+
+## Élan kept when the active Pokémon changes: elan_keep_percent items keep that share (rounded down), else 0.
+func _elan_after_switch() -> int:
+	return floori(float(elan) * ItemEffects.passive_percent(items, "elan_keep_percent") / PERCENT)
 
 
 ## Pure preview (no RNG, no signal) of hand[index] against enemies[target_index] if played NOW:
@@ -424,7 +464,7 @@ func _flat_bonus(card: CardData, elan_value: int, announce: bool) -> int:
 		if _talent_book != null:
 			bonus += elan_value * _talent_book.elan_damage_per_stack
 	for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
-		bonus += item.total("damage_bonus")
+		bonus += ItemEffects.damage_bonus_for(item, card)
 		if announce:
 			item_triggered.emit(item)
 	return bonus
@@ -456,11 +496,30 @@ func _set_elan(value: int) -> void:
 ## Fires the talent of `pokemon_id` (it just entered the field) unless it is used up (see is_talent_used).
 func _trigger_talent(pokemon_id: String) -> void:
 	var tid: String = get_talent_id(pokemon_id)
-	if tid.is_empty() or is_talent_used(pokemon_id):
+	if tid.is_empty():
 		return
+	if is_talent_used(pokemon_id):
+		var src: ItemData = _retrigger_item()  # story 029: a used-up talent may fire once more per battle
+		if src == null:
+			return
+		_retrigger_used = true
+		item_triggered.emit(src)
 	_talents_fired[pokemon_id] = true
 	_apply_effect(_talent_book.effect_of(tid), -1)
 	talent_triggered.emit(pokemon_id, tid)
+
+
+## The held item allowing one more talent trigger this battle (null if none or already used).
+func _retrigger_item() -> ItemData:
+	return null if _retrigger_used else ItemEffects.first_with(items, "talent_retrigger")
+
+
+## Fires on_kill items once per enemy that died (not captured).
+func _check_kills() -> void:
+	for e: Combatant in enemies:
+		if not e.is_alive() and not _dead_seen.has(e):
+			_dead_seen[e] = true
+			_fire_items(ItemData.TRIGGER_ON_KILL)
 
 
 ## Applies an EffectSpec effect for the player. `target_index` = the card's target (-1: none; `to: target` is skipped).
@@ -558,6 +617,7 @@ func end_turn() -> bool:
 	if not player.is_alive():
 		_lose()
 		return true
+	_check_kills()
 	if first_living_enemy() < 0:
 		_win()
 		return true
@@ -636,7 +696,8 @@ func capture_chance(ball: Variant, enemy_index: int) -> float:
 	if bid.is_empty() or not is_capturable(enemy_index):
 		return 0.0
 	var e: Combatant = enemies[enemy_index]
-	return _capture_rules.chance(_ball_book[bid], e.hp, e.max_hp, e.status_ids(), e.legendary)
+	var base: float = _capture_rules.chance(_ball_book[bid], e.hp, e.max_hp, e.status_ids(), e.legendary)
+	return minf(1.0, base + float(ItemEffects.passive_total(items, "capture_bonus")) / PERCENT)  # story 029: capture_bonus items
 
 
 ## True if a ball can be thrown now: player's turn, ball carried, enough energy, capturable living target.
@@ -781,16 +842,52 @@ func _fire_items(trigger: String) -> void:
 			continue
 		var did: bool = false
 		for e: Dictionary in item.effects:
-			if ItemEffects.apply_to_combatant(e, player) > 0:
+			if _apply_battle_item_effect(e) or ItemEffects.apply_to_combatant(e, player) > 0:
 				did = true
 		if did:
+			item_triggered.emit(item)
+
+
+## Story 029 battle_start effects that need the battle: strength_start (Force for the whole fight), apply_all_enemies
+## (status on every living enemy). draw_first_turn / energy_first_turn are applied by _apply_first_turn_items. True if it did something.
+func _apply_battle_item_effect(e: Dictionary) -> bool:
+	match String(e["type"]):
+		"strength_start":
+			player.strength += int(e["value"])
+			strength_changed.emit(player.strength, turn_damage_bonus)
+			return true
+		"apply_all_enemies":
+			var any: bool = false
+			for en: Combatant in enemies:
+				if en.is_alive() and apply_status(en, String(e["status"]), int(e["value"])):
+					any = true
+			return any
+	return false
+
+
+## battle_start items with draw_first_turn / energy_first_turn: extra cards / energy on the battle's first turn only.
+func _apply_first_turn_items() -> void:
+	for item: ItemData in items:
+		if item.trigger != ItemData.TRIGGER_BATTLE_START:
+			continue
+		var cards: int = item.total("draw_first_turn")
+		var gain: int = item.total("energy_first_turn")
+		if cards > 0:
+			_draw_cards(cards)
+		energy += gain
+		if cards > 0 or gain > 0:
 			item_triggered.emit(item)
 
 
 ## `first` = the battle's first turn: block gained from battle_start items must survive.
 func _start_player_turn(first: bool = false) -> void:
 	if not first:
+		var kept: int = floori(float(player.block) * ItemEffects.passive_percent(items, "block_keep") / PERCENT)
 		player.reset_block()
+		if kept > 0:  # story 029: block_keep items carry a share of the block over
+			player.add_block(kept)
+			item_triggered.emit(ItemEffects.first_with(items, "block_keep"))
+	_free_type_used.clear()
 	energy = max_energy
 	energy_lost = 0
 	_end_turn_strength()
@@ -807,6 +904,7 @@ func _start_player_turn(first: bool = false) -> void:
 	_fire_items(ItemData.TRIGGER_TURN_START)
 	_draw_cards(hand_size)
 	if first:
+		_apply_first_turn_items()
 		_trigger_talent(active_pokemon_id)  # story 027: the starter "enters" when the battle begins
 	turn_started.emit()
 	state_changed.emit()
@@ -864,6 +962,8 @@ func apply_status(target: Combatant, status_id: String, value: int) -> bool:
 		return false
 	if target == null or not target.is_alive() or value <= 0:
 		return false
+	if target != player:  # story 029: status_bonus items strengthen what the player inflicts
+		value += ItemEffects.status_bonus(items, status_id)
 	if is_immune(target, status_id):
 		status_blocked.emit(target, status_id)
 		return false

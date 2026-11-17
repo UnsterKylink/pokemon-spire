@@ -1405,7 +1405,7 @@ func _load_items(root: Dictionary) -> bool:
 			push_error("GameData: item '%s' is invalid" % item_id)
 			ok = false
 			continue
-		if not _check_effect_status_refs("item '%s'" % item_id, item.effects):
+		if not _check_effect_status_refs("item '%s'" % item_id, item.effects) or not _check_item_type_refs(item):
 			ok = false
 			continue
 		if item.total("energy_up_per_turn") > 0:
@@ -1437,6 +1437,20 @@ func _load_potions(root: Dictionary) -> bool:
 			ok = false
 		else:
 			_potions[potion_id] = potion
+	return ok
+
+
+## Story 029: card_type of damage_bonus_type / first_type_card_free must be a type of types.json; add_ball names a ball of balls.json
+## (the type chart and balls are loaded before the items; a project without them skips the check).
+func _check_item_type_refs(item: ItemData) -> bool:
+	var ok: bool = true
+	for e: Dictionary in item.effects:
+		if e.has("card_type") and not _type_chart.get_type_ids().is_empty() and String(e["card_type"]) not in _type_chart.get_type_ids():
+			push_error("GameData: item '%s' references unknown type '%s'" % [item.id, String(e["card_type"])])
+			ok = false
+		if e.has("ball") and not _balls.is_empty() and not _balls.has(String(e["ball"])):
+			push_error("GameData: item '%s' references unknown ball '%s'" % [item.id, String(e["ball"])])
+			ok = false
 	return ok
 
 

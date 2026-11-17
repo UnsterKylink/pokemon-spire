@@ -679,12 +679,15 @@ func add_item(item: ItemData) -> bool:
 					hp = mini(max_hp, hp + int(e["value"]))
 				"heal_percent_max":
 					heal_percent(float(e["percent"]))
+				"add_ball":  # story 029: `value` balls of kind `ball` (as many as the bag holds)
+					for n: int in int(e["value"]):
+						add_ball(String(e["ball"]))
 	return true
 
 
 ## Max number of potions carried (potions.json).
 func max_potions() -> int:
-	return _data.get_max_potions() if _data != null else 0
+	return (_data.get_max_potions() if _data != null else 0) + ItemEffects.passive_total(items, "max_potions_up")
 
 
 ## Stores a potion. False (nothing changes) if null or the belt is full.

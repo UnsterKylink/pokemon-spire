@@ -66,12 +66,12 @@ static func pick_items(data: GameData, run: RunState, count: int, rng: RandomNum
 	while result.size() < count and not pool.is_empty():
 		var total: float = 0.0
 		for it: ItemData in pool:
-			total += float(weights.get(it.rarity, 0.0))
+			total += float(weights.get(it.rarity, 0.0)) * it.weight
 		var index: int = pool.size() - 1
 		if total > 0.0:
 			var roll: float = rng.randf() * total
 			for i: int in pool.size():
-				var w: float = float(weights.get(pool[i].rarity, 0.0))
+				var w: float = float(weights.get(pool[i].rarity, 0.0)) * pool[i].weight  # story 029: per-item weight
 				if w > 0.0 and roll < w:
 					index = i
 					break

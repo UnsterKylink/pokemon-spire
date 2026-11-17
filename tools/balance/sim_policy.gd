@@ -84,7 +84,14 @@ const DEFAULTS: Dictionary = {
 	"mart_remove_once": true,
 	"mart_min_item_rating": 4.0,
 	"item_effect_weight": {"energy_up_per_turn": 12.0, "draw_up": 9.0, "max_hp_up": 0.6, "damage_bonus": 2.5, "heal_flat": 0.7,
-			"block_flat": 0.6, "money_bonus_on_win": 0.15, "status_immunity": 2.0, "heal_percent_max": 0.2},
+			"block_flat": 0.6, "money_bonus_on_win": 0.15, "status_immunity": 2.0, "heal_percent_max": 0.2,
+			# Story 029. Type / status scoped effects are multiplied by the deck share (see item_deck_share_scale).
+			"damage_bonus_type": 2.5, "first_type_card_free": 5.0, "status_bonus": 2.5, "strength_start": 10.0,
+			"draw_first_turn": 2.0, "energy_first_turn": 4.0, "apply_all_enemies": 3.0, "elan_cap_up": 3.0, "elan_keep_percent": 0.06,
+			"talent_retrigger": 3.0, "exhaust_recycle": 2.0, "block_keep": 0.08, "capture_bonus": 0.1, "max_potions_up": 2.0,
+			"add_ball": 0.5},
+	## Story 029: a type / status scoped item is worth (share of the deck it concerns) x this (e.g. 1/3 of the deck x 6 = x2).
+	"item_deck_share_scale": 6.0,
 }
 
 var cfg: Dictionary = {}
@@ -508,12 +515,28 @@ func play_center(run: RunState) -> void:
 	run.rest_heal()
 
 
-func _item_rating(item: ItemData) -> float:
+func _item_rating(item: ItemData, deck: Array[CardData] = []) -> float:
 	var w: Dictionary = cfg["item_effect_weight"]
 	var total: float = 0.0
 	for e: Dictionary in item.effects:
-		total += float(w.get(String(e["type"]), 1.0)) * float(e.get("value", e.get("percent", 1)))
+		var r: float = float(w.get(String(e["type"]), 1.0)) * float(e.get("value", e.get("percent", 1)))
+		if e.has("card_type") or String(e["type"]) == "status_bonus":
+			r *= _deck_share(e, deck) * float(cfg["item_deck_share_scale"])
+		total += r
 	return total
+
+
+## Fraction of `deck` an item effect concerns: cards of its card_type (attacks for damage_bonus_type), or cards inflicting its status.
+func _deck_share(e: Dictionary, deck: Array[CardData]) -> float:
+	if deck.is_empty():
+		return 0.0
+	var n: int = 0
+	for c: CardData in deck:
+		if e.has("card_type") and c.type_id == String(e["card_type"]) and (c.kind == CardData.KIND_ATTACK or String(e["type"]) != "damage_bonus_type"):
+			n += 1
+		elif e.has("status") and c.status_id == String(e["status"]):
+			n += 1
+	return float(n) / float(deck.size())
 
 
 ## Poké Mart: heal potion -> best item -> remove one basic card -> good card -> fill the belt with potions.
@@ -543,7 +566,7 @@ func _mart_step(run: RunState, shop: ShopInventory) -> bool:
 	var best_rating: float = float(cfg["mart_min_item_rating"])
 	for i: int in shop.items.size():
 		if shop.can_buy_item(i):
-			var r: float = _item_rating(shop.items[i].item)
+			var r: float = _item_rating(shop.items[i].item, run.deck)
 			if r > best_rating:
 				best_rating = r
 				best_item = i

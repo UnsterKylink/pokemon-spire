@@ -36,18 +36,73 @@ static func win_money_bonus(items: Array[ItemData]) -> int:
 	return sum
 
 
+## Flat damage a card_played item adds to `card`: damage_bonus (every attack) + damage_bonus_type (attacks of that type only).
+static func damage_bonus_for(item: ItemData, card: CardData) -> int:
+	var sum: int = item.total("damage_bonus")
+	for e: Dictionary in item.effects:
+		if String(e["type"]) == "damage_bonus_type" and String(e["card_type"]) == card.type_id:
+			sum += int(e["value"])
+	return sum
+
+
 ## card_played items adding damage to this attack. `attacks_played` = attack cards already played this battle.
 static func damage_bonus_sources(items: Array[ItemData], card: CardData, attacks_played: int) -> Array[ItemData]:
 	var result: Array[ItemData] = []
 	if card.kind != CardData.KIND_ATTACK or card.damage <= 0:
 		return result
 	for item: ItemData in items:
-		if item.trigger != ItemData.TRIGGER_CARD_PLAYED or item.total("damage_bonus") <= 0:
+		if item.trigger != ItemData.TRIGGER_CARD_PLAYED or damage_bonus_for(item, card) <= 0:
 			continue
 		if item.first_attack_each_battle and attacks_played > 0:
 			continue
 		result.append(item)
 	return result
+
+
+## First passive item holding an effect of `effect_type` (null if none). Story 029: flags and percent effects.
+static func first_with(items: Array[ItemData], effect_type: String) -> ItemData:
+	for item: ItemData in items:
+		if item.trigger != ItemData.TRIGGER_PASSIVE:
+			continue
+		for e: Dictionary in item.effects:
+			if String(e["type"]) == effect_type:
+				return item
+	return null
+
+
+## Sum of the `percent` of a passive effect over the items (0 if none).
+static func passive_percent(items: Array[ItemData], effect_type: String) -> float:
+	var sum: float = 0.0
+	for item: ItemData in items:
+		if item.trigger != ItemData.TRIGGER_PASSIVE:
+			continue
+		for e: Dictionary in item.effects:
+			if String(e["type"]) == effect_type:
+				sum += float(e["percent"])
+	return sum
+
+
+## Extra value a passive status_bonus gives to `status_id` applied by the player (0 if none).
+static func status_bonus(items: Array[ItemData], status_id: String) -> int:
+	var sum: int = 0
+	for item: ItemData in items:
+		if item.trigger != ItemData.TRIGGER_PASSIVE:
+			continue
+		for e: Dictionary in item.effects:
+			if String(e["type"]) == "status_bonus" and String(e["status"]) == status_id:
+				sum += int(e["value"])
+	return sum
+
+
+## The passive item making the first card of `card_type` each turn free (null if none).
+static func free_card_item(items: Array[ItemData], card_type: String) -> ItemData:
+	for item: ItemData in items:
+		if item.trigger != ItemData.TRIGGER_PASSIVE:
+			continue
+		for e: Dictionary in item.effects:
+			if String(e["type"]) == "first_type_card_free" and String(e["card_type"]) == card_type:
+				return item
+	return null
 
 
 ## Status ids the held items make their carrier immune to (passive "status_immunity" effects).
