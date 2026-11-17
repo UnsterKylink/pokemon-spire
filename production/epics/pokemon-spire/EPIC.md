@@ -32,7 +32,7 @@
 | 020 | Style graphique, fonds de combat et cartes | Visual/Feel | Complete | N/A |
 | 020b | Refonte visuelle premium (Pokémon animés, objets, cartes holo, finitions) | Visual/Feel | Complete | N/A |
 | 021 | Animations d'attaque et de combat | Visual/Feel | In Progress | N/A |
-| 027 | Profondeur du combat : effets de cartes, Talents et Élan | Logic | In Progress | N/A |
+| 027 | Profondeur du combat : effets de cartes, Talents et Élan | Logic | Complete | N/A |
 | 022 | Musique et effets sonores | Visual/Feel | Ready | N/A |
 | 023 | Menu principal, pause, options et tutoriel | UI | Ready | N/A |
 | 024 | Version .exe Windows et optimisation | Integration | Ready | N/A |
