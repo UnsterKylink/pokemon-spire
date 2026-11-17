@@ -69,6 +69,8 @@ const HOLO_SHADER_PATH: String = "res://src/ui/shaders/card_holo.gdshader"
 static var _holo_shader: Shader
 
 var card: CardData
+## Story 029: cost paid in battle (-1 = the printed cost), see set_cost().
+var _cost_override: int = -1
 var frame_color: Color = UiStyle.SKILL
 var type_name: String = ""
 var carrier_name: String = ""
@@ -152,6 +154,19 @@ func set_extras(damage_text: String, damage_delta: int, keyword_badges: PackedSt
 			_talent_label.add_theme_stylebox_override("normal", _pill(UiStyle.TALENT, UiStyle.OUTLINE))
 		_talent_label.text = talent_name
 	_layout()
+
+
+## Story 029: the cost actually paid in this battle (items such as the Plaques make a card free); shown in green
+## when lower than the printed cost.
+func set_cost(value: int) -> void:
+	_cost_override = value
+	if _cost_label == null or card == null:
+		return
+	_cost_label.text = str(value)
+	if value < card.cost:
+		_cost_label.add_theme_color_override("font_color", UiStyle.DAMAGE_UP)
+	else:
+		_cost_label.remove_theme_color_override("font_color")
 
 
 ## Hover highlight (white glow around the face + lift); kept for callers of story 020. See hover().
@@ -248,6 +263,8 @@ func _build() -> void:
 	_name_label.text = card.display_name
 	_cost_label = _make_label("CardCost", UiStyle.TEXT, 5)
 	_cost_label.text = str(card.cost)
+	if _cost_override >= 0:
+		set_cost.call_deferred(_cost_override)
 	if not type_name.is_empty():
 		_type_label = _make_label("CardType", UiStyle.TEXT, 3)
 		_type_label.text = type_name

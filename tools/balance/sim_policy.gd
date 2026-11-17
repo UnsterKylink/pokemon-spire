@@ -243,7 +243,7 @@ func _try_potion(b: Battle, room_type: String, boosters_used: Dictionary) -> boo
 		for c: CardData in b.hand:
 			if c.kind == CardData.KIND_ATTACK:
 				attacks_in_hand += 1
-			if c.cost > b.energy:
+			if b.card_cost(c) > b.energy:
 				min_cost_left = mini(min_cost_left, c.cost)
 		for i: int in b.potions.size():
 			var pid: String = b.potions[i].id
@@ -302,7 +302,7 @@ func _choose_card(b: Battle) -> Dictionary:
 	# Pure status skills, early, on a healthy target that does not already have it and is not immune.
 	for i: int in b.hand.size():
 		var c: CardData = b.hand[i]
-		if c.kind != CardData.KIND_SKILL or c.status_id.is_empty() or c.cost > b.energy:
+		if c.kind != CardData.KIND_SKILL or c.status_id.is_empty() or b.card_cost(c) > b.energy:
 			continue
 		for t: int in targets:
 			var e: Combatant = b.enemies[t]
@@ -316,7 +316,7 @@ func _choose_card(b: Battle) -> Dictionary:
 			var best_s: float = -INF
 			for i: int in b.hand.size():
 				var c: CardData = b.hand[i]
-				if c.kind != CardData.KIND_ATTACK or not c.deals_damage() or c.cost > b.energy or not _self_damage_ok(b, c):
+				if c.kind != CardData.KIND_ATTACK or not c.deals_damage() or b.card_cost(c) > b.energy or not _self_damage_ok(b, c):
 					continue
 				if chart.damage_multiplier(c.type_id, e.type_ids) < min_mult:
 					continue
@@ -325,7 +325,7 @@ func _choose_card(b: Battle) -> Dictionary:
 				var dmg: int = int(pv["amount"]) * int(pv["hits"])
 				if dmg <= 0 and min_mult >= 1.0:
 					continue
-				var s: float = (float(dmg) + _extras_value(b, c)) / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
+				var s: float = (float(dmg) + _extras_value(b, c)) / maxf(float(b.card_cost(c)), float(cfg["zero_cost_energy"]))
 				if dmg >= e.hp + e.block:
 					s += float(cfg["kill_bonus"])
 				if s > best_s:
@@ -375,7 +375,7 @@ func _best_setup(b: Battle) -> Dictionary:
 		return {}
 	for i: int in b.hand.size():
 		var c: CardData = b.hand[i]
-		if c.kind != CardData.KIND_SKILL or c.needs_target() or c.cost > b.energy:
+		if c.kind != CardData.KIND_SKILL or c.needs_target() or b.card_cost(c) > b.energy:
 			continue
 		var gain: int = int(c.effect.get("energy", 0))
 		var useful: bool = gain > 0 or c.effect.has("draw") or c.effect.has("strength") or c.effect.has("strength_turn")
@@ -389,9 +389,9 @@ func _best_block(b: Battle) -> Dictionary:
 	var best_s: float = -INF
 	for i: int in b.hand.size():
 		var c: CardData = b.hand[i]
-		if _block_of(b, c) <= 0 or c.kind != CardData.KIND_SKILL or c.cost > b.energy:
+		if _block_of(b, c) <= 0 or c.kind != CardData.KIND_SKILL or b.card_cost(c) > b.energy:
 			continue
-		var s: float = float(_block_of(b, c)) / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
+		var s: float = float(_block_of(b, c)) / maxf(float(b.card_cost(c)), float(cfg["zero_cost_energy"]))
 		if s > best_s:
 			best_s = s
 			best_i = i

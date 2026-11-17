@@ -122,6 +122,8 @@ static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokem
 	var badges: PackedStringArray = extras.get("keywords", keyword_badges(card, null))
 	var dmg: String = String(extras.get("damage_text", (TEXT_MULTI_HIT % [card.hits, card.damage]) if card.hits > 1 and card.damage > 0 else ""))
 	face.set_extras(dmg, int(extras.get("damage_delta", 0)), badges, String(extras.get("talent", "")))
+	if extras.has("cost"):
+		face.set_cost(int(extras["cost"]))
 	b.add_child(face)
 	# Story 020b: every card lifts / tilts under the cursor (so unplayable cards can be read); only playable ones glow.
 	b.mouse_entered.connect(func() -> void: face.hover(true, not b.disabled))

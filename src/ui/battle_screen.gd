@@ -2324,7 +2324,7 @@ func _make_combat_chip(text: String, color: Color, tip: String) -> PanelContaine
 ## type), keyword badges, talent mark when playing it would fire its carrier's talent.
 func _hand_extras(i: int, card: CardData) -> Dictionary:
 	var book: TalentBook = _data.get_talent_book()
-	var extras: Dictionary = {"keywords": CardView.keyword_badges(card, book), "talent": ""}
+	var extras: Dictionary = {"keywords": CardView.keyword_badges(card, book), "talent": "", "cost": _battle.card_cost(card)}
 	if card.deals_damage():
 		var tgt: int = _preview_target_index()
 		if tgt >= 0:
