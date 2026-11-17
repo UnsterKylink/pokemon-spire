@@ -12,6 +12,8 @@ extends PanelContainer
 signal potion_pressed(index: int)
 ## Emitted by the "Deck" button (story 011): Main opens / closes the single deck panel.
 signal deck_pressed
+## Emitted by the "Options" button: Main opens the options panel.
+signal options_pressed
 
 const HEIGHT: float = 44.0
 ## Currency suffix. The default font has no "₽" glyph (it only renders through OS font fallback, absent on
@@ -35,6 +37,8 @@ const TEXT_BALL_COUNT: String = "×%d"
 const BADGE_SLOT_SIDE: float = 22.0
 const FLASH_DURATION: float = 0.7
 const TEXT_DECK: String = "Deck"
+const TEXT_OPTIONS: String = "Options"
+const TEXT_OPTIONS_TIP: String = "Options du jeu (indicateur des types, vitesse des animations)."
 const TEXT_DECK_TIP: String = "Voir ton deck (Échap pour fermer)."
 const TEXT_DECK_BLOCKED: String = "Termine d'abord le choix de carte en cours."
 const TEXT_BADGES: String = "Badges :"
@@ -188,6 +192,21 @@ func _init() -> void:
 		dsb.border_width_bottom = 4 if state != "pressed" else 2
 	_deck_button.pressed.connect(press_deck)
 	row.add_child(_deck_button)
+	var options_button: Button = Button.new()
+	options_button.name = "OptionsButton"
+	options_button.text = TEXT_OPTIONS
+	options_button.tooltip_text = TEXT_OPTIONS_TIP
+	options_button.custom_minimum_size = Vector2(90, 32)
+	options_button.focus_mode = Control.FOCUS_NONE
+	options_button.add_theme_font_size_override("font_size", 17)
+	UiStyle.apply_button(options_button, UiStyle.ACCENT_BLUE)
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		var osb: StyleBoxFlat = options_button.get_theme_stylebox(state)
+		osb.content_margin_top = 1.0 if state != "pressed" else 3.0
+		osb.content_margin_bottom = 3.0 if state != "pressed" else 1.0
+		osb.border_width_bottom = 4 if state != "pressed" else 2
+	options_button.pressed.connect(func() -> void: options_pressed.emit())
+	row.add_child(options_button)
 
 
 ## Redraws the bar from `run` (read only). In a battle pass it: its potion list is shown and the slots the

@@ -1383,6 +1383,24 @@ func _rival_shots() -> void:
 
 
 ## Story 020: redesigned cards in the battle hand (5 and 10 cards), the reward screen and the deck overlay (filter `story-020`).
+## Options panel (filter `options`): the panel, then the same selected Flammette with the type hint on / off.
+func _options_shots() -> void:
+	_main.start_new_run(STYLE_SEED, "salameche")
+	_main.start_encounter("trio_vol")
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.qa_force_hand(STYLE_HAND)
+	await create_timer(FLOAT_WAIT).timeout
+	_main.open_options()
+	_main.get_options_panel().set_type_hints(true)
+	await _shot("01-options")
+	_main.get_options_panel().close()
+	bs.select_card(0)
+	await _shot("02-indicateur-actif")
+	_main.get_options_panel().set_type_hints(false)
+	await _shot("03-indicateur-desactive")
+	_main.get_options_panel().set_type_hints(true)
+
+
 func _style_shots() -> void:
 	_main.start_new_run(STYLE_SEED, "salameche")
 	_main.start_encounter("trio_vol")
@@ -1822,6 +1840,10 @@ func _combat_depth_shots() -> void:
 
 
 func _run() -> void:
+	if _filter == "options":
+		await _options_shots()
+		quit()
+		return
 	if _filter == "story-027":
 		await _combat_depth_shots()
 		quit(0)

@@ -139,6 +139,8 @@ var _shop: ShopInventory
 var _hud: RunHud
 ## Story 011: THE deck panel (deck / pioche / défausse), under the HUD, above every screen. Read only.
 var _deck_panel: DeckOverlay
+## The options panel (opened from the run bar).
+var _options_panel: OptionsPanel
 var _offers: Array[RewardOffer] = []
 
 
@@ -153,9 +155,13 @@ func _ready() -> void:
 	_hud.ball_book = _data.get_ball_book()
 	_hud.potion_pressed.connect(battle_use_potion)
 	_hud.deck_pressed.connect(toggle_deck)
+	_hud.options_pressed.connect(open_options)
 	add_child(_hud)
 	_deck_panel = DeckOverlay.new()
 	add_child(_deck_panel)
+	_options_panel = OptionsPanel.new()
+	add_child(_options_panel)
+	_options_panel.changed.connect(_on_options_changed)
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
 	add_child(PostFx.new(), false, Node.INTERNAL_MODE_BACK)  # story 020b: global image finish, above every screen
 	var forced_seed: int = 0
@@ -603,6 +609,26 @@ func qa_set_money(amount: int) -> void:
 	if _run != null:
 		_run.money = maxi(amount, 0)
 		_refresh_hud()
+
+
+# --- Options panel ---------------------------------------------------------------------------------
+
+## Opens the options panel (type-effectiveness hint, animation speed).
+func open_options() -> void:
+	if _options_panel != null:
+		close_deck()
+		move_child(_options_panel, get_child_count() - 1)  # above the current screen and the run bar
+		_options_panel.open()
+
+
+## QA: the options panel.
+func get_options_panel() -> OptionsPanel:
+	return _options_panel
+
+
+func _on_options_changed() -> void:
+	if _battle_screen != null and is_instance_valid(_battle_screen):
+		_battle_screen.apply_settings()
 
 
 # --- Deck panel (story 011) ---------------------------------------------------------------------

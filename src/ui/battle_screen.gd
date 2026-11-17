@@ -352,6 +352,12 @@ func get_fx_director() -> BattleFxDirector:
 
 
 ## Story 021, QA: text of the speed button.
+## Re-reads the player options (Options panel): animation speed and type hints.
+func apply_settings() -> void:
+	set_fx_speed(BattleFxDirector.load_saved_speed())
+	_refresh()
+
+
 func get_speed_button_text() -> String:
 	return _speed_button.text
 
@@ -1717,6 +1723,8 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 ## Target tint for the selected attack card: green-ish when super effective, red-ish when not very effective / immune,
 ## the usual target tint otherwise (skills, neutral hits).
 func _target_modulate(enemy_index: int) -> Color:
+	if not GameSettings.type_hints_enabled():
+		return MODULATE_TARGETABLE
 	var preview: Dictionary = _battle.preview_card_damage(_selected_index, enemy_index)
 	if int(preview.get("hits", 0)) <= 0:
 		return MODULATE_TARGETABLE
