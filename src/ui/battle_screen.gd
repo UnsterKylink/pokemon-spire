@@ -66,6 +66,14 @@ const COLOR_INTENT_BUFF: Color = Color(1.0, 0.9, 0.3)
 const COLOR_KO: Color = Color(0.6, 0.6, 0.6)
 const MODULATE_KO: Color = Color(0.45, 0.45, 0.45, 0.55)
 const MODULATE_TARGETABLE: Color = Color(1.0, 0.9, 0.6)
+## Type hint on targets while an attack card is selected (player request 2026-11-17): very light green when the attack
+## is super effective (x > 1), very light red when it is not very effective (x < 1), greyer red for an immunity (x0).
+const MODULATE_SUPER_EFFECTIVE: Color = Color(0.82, 1.0, 0.82)
+const MODULATE_NOT_EFFECTIVE: Color = Color(1.0, 0.8, 0.8)
+const MODULATE_IMMUNE: Color = Color(0.8, 0.62, 0.62)
+## Same hint on the enemy's name (readable on any backdrop).
+const COLOR_NAME_SUPER: Color = Color(0.55, 1.0, 0.55)
+const COLOR_NAME_WEAK: Color = Color(1.0, 0.55, 0.5)
 const COLOR_TEXT_LIGHT: Color = Color(1.0, 1.0, 1.0)
 const COLOR_TEXT_DARK: Color = Color(0.1, 0.1, 0.12)
 const COLOR_SUPER_EFFECTIVE: Color = Color(0.35, 1.0, 0.4)
@@ -1689,14 +1697,37 @@ func _refresh_enemy(v: EnemyView, e: Combatant) -> void:
 	v.intent_label.self_modulate = Color.WHITE if not v.intent_label.text.is_empty() else Color.TRANSPARENT
 	if v.ko_faded:
 		v.sprite.modulate = Color(1, 1, 1, 0)
+	var hint: Color = _target_modulate(_battle.enemies.find(e)) if _selected_index >= 0 and e.is_alive() else MODULATE_TARGETABLE
+	if hint == MODULATE_SUPER_EFFECTIVE:
+		v.name_label.add_theme_color_override("font_color", COLOR_NAME_SUPER)
+	elif hint == MODULATE_NOT_EFFECTIVE or hint == MODULATE_IMMUNE:
+		v.name_label.add_theme_color_override("font_color", COLOR_NAME_WEAK)
+	else:
+		v.name_label.remove_theme_color_override("font_color")
 	if not e.is_alive():
 		v.panel.modulate = MODULATE_KO
 	elif _selected_index >= 0:
-		v.panel.modulate = MODULATE_TARGETABLE
+		v.panel.modulate = _target_modulate(_battle.enemies.find(e))
 	elif _capture_mode and _battle.is_capturable(_battle.enemies.find(e)):
 		v.panel.modulate = MODULATE_CAPTURABLE
 	else:
 		v.panel.modulate = Color.WHITE
+
+
+## Target tint for the selected attack card: green-ish when super effective, red-ish when not very effective / immune,
+## the usual target tint otherwise (skills, neutral hits).
+func _target_modulate(enemy_index: int) -> Color:
+	var preview: Dictionary = _battle.preview_card_damage(_selected_index, enemy_index)
+	if int(preview.get("hits", 0)) <= 0:
+		return MODULATE_TARGETABLE
+	var mult: float = float(preview.get("multiplier", 1.0))
+	if mult <= 0.0:
+		return MODULATE_IMMUNE
+	if mult > 1.0:
+		return MODULATE_SUPER_EFFECTIVE
+	if mult < 1.0:
+		return MODULATE_NOT_EFFECTIVE
+	return MODULATE_TARGETABLE
 
 
 ## Story 016: long intents ("Attaque 13 + Brûlure 4") shrink their font so they fit the enemy slot (3 enemies at 1280).
