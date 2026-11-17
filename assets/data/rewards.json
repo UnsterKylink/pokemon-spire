@@ -91,6 +91,11 @@
 			"ball_ombre",
 			"tete_de_fer",
 			"colere"
-		, "combo_griffe", "double_pied", "taillade", "demi_tour", "chatiment", "saumure", "roulade", "bluff", "damocles", "big_splash", "aiguisage", "danse_lames", "groz_yeux", "charme", "hate", "chargeur", "garde_large", "stockage"]
+		, "combo_griffe", "double_pied", "taillade", "demi_tour", "chatiment", "saumure", "roulade", "bluff", "damocles", "big_splash", "aiguisage", "danse_lames", "groz_yeux", "charme", "hate", "chargeur", "garde_large", "stockage",
+			"meteores", "boutefeu", "nitrocharge", "surchauffe", "aqua_jet", "repli", "aqua_anneau", "vole_vie", "synthese", "vampigraine",
+			"rayon_charge", "double_dard", "secretion", "papillodanse", "choc_venin", "smog", "acrobatie", "vent_arriere", "danse_plume",
+			"fracass_tete", "ampleur", "massd_os", "osmerang", "jet_de_sable", "amass_sable", "tricherie", "provoc", "machination",
+			"vent_mauvais", "malediction", "onde_folie", "cauchemar", "avalanche", "grele", "brume", "gonflette", "detection", "coupe_psycho",
+			"poing_meteore", "queue_de_fer", "bouclier_royal", "mur_de_fer", "danse_draco", "vibrecaille", "lumiere_lunaire", "doux_baiser"]
 	}
 }
