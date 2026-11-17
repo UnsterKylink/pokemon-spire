@@ -59,7 +59,7 @@ func _initialize() -> void:
 	ok(gd.get_starter_pokemon_id() == "salameche", "starter id")
 	for c: CardData in gd.get_starter_deck("salameche"):
 		ok(c.kind == "skill" or c.pokemon_id == "salameche", "starter deck salameche " + c.id)
-	for cid: String in ["crocs_feu","lance_flammes","danse_flamme","draco_griffe"]:
+	for cid: String in ["crocs_feu","lance_flammes","danse_flamme"]:  # story 028: draco_griffe is now carried by Draco
 		ok(gd.get_card(cid).pokemon_id == "salameche", "salameche card " + cid)
 	var inf: Dictionary = gd.get_pokemon_info("geodude")
 	ok(inf["name"] != "" and inf["sprite_path"] != "" and inf["types"].size() == 2, "info geodude dual")
@@ -115,7 +115,7 @@ func _initialize() -> void:
 	ok(pika.intent.type == "attack" and pika.intent.value == 0 and pika.intent.display_text() == "Attaque 0", "intent 0 vs geodude")
 	# Story 027: the newcomer's talent fires on entry (geodude: Fermeté gives block); the block already held is kept.
 	var talent_block: int = int(gd.get_talent_book().effect_of(String(gd.get_talent_info("geodude")["id"])).get("block", 0))
-	ok(b.player.block == blk + talent_block, "block shared across switch (+ entry talent)")
+	ok(b.player.block == blk + talent_block + gd.get_card("jet_de_pierres").block, "block shared across switch (+ entry talent + card block)")
 	ok(sc[0] > 0, "state_changed")
 	var hp0: int = run.hp
 	var pre_hp: int = b.player.hp

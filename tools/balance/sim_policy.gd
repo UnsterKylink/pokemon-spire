@@ -390,7 +390,14 @@ func _best_block(b: Battle) -> Dictionary:
 			best_i = i
 	if best_i < 0:
 		return {}
-	return {"index": best_i, "target": -1}
+	# Story 028: some block skills also apply a debuff to one enemy (they need a target): the first living one.
+	var target: int = -1
+	if b.hand[best_i].needs_target():
+		for t: int in b.enemies.size():
+			if b.is_valid_target(t):
+				target = t
+				break
+	return {"index": best_i, "target": target}
 
 
 # --- Cards: reward / evolution / shop scoring ------------------------------------------------------

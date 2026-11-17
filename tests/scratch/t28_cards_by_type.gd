@@ -55,7 +55,8 @@ func _initialize() -> void:
 		if not c.pokemon_id.is_empty():
 			var info: Dictionary = gd.get_pokemon_info(c.pokemon_id)
 			ok(not info.is_empty(), "%s: carrier '%s' exists" % [id, c.pokemon_id])
-			ok(c.type_id in (info.get("types", []) as Array), "%s: carrier '%s' has type %s" % [id, c.pokemon_id, c.type_id])
+			if c.rarity != "starter":  # starter moves follow the starter (e.g. Griffe on Salamèche)
+				ok(c.type_id in (info.get("types", []) as Array), "%s: carrier '%s' has type %s" % [id, c.pokemon_id, c.type_id])
 	for t: String in TYPES:
 		ok(int(per_type.get(t, 0)) >= 8, "type %s has >= 8 cards (%d)" % [t, int(per_type.get(t, 0))])
 		ok(int(skills.get(t, 0)) >= 2, "type %s has >= 2 skills (%d)" % [t, int(skills.get(t, 0))])

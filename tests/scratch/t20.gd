@@ -324,7 +324,7 @@ func _initialize() -> void:
 	e = mk(["normal"], BLOCK1)
 	b = bt(pl(), [e], "crocs_feu")
 	b.play_card(0, 0)
-	ok(e.hp == 92 and e.get_status_value("burn") == 2, "crocs_feu hits 8 + burn 2")
+	ok(e.hp == 100 - gd.get_card("crocs_feu").damage and e.get_status_value("burn") == 2, "crocs_feu hits its damage + burn 2")
 	e = mk(["fire"], BLOCK1)
 	b = bt(pl(), [e], "crocs_feu")
 	ev.clear()
