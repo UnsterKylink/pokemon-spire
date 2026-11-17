@@ -290,6 +290,8 @@ var _elan_shown: int = 0
 var _preview_target: int = -1
 var _rec_hit_count: int = 0
 var _rec_tail: Array[Dictionary] = []
+## Talent events recorded before the switch that caused them (Battle fires the talent first): played after switch_in.
+var _rec_talents: Array[Dictionary] = []
 const TEXT_IMMUNE_SHORT: String = "Immunisé"
 
 
@@ -1190,6 +1192,7 @@ func _on_active_pokemon_changed(_old_id: String, _new_id: String) -> void:
 	if _recording:
 		_push({"kind": "switch_out"})
 		_push({"kind": "switch_in"})
+		_flush_rec_talents()
 		return
 	_do_active_changed()
 
@@ -1795,8 +1798,10 @@ func _logic(fn: Callable, limit_key: String = "max_action_seconds") -> Variant:
 	_rec_fizzled = false
 	_rec_hit_count = 0
 	_rec_tail.clear()
+	_rec_talents.clear()
 	_recording = true
 	var result: Variant = fn.call()
+	_flush_rec_talents()
 	for ev: Dictionary in _rec_tail:
 		_push(ev)  # story 027: the exhaust burn plays after the card's hits
 	_rec_tail.clear()
@@ -2040,6 +2045,8 @@ func _play_hit(ev: Dictionary) -> void:
 		if s["c"] == tgt:
 			new_hp = s["hp"]
 	var lost: int = maxi(0, old_hp - new_hp)
+	if bool(ev.get("multi", false)):
+		lost = maxi(0, int(ev["amount"]))  # story 027: Battle resolves every hit before the snapshots: each number is its own hit
 	var dur: float = 0.0
 	if spr != null:
 		var at: Vector2 = _center_of(spr)
@@ -2330,7 +2337,7 @@ func _on_elan_changed(value: int) -> void:
 
 func _on_talent_triggered(pokemon_id: String, talent_id: String) -> void:
 	if _recording:
-		_push({"kind": "talent", "pid": pokemon_id, "tid": talent_id})
+		_rec_talents.append({"kind": "talent", "pid": pokemon_id, "tid": talent_id})
 		return
 	_refresh_talent_pill()
 	_refresh_force_chips()
@@ -2393,15 +2400,23 @@ func _play_exhaust(ev: Dictionary) -> void:
 	_fx_layer.add_child(ghost)
 	ghost.size = ghost.custom_minimum_size
 	var hand_c: Vector2 = _hand_box.get_global_rect().get_center()
-	var c: Vector2 = _fx_layer.get_global_transform().affine_inverse() * (hand_c + Vector2(0, -CARD_SIZE.y * 0.5))
+	var c: Vector2 = _fx_layer.get_global_transform().affine_inverse() * (hand_c + Vector2(0, -CARD_SIZE.y * 0.9))
 	ghost.position = c - ghost.size * 0.5
 	ghost.pivot_offset = ghost.size * 0.5
-	var secs: float = _fx.t(BattleFxDirector.cfg_f("exhaust", "seconds", 0.6))
+	var secs: float = _fx.t(BattleFxDirector.cfg_f("exhaust", "seconds", 0.8))
 	var tw: Tween = _fx.new_tween(ghost)
-	tw.tween_property(ghost, "modulate", Color(2.0, 1.1, 0.5, 1.0), secs * 0.3)
+	tw.tween_property(ghost, "modulate", Color(1.8, 1.1, 0.6, 1.0), secs * 0.3)
+	tw.tween_interval(secs * 0.25)
 	tw.tween_property(ghost, "scale", Vector2.ONE * 0.6, secs * 0.7)
 	tw.parallel().tween_property(ghost, "modulate:a", 0.0, secs * 0.7)
 	tw.parallel().tween_property(ghost, "position:y", ghost.position.y - 30.0, secs * 0.7)
 	tw.tween_callback(ghost.queue_free)
 	_fx.burst(_fx_layer, c, UiStyle.EXHAUST_BURN, 16, 80.0, secs)
 	await _fx.wait(secs)
+
+
+## Pushes the talent events held back until their Pokémon's switch_in was queued (snapshots taken now).
+func _flush_rec_talents() -> void:
+	for ev: Dictionary in _rec_talents:
+		_push(ev)
+	_rec_talents.clear()

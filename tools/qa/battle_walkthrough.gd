@@ -1744,7 +1744,88 @@ func _fx_battle_shots() -> void:
 	bs.skip_animations()
 
 
+## Story 027: combat depth (filter `story-027`): hand with the new cards (keyword badges, live damage, talent mark),
+## Élan 3+, talent banner, Faiblesse / Vulnérable + Force chips, multi-hit numbers, exhaust burn + the « Épuisées » tab,
+## a keyword tooltip. Prints the Élan / talent / chip texts for each shot.
+func _combat_depth_line(tag: String) -> void:
+	var bs: BattleScreen = _main.get_battle_screen()
+	var chips: Array = []
+	for i: int in bs.get_battle().enemies.size():
+		chips.append(bs.get_enemy_status_chips(i))
+	print("027 %s | elan=\"%s\" talent=\"%s\" force=%s player_chips=%s enemy_chips=%s exhaust=\"%s\" active=%s" % [tag,
+			bs.get_elan_text(), bs.get_talent_pill_text(), bs.get_force_chip_texts(), bs.get_player_status_chips(), chips,
+			bs.get_exhaust_counter_text(), bs.get_battle().active_pokemon_id])
+
+
+func _first_alive(b: Battle) -> int:
+	for i: int in b.enemies.size():
+		if b.is_valid_target(i):
+			return i
+	return 0
+
+
+func _combat_depth_shots() -> void:
+	_main.start_new_run(2027, "salameche")
+	_main.start_encounter("trio_vol")
+	await create_timer(0.5).timeout
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.set_fx_speed("instant")
+	var b: Battle = bs.get_battle()
+	var hand: Array[String] = ["combo_griffe", "danse_lames", "roulade", "stockage", "chargeur"]
+	bs.qa_force_hand(hand)
+	_combat_depth_line("01")
+	await _shot("01-main-mots-cles")
+	print("027 tooltip=%s" % [bs.qa_show_keyword_tooltip(1)])
+	await _shot("07-infobulle-mot-cle")
+	var fl: Array[String] = ["flammette", "flammette", "flammette", "flammette", "roulade"]
+	bs.qa_force_hand(fl)
+	for k: int in 3:
+		bs.play_card_direct(0, _first_alive(b))
+	b.energy = b.max_energy
+	bs.qa_force_hand(["flammette", "roulade", "danse_lames", "combo_griffe", "stockage"] as Array[String])
+	_combat_depth_line("02")
+	await _shot("02-elan-3")
+	bs.play_card_direct(2)  # Danse-Lames: Force 2, exhausted
+	bs.qa_apply_status(0, "weak", 2)
+	bs.qa_apply_status(1, "vulnerable", 2)
+	bs.qa_apply_status(-1, "weak", 1)
+	bs.qa_force_hand(["flammette", "roulade", "combo_griffe", "stockage", "chargeur"] as Array[String])
+	_combat_depth_line("04")
+	await _shot("04-faiblesse-vulnerable-force")
+	bs.set_fx_speed("normal")
+	bs.qa_force_hand(["combo_griffe", "combo_griffe", "chargeur", "stockage"] as Array[String])
+	bs.play_card_direct(0, _first_alive(b))
+	await create_timer(0.62).timeout
+	_combat_depth_line("03")
+	await _shot("03-talent-banniere")
+	bs.skip_animations()
+	await create_timer(0.2).timeout
+	bs.qa_force_hand(["combo_griffe", "chargeur", "stockage"] as Array[String])
+	bs.play_card_direct(0, _first_alive(b))
+	await create_timer(0.9).timeout
+	await _shot("05-multi-coups")
+	bs.skip_animations()
+	await create_timer(0.2).timeout
+	bs.qa_force_hand(["chargeur", "stockage"] as Array[String])
+	bs.play_card_direct(0)
+	await create_timer(0.05).timeout
+	await _shot("06-epuisement-brulure")
+	bs.skip_animations()
+	await create_timer(0.2).timeout
+	_combat_depth_line("06")
+	_main.open_deck("discard")
+	var panel: DeckOverlay = _main.get("_deck_panel") as DeckOverlay
+	panel.show_tab(DeckOverlay.Tab.EXHAUST)
+	print("027 tabs=%s lines=%s" % [panel.get_tab_titles(), panel.get_lines()])
+	await _shot("08-onglet-epuisees")
+	panel.close()
+
+
 func _run() -> void:
+	if _filter == "story-027":
+		await _combat_depth_shots()
+		quit(0)
+		return
 	if _filter == "story-021":
 		await _fx_battle_shots()
 		quit(0)
