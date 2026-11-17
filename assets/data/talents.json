@@ -1,0 +1,41 @@
+{
+	"_doc": "Story 027 : Talents et Elan. talents : id -> {name (FR), description (FR, texte joueur), effect}. effect = meme grammaire que les cartes (src/battle/effect_spec.gd) : block, heal, draw, energy, strength (Force pour le combat), strength_turn (Force ce tour), next_attack_bonus (degats ajoutes a chaque coup de la prochaine carte d'attaque), self_damage, block_per_enemy, apply [{status (id de statuses.json), value, to: all_enemies|random_enemy|self}] ; un talent n'a pas de cible (pas de to: target). Le talent d'un Pokemon se declenche quand il ENTRE sur le terrain (une carte d'attaque le fait entrer, ou il est le Pokemon de depart au debut du combat). default_by_type : type principal (types.json, les 18) -> id de talent par defaut. by_pokemon : id de Pokemon -> id de talent, pour les Pokemon de roster.json (fichier genere, non edite a la main) ; un Pokemon de pokemon.json peut aussi porter un champ 'talent' (prioritaire). talent_once_per_turn : true = le talent d'un meme Pokemon se declenche au plus une fois par tour du joueur (anti ping-pong). elan : gain_per_attack = Elan gagne par carte d'attaque jouee par le Pokemon DEJA actif ; cap = Elan maximum ; damage_per_stack = degats ajoutes a chaque coup des attaques par point d'Elan (avant le multiplicateur de type) ; changer de Pokemon remet l'Elan a 0 ; 0 partout = Elan desactive. keywords : id -> {name, description} = textes des infobulles de mots-cles (UI).",
+	"talent_once_per_turn": true,
+	"elan": {"gain_per_attack": 1, "cap": 5, "damage_per_stack": 1},
+	"talents": {
+		"ramassage": {"name": "Ramassage", "description": "En entrant : gagne 2 points de protection.", "effect": {"block": 2}},
+		"brasier": {"name": "Brasier", "description": "En entrant : la prochaine attaque inflige 2 dégâts de plus.", "effect": {"next_attack_bonus": 2}},
+		"torrent": {"name": "Torrent", "description": "En entrant : gagne 3 points de protection.", "effect": {"block": 3}},
+		"engrais": {"name": "Engrais", "description": "En entrant : rend 2 PV.", "effect": {"heal": 2}},
+		"statik": {"name": "Statik", "description": "En entrant : applique Vulnérable 1 à un ennemi au hasard.", "effect": {"apply": [{"status": "vulnerable", "value": 1, "to": "random_enemy"}]}},
+		"rideau_neige": {"name": "Rideau Neige", "description": "En entrant : gagne 2 points de protection par ennemi.", "effect": {"block_per_enemy": 2}},
+		"cran": {"name": "Cran", "description": "En entrant : gagne 1 Force pour ce tour.", "effect": {"strength_turn": 1}},
+		"point_poison": {"name": "Point Poison", "description": "En entrant : applique Poison 2 à un ennemi au hasard.", "effect": {"apply": [{"status": "poison", "value": 2, "to": "random_enemy"}]}},
+		"voile_sable": {"name": "Voile Sable", "description": "En entrant : gagne 3 points de protection.", "effect": {"block": 3}},
+		"regard_vif": {"name": "Regard Vif", "description": "En entrant : pioche 1 carte.", "effect": {"draw": 1}},
+		"prediction": {"name": "Prédiction", "description": "En entrant : pioche 1 carte.", "effect": {"draw": 1}},
+		"essaim": {"name": "Essaim", "description": "En entrant : la prochaine attaque inflige 2 dégâts de plus.", "effect": {"next_attack_bonus": 2}},
+		"fermete": {"name": "Fermeté", "description": "En entrant : gagne 4 points de protection.", "effect": {"block": 4}},
+		"corps_maudit": {"name": "Corps Maudit", "description": "En entrant : applique Vulnérable 1 à un ennemi au hasard.", "effect": {"apply": [{"status": "vulnerable", "value": 1, "to": "random_enemy"}]}},
+		"multiecaille": {"name": "Multiécaille", "description": "En entrant : gagne 4 points de protection.", "effect": {"block": 4}},
+		"farceur": {"name": "Farceur", "description": "En entrant : applique Faiblesse 1 à un ennemi au hasard.", "effect": {"apply": [{"status": "weak", "value": 1, "to": "random_enemy"}]}},
+		"corps_sain": {"name": "Corps Sain", "description": "En entrant : gagne 4 points de protection.", "effect": {"block": 4}},
+		"garde_amie": {"name": "Garde Amie", "description": "En entrant : rend 2 PV.", "effect": {"heal": 2}},
+		"intimidation": {"name": "Intimidation", "description": "En entrant : applique Faiblesse 1 à tous les ennemis.", "effect": {"apply": [{"status": "weak", "value": 1, "to": "all_enemies"}]}},
+		"turbo": {"name": "Turbo", "description": "En entrant : gagne 1 énergie.", "effect": {"energy": 1}},
+		"absorb_eau": {"name": "Absorb Eau", "description": "En entrant : rend 3 PV.", "effect": {"heal": 3}},
+		"fuite": {"name": "Fuite", "description": "En entrant : pioche 1 carte.", "effect": {"draw": 1}}
+	},
+	"default_by_type": {"normal": "ramassage", "fire": "brasier", "water": "torrent", "grass": "engrais", "electric": "statik", "ice": "rideau_neige", "fighting": "cran", "poison": "point_poison", "ground": "voile_sable", "flying": "regard_vif", "psychic": "prediction", "bug": "essaim", "rock": "fermete", "ghost": "corps_maudit", "dragon": "multiecaille", "dark": "farceur", "steel": "corps_sain", "fairy": "garde_amie"},
+	"by_pokemon": {"gyarados": "intimidation", "luxray": "intimidation", "staraptor": "intimidation", "mawile": "intimidation", "blaziken": "turbo"},
+	"keywords": {
+		"exhaust": {"name": "Épuisement", "description": "Une fois jouée, la carte est retirée jusqu'à la fin du combat."},
+		"retain": {"name": "Rétention", "description": "La carte reste dans ta main à la fin du tour."},
+		"weak": {"name": "Faiblesse", "description": "Inflige 25 % de dégâts en moins pendant N tours."},
+		"vulnerable": {"name": "Vulnérable", "description": "Subit 50 % de dégâts en plus pendant N tours."},
+		"strength": {"name": "Force", "description": "Chaque coup de tes attaques inflige ce nombre de dégâts en plus."},
+		"elan": {"name": "Élan", "description": "Chaque attaque du Pokémon déjà actif donne 1 Élan (max 5). Chaque coup de tes attaques inflige +1 dégât par Élan. Changer de Pokémon remet l'Élan à 0."},
+		"talent": {"name": "Talent", "description": "Se déclenche quand le Pokémon entre sur le terrain (une fois par tour)."},
+		"hits": {"name": "Multi-coups", "description": "Chaque coup est résolu séparément : protection, type, Force et Élan comptent à chaque coup."}
+	}
+}

@@ -3,12 +3,15 @@ extends RefCounted
 ## Pure combat logic (no nodes/scenes): 1 player Pokémon vs 1..3 enemies with data-driven intents.
 ## Implements: design/game-brief.md MVP features 1-2, story-001-combat-de-base,
 ## story-002-intentions-et-multi-ennemis, story-003-types, story-016-statuts (incl. the anti-lock rules),
-## story-019-equilibrage (an enemy attack uses its action's data type, see _attack_type_of).
+## story-019-equilibrage (an enemy attack uses its action's data type, see _attack_type_of),
+## story-027-profondeur-du-combat (card effect grammar EffectSpec, talents, Élan, Faiblesse / Vulnérable, exhaust / retain).
 
 enum State { PLAYER_TURN, WON, LOST }
 
 const MIN_ENEMIES: int = 1
 const MAX_ENEMIES: int = 3
+## Story 027: HP a self-damaging card always leaves to the player (a card never K.O.s its own team).
+const SELF_DAMAGE_HP_FLOOR: int = 1
 
 signal state_changed
 signal turn_started
@@ -46,6 +49,17 @@ signal capture_succeeded(target: Combatant)
 ## The throw failed: the enemy stays and keeps acting normally (a captured Pokémon never flees).
 signal capture_failed(target: Combatant)
 
+## Story 027. Élan changed (gained by an attack of the already-active Pokémon, reset to 0 by a switch).
+signal elan_changed(value: int)
+## The talent `talent_id` of `pokemon_id` fired because it entered the field (effects already applied).
+signal talent_triggered(pokemon_id: String, talent_id: String)
+## The player's Force changed: `battle_value` lasts the whole battle, `turn_value` until the end of the turn.
+signal strength_changed(battle_value: int, turn_value: int)
+## A played card went to the exhaust pile (already appended to `exhaust_pile`).
+signal card_exhausted(card: CardData)
+## Cards were drawn outside the normal start-of-turn draw (card / talent / potion effect); `count` really drawn.
+signal cards_drawn(count: int)
+
 var player: Combatant
 ## Id of the Pokémon currently on the field (shared HP/block; story 009). Read-only for the UI.
 var active_pokemon_id: String = ""
@@ -57,6 +71,14 @@ var hand_size: int = 0
 var draw_pile: Array[CardData] = []
 var hand: Array[CardData] = []
 var discard_pile: Array[CardData] = []
+## Story 027: cards with `exhaust` played this battle (out of the deck until the battle ends).
+var exhaust_pile: Array[CardData] = []
+## Story 027: Élan of the active Pokémon (see get_elan) and the flat bonus waiting for the next attack card.
+var elan: int = 0
+var next_attack_bonus: int = 0
+var _cards_played_this_turn: int = 0
+var _talents_fired: Dictionary = {}  # pokemon id -> true (this player turn)
+var _talent_book: TalentBook = null
 ## Held items active in this battle (story 006); their triggers are fired by this class.
 var items: Array[ItemData] = []
 ## Potions carried into the battle, usable with use_potion (removed once used).
@@ -94,7 +116,8 @@ func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Arra
 		type_chart: TypeChart = null, pokemon_lookup: Callable = Callable(), starter_pokemon_id: String = "",
 			held_items: Array[ItemData] = [], carried_potions: Array[PotionData] = [],
 			status_book: StatusBook = null, capture_rules: CaptureRules = null, ball_book: Dictionary = {},
-			carried_balls: Dictionary = {}, can_capture: bool = false) -> void:
+			carried_balls: Dictionary = {}, can_capture: bool = false, talent_book: TalentBook = null) -> void:
+	_talent_book = talent_book
 	_capture_rules = capture_rules
 	_ball_book = ball_book
 	capture_allowed = can_capture
@@ -158,6 +181,8 @@ func first_living_enemy() -> int:
 
 ## Plays hand[index]. target_index is an index into `enemies`; required for cards that
 ## deal damage, ignored by the others. Returns false (and changes nothing) if invalid.
+## Story 027 order: switch (Élan reset, talent) -> hits (each one separately) -> block / heal / effect / conditionals ->
+## Élan gain -> status of the card -> card_played.
 func play_card(index: int, target_index: int = -1) -> bool:
 	if not can_play(index):
 		return false
@@ -170,20 +195,27 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		energy -= card.cost
 		hand.remove_at(index)
 		discard_pile.append(card)
+		_cards_played_this_turn += 1
 		status_blocked.emit(player, fizzle_id)
 		card_played.emit(card)
 		state_changed.emit()
 		return true
+	var ctx: Dictionary = _card_context(card)
 	# Only attack cards bring their Pokémon in, BEFORE the hit (types/intents use the new Pokémon).
-	if card.kind == CardData.KIND_ATTACK and not card.pokemon_id.is_empty() and card.pokemon_id != active_pokemon_id:
+	if bool(ctx["entered"]):
 		var old_id: String = active_pokemon_id
 		active_pokemon_id = card.pokemon_id
 		_apply_identity(card.pokemon_id)
+		_set_elan(0)  # switching loses the Élan...
+		_trigger_talent(card.pokemon_id)  # ...and the newcomer's talent fires
 		refresh_intents()
 		active_pokemon_changed.emit(old_id, active_pokemon_id)
 	energy -= card.cost
 	hand.remove_at(index)
-	discard_pile.append(card)
+	if card.exhaust:
+		exhaust_pile.append(card)
+	else:
+		discard_pile.append(card)
 	# Story 018: a `target_all` card hits every living enemy (left to right), others only enemies[target_index].
 	var targets: Array[int] = []
 	if card.needs_target():
@@ -193,39 +225,66 @@ func play_card(index: int, target_index: int = -1) -> bool:
 					targets.append(i)
 		else:
 			targets.append(target_index)
-	var hits: Array[Dictionary] = []  # {index, target, amount, mult}
+	# Conditions are evaluated BEFORE the damage of the card (HP, statuses and Élan as the player sees them).
+	var met_any: Array[bool] = []
+	for c: Dictionary in card.conditionals:
+		var met: bool = targets.is_empty() and _condition_met(c["if"], card, ctx, null)
+		for ti: int in targets:
+			met = met or _condition_met(c["if"], card, ctx, enemies[ti])
+		met_any.append(met)
+	var deals: bool = card.deals_damage()
+	var base_damage: int = card.damage + floori(float(player.block) * card.damage_from_block)
+	var per_target: Array[Dictionary] = []  # {index, mult}
+	var hits: Array[Dictionary] = []  # one per HIT: {target, amount, mult}
 	for ti: int in targets:
-		var hit: Dictionary = {"index": ti, "target": enemies[ti], "amount": 0, "mult": 1.0}
-		if card.damage > 0:
-			var hit_target: Combatant = enemies[ti]
-			# Bonuses (items, "Attaque +") are added BEFORE the type multiplier, like enemy strength.
-			var bonus: int = turn_damage_bonus - _attack_penalty(player)  # burn: weaker attacks (before the type multiplier)
-			for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
-				bonus += item.total("damage_bonus")
-				item_triggered.emit(item)
-			hit["mult"] = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
-			hit["amount"] = _type_chart.final_damage(card.damage + bonus, card.type_id, hit_target.type_ids)
-			hit_target.take_damage(int(hit["amount"]))  # block absorbs AFTER the type multiplier
-			if int(hit["amount"]) > 0:
-				_on_damaged(hit_target, card.type_id)
+		var hit_target: Combatant = enemies[ti]
+		var mult: float = 1.0
+		if deals:
+			# Bonuses (items, Force, Élan) are added BEFORE the type multiplier, like enemy strength.
+			var bonus: int = _flat_bonus(card, int(ctx["elan"]), true)
+			var count: int = card.hits
+			for c: Dictionary in card.conditionals:
+				if _condition_met(c["if"], card, ctx, hit_target):
+					bonus += int((c["then"] as Dictionary).get("damage", 0))
+					count += int((c["then"] as Dictionary).get("hits", 0))
+			mult = _type_chart.damage_multiplier(card.type_id, hit_target.type_ids)
+			for h: int in count:
+				if not hit_target.is_alive():
+					break
+				# Each hit is its own damage event: Faiblesse / Vulnérable, type, then block.
+				var amount: int = _scaled_damage(base_damage + bonus, player, hit_target, card.type_id)
+				hit_target.take_damage(amount)  # block absorbs AFTER the type multiplier
+				if amount > 0:
+					_on_damaged(hit_target, card.type_id)
+				hits.append({"target": hit_target, "amount": amount, "mult": mult})
 			if not hit_target.is_alive():
 				hit_target.intent = null  # a K.O. enemy no longer acts
-		hits.append(hit)
+		per_target.append({"index": ti, "mult": mult})
 	if card.block > 0:
 		player.add_block(card.block)
 	if card.heal > 0:
 		player.heal(card.heal)
-	if card.damage > 0:
-		for hit: Dictionary in hits:
-			hit_resolved.emit(hit["target"], int(hit["amount"]), float(hit["mult"]))
+	_apply_effect(card.effect, target_index)
+	for ci: int in card.conditionals.size():
+		if met_any[ci]:
+			_apply_effect(card.conditionals[ci]["then"], target_index)
+	for hit: Dictionary in hits:
+		hit_resolved.emit(hit["target"], int(hit["amount"]), float(hit["mult"]))
 	if card.kind == CardData.KIND_ATTACK:
 		_attacks_played += 1
+		if deals and next_attack_bonus != 0:
+			next_attack_bonus = 0
+		if bool(ctx["was_active"]) and _talent_book != null:
+			_set_elan(mini(_talent_book.elan_cap, elan + _talent_book.elan_gain_per_attack))
+	_cards_played_this_turn += 1
 	# Status of the card: applied AFTER the damage (a sleeping target is not woken by its own card). A hit that deals
 	# no damage because of a 0x type multiplier inflicts nothing; a status skill always applies.
 	if not card.status_id.is_empty():
-		for hit: Dictionary in hits:
-			if is_valid_target(int(hit["index"])) and (card.damage <= 0 or float(hit["mult"]) > 0.0):
-				apply_status(enemies[int(hit["index"])], card.status_id, card.status_value)
+		for rec: Dictionary in per_target:
+			if is_valid_target(int(rec["index"])) and (not deals or float(rec["mult"]) > 0.0):
+				apply_status(enemies[int(rec["index"])], card.status_id, card.status_value)
+	if card.exhaust:
+		card_exhausted.emit(card)
 	card_played.emit(card)
 	if first_living_enemy() < 0:
 		_win()
@@ -234,16 +293,240 @@ func play_card(index: int, target_index: int = -1) -> bool:
 	return true
 
 
+# --- Story 027: Élan, talents, effect grammar --------------------------------------------------------
+
+## Current Élan of the active Pokémon (0 without talent book).
+func get_elan() -> int:
+	return elan
+
+
+## Highest Élan reachable (talents.json elan.cap; 0 = Élan disabled).
+func get_elan_cap() -> int:
+	return _talent_book.elan_cap if _talent_book != null else 0
+
+
+## Flat damage every hit of an attack card gains from the current Élan.
+func get_elan_damage_bonus() -> int:
+	return elan * _talent_book.elan_damage_per_stack if _talent_book != null else 0
+
+
+## The player's Force for the whole battle (flat damage per hit).
+func get_strength() -> int:
+	return player.strength
+
+
+## The player's Force that lasts until the end of this turn (flat damage per hit; also the "Attaque +" potion).
+func get_turn_strength() -> int:
+	return turn_damage_bonus
+
+
+## Flat damage waiting for the next attack card (talents such as Brasier).
+func get_next_attack_bonus() -> int:
+	return next_attack_bonus
+
+
+## Talent id of a Pokémon in this battle ("" if none / no talent book).
+func get_talent_id(pokemon_id: String) -> String:
+	if _talent_book == null:
+		return ""
+	var explicit: String = ""
+	var types: Array[String] = []
+	if _pokemon_lookup.is_valid():
+		var info: Dictionary = _pokemon_lookup.call(pokemon_id)
+		explicit = String(info.get("talent", ""))
+		for t: Variant in (info.get("types", []) as Array):
+			types.append(String(t))
+	if types.is_empty() and pokemon_id == active_pokemon_id:
+		types = player.type_ids
+	return _talent_book.talent_for(pokemon_id, explicit, types)
+
+
+## True if playing `card` now would make its Pokémon's talent fire (it would enter and has not fired this turn).
+func would_trigger_talent(card: CardData) -> bool:
+	if not bool(_card_context(card)["entered"]):
+		return false
+	return not get_talent_id(card.pokemon_id).is_empty() and not (_talent_book.once_per_turn and _talents_fired.has(card.pokemon_id))
+
+
+## Pure preview (no RNG, no signal) of hand[index] against enemies[target_index] if played NOW:
+## {"amount": final damage of ONE hit before block, "hits": number of hits, "multiplier": type factor}.
+## Includes Force, Élan (lost if the card switches), items, conditionals, Faiblesse / Vulnérable and the attack bonus
+## of the talent the switch would fire. {amount 0, hits 0, multiplier 1.0} if invalid or the card deals no damage.
+func preview_card_damage(index: int, target_index: int) -> Dictionary:
+	if index < 0 or index >= hand.size() or not is_valid_target(target_index) or not hand[index].deals_damage():
+		return {"amount": 0, "hits": 0, "multiplier": 1.0}
+	var card: CardData = hand[index]
+	var target: Combatant = enemies[target_index]
+	var ctx: Dictionary = _card_context(card)
+	var bonus: int = _flat_bonus(card, int(ctx["elan"]), false)
+	if would_trigger_talent(card):
+		var fx: Dictionary = _talent_book.effect_of(get_talent_id(card.pokemon_id))
+		bonus += int(fx.get("next_attack_bonus", 0)) + int(fx.get("strength_turn", 0)) + int(fx.get("strength", 0))
+	var count: int = card.hits
+	for c: Dictionary in card.conditionals:
+		if _condition_met(c["if"], card, ctx, target):
+			bonus += int((c["then"] as Dictionary).get("damage", 0))
+			count += int((c["then"] as Dictionary).get("hits", 0))
+	var base: int = card.damage + floori(float(player.block) * card.damage_from_block)
+	return {"amount": _scaled_damage(base + bonus, player, target, card.type_id), "hits": count,
+			"multiplier": _type_chart.damage_multiplier(card.type_id, target.type_ids)}
+
+
+## What playing `card` now means for its carrier: {was_active, entered, first (first card of the turn), elan (the Élan
+## the card is played with: 0 if it switches)}.
+func _card_context(card: CardData) -> Dictionary:
+	var is_attack: bool = card.kind == CardData.KIND_ATTACK
+	var entered: bool = is_attack and not card.pokemon_id.is_empty() and card.pokemon_id != active_pokemon_id
+	return {"was_active": is_attack and not entered, "entered": entered, "first": _cards_played_this_turn == 0,
+			"elan": 0 if entered else elan}
+
+
+func _condition_met(cond: Dictionary, card: CardData, ctx: Dictionary, target: Combatant) -> bool:
+	match String(cond["type"]):
+		EffectSpec.COND_WAS_ACTIVE:
+			return bool(ctx["was_active"])
+		EffectSpec.COND_ENTERED:
+			return bool(ctx["entered"])
+		EffectSpec.COND_FIRST_CARD:
+			return bool(ctx["first"])
+		EffectSpec.COND_ELAN:
+			return int(ctx["elan"]) >= int(cond["arg"])
+		EffectSpec.COND_SUPER_EFFECTIVE:
+			return target != null and _type_chart.damage_multiplier(card.type_id, target.type_ids) > _neutral_multiplier()
+		EffectSpec.COND_TARGET_STATUS:
+			if target == null:
+				return false
+			return not target.statuses.is_empty() if String(cond["arg"]) == EffectSpec.ANY_STATUS else target.has_status(String(cond["arg"]))
+		EffectSpec.COND_TARGET_HP_BELOW:
+			return target != null and float(target.hp) < float(target.max_hp) * float(cond["arg"])
+	return false
+
+
+## The factor of a status-free, type-neutral hit (the default of StatusData's multipliers).
+func _neutral_multiplier() -> float:
+	return StatusData.new().damage_dealt_multiplier
+
+
+## Flat damage added to every hit of `card` before the multipliers: Force (turn + battle), next-attack bonus, Élan
+## (`elan_value` stacks, attack cards), items, minus the burn penalty. `announce` emits item_triggered.
+func _flat_bonus(card: CardData, elan_value: int, announce: bool) -> int:
+	var bonus: int = turn_damage_bonus + player.strength - _attack_penalty(player)  # burn: weaker attacks
+	if card.kind == CardData.KIND_ATTACK:
+		bonus += next_attack_bonus
+		if _talent_book != null:
+			bonus += elan_value * _talent_book.elan_damage_per_stack
+	for item: ItemData in ItemEffects.damage_bonus_sources(items, card, _attacks_played):
+		bonus += item.total("damage_bonus")
+		if announce:
+			item_triggered.emit(item)
+	return bonus
+
+
+## Final damage (before block) of an attack worth `raw` from `attacker` on `target`: Faiblesse of the attacker and
+## Vulnérable of the target scale the value (rounded down), then the type multiplier applies.
+func _scaled_damage(raw: int, attacker: Combatant, target: Combatant, type_id: String) -> int:
+	var scale: float = _status_multiplier(attacker, true) * _status_multiplier(target, false)
+	return _type_chart.final_damage(floori(float(maxi(0, raw)) * scale), type_id, target.type_ids)
+
+
+func _status_multiplier(c: Combatant, dealt: bool) -> float:
+	var m: float = _neutral_multiplier()
+	for sid: String in c.statuses.keys():
+		var def: StatusData = _status_book.get_def(sid)
+		if def != null:
+			m *= def.damage_dealt_multiplier if dealt else def.damage_taken_multiplier
+	return m
+
+
+func _set_elan(value: int) -> void:
+	if value == elan:
+		return
+	elan = value
+	elan_changed.emit(elan)
+
+
+## Fires the talent of `pokemon_id` (it just entered the field) unless it already fired this turn.
+func _trigger_talent(pokemon_id: String) -> void:
+	var tid: String = get_talent_id(pokemon_id)
+	if tid.is_empty() or (_talent_book.once_per_turn and _talents_fired.has(pokemon_id)):
+		return
+	_talents_fired[pokemon_id] = true
+	_apply_effect(_talent_book.effect_of(tid), -1)
+	talent_triggered.emit(pokemon_id, tid)
+
+
+## Applies an EffectSpec effect for the player. `target_index` = the card's target (-1: none; `to: target` is skipped).
+func _apply_effect(fx: Dictionary, target_index: int) -> void:
+	if fx.is_empty():
+		return
+	if fx.has("block"):
+		player.add_block(int(fx["block"]))
+	if fx.has("block_per_enemy"):
+		var living: int = 0
+		for e: Combatant in enemies:
+			if e.is_alive():
+				living += 1
+		player.add_block(int(fx["block_per_enemy"]) * living)
+	if fx.has("heal"):
+		player.heal(int(fx["heal"]))
+	if fx.has("self_damage"):
+		player.lose_hp(mini(int(fx["self_damage"]), player.hp - SELF_DAMAGE_HP_FLOOR))
+	if fx.has("strength") or fx.has("strength_turn"):
+		player.strength += int(fx.get("strength", 0))
+		turn_damage_bonus += int(fx.get("strength_turn", 0))
+		strength_changed.emit(player.strength, turn_damage_bonus)
+	if fx.has("next_attack_bonus"):
+		next_attack_bonus += int(fx["next_attack_bonus"])
+	if fx.has("energy"):
+		energy += int(fx["energy"])
+	for a: Dictionary in fx.get(EffectSpec.FIELD_APPLY, []):
+		match String(a["to"]):
+			EffectSpec.TO_TARGET:
+				if is_valid_target(target_index):
+					apply_status(enemies[target_index], String(a["status"]), int(a["value"]))
+			EffectSpec.TO_ALL:
+				for e: Combatant in enemies:
+					if e.is_alive():
+						apply_status(e, String(a["status"]), int(a["value"]))
+			EffectSpec.TO_RANDOM:
+				var pick: Combatant = _random_living_enemy()
+				if pick != null:
+					apply_status(pick, String(a["status"]), int(a["value"]))
+			EffectSpec.TO_SELF:
+				apply_status(player, String(a["status"]), int(a["value"]))
+	if fx.has("draw"):
+		cards_drawn.emit(_draw_cards(int(fx["draw"])))
+
+
+## A living enemy picked with the injected RNG (the RNG is only drawn when there is a real choice); null if none.
+func _random_living_enemy() -> Combatant:
+	var living: Array[Combatant] = []
+	for e: Combatant in enemies:
+		if e.is_alive():
+			living.append(e)
+	if living.is_empty():
+		return null
+	return living[_rng.randi_range(0, living.size() - 1)] if living.size() > MIN_ENEMIES else living[0]
+
+
 ## Ends the player's turn: discards hand, each living enemy (left to right) executes the
 ## intent it displayed, then (if the player survives) next intents are rolled and a new
 ## player turn begins.
 func end_turn() -> bool:
 	if state != State.PLAYER_TURN:
 		return false
-	discard_pile.append_array(hand)
-	hand.clear()
+	# Story 027: cards still in hand fire their end-of-turn effect, then everything but the `retain` cards is discarded.
+	for c: CardData in hand.duplicate():
+		_apply_effect(c.end_of_turn_in_hand, -1)
+	var kept: Array[CardData] = []
+	for c: CardData in hand:
+		if c.retain:
+			kept.append(c)
+		else:
+			discard_pile.append(c)
+	hand = kept
 	_fire_items(ItemData.TRIGGER_TURN_END)
-	turn_damage_bonus = 0
+	_end_turn_strength()
 	var aftermath_before: int = player.aftermath_turns
 	_tick_statuses(player)  # the player's statuses tick at the end of its turn, before the enemies act
 	if not player.is_alive():
@@ -299,9 +582,10 @@ func use_potion(index: int) -> bool:
 			"energy_gain":
 				energy += int(e["value"])
 			"draw_cards":
-				_draw_cards(int(e["value"]))
+				cards_drawn.emit(_draw_cards(int(e["value"])))
 			"damage_bonus_turn":
 				turn_damage_bonus += int(e["value"])
+				strength_changed.emit(player.strength, turn_damage_bonus)
 			_:
 				ItemEffects.apply_to_combatant(e, player)
 	potion_used.emit(potion)
@@ -402,8 +686,7 @@ func refresh_intents() -> void:
 	for e: Combatant in enemies:
 		if e.is_alive() and e.intent != null:
 			if e.intent.type == EnemyIntent.TYPE_ATTACK:
-				e.intent.value = _type_chart.final_damage(maxi(0, e.intent.base_value - _attack_penalty(e)),
-						_attack_type_of(e, e.intent), player.type_ids)
+				e.intent.value = _scaled_damage(e.intent.base_value - _attack_penalty(e), e, player, _attack_type_of(e, e.intent))
 			e.intent.skip_label = _skip_label(e)
 
 
@@ -472,7 +755,7 @@ func _roll_intent(enemy: Combatant) -> void:
 		# Strength is added BEFORE the type multiplier (burn subtracts its penalty there too); the displayed value is the final one.
 		rolled.attack_type = _attack_type_of(enemy, rolled)
 		rolled.attack_type_label = _type_chart.get_type_name(rolled.attack_type) if enemy.type_ids.size() > 1 else ""
-		rolled.value = _type_chart.final_damage(maxi(0, rolled.value - _attack_penalty(enemy)), rolled.attack_type, player.type_ids)
+		rolled.value = _scaled_damage(rolled.value - _attack_penalty(enemy), enemy, player, rolled.attack_type)
 		rolled.status_label = _status_book.name_of(rolled.status_id)
 	rolled.skip_label = _skip_label(enemy)
 	enemy.intent = rolled
@@ -502,7 +785,9 @@ func _start_player_turn(first: bool = false) -> void:
 		player.reset_block()
 	energy = max_energy
 	energy_lost = 0
-	turn_damage_bonus = 0
+	_end_turn_strength()
+	_cards_played_this_turn = 0
+	_talents_fired.clear()
 	# Asleep / frozen team: it loses player_energy_loss energy (whole turn if absent), still draws and plays with the rest.
 	var lost_turn: String = _consume_skip_turn(player)
 	if not lost_turn.is_empty():
@@ -512,19 +797,35 @@ func _start_player_turn(first: bool = false) -> void:
 		turn_skipped.emit(player, lost_turn)
 	_fire_items(ItemData.TRIGGER_TURN_START)
 	_draw_cards(hand_size)
+	if first:
+		_trigger_talent(active_pokemon_id)  # story 027: the starter "enters" when the battle begins
 	turn_started.emit()
 	state_changed.emit()
 
 
-func _draw_cards(count: int) -> void:
+## Clears the Force that only lasts one turn (announced when it was not already 0).
+func _end_turn_strength() -> void:
+	if turn_damage_bonus != 0:
+		turn_damage_bonus = 0
+		strength_changed.emit(player.strength, turn_damage_bonus)
+
+
+## Draws up to `count` cards (the discard pile is reshuffled when the draw pile is empty; the exhaust pile never is).
+## Returns how many were really drawn. Story 027: a drawn card fires its `on_draw` effect.
+func _draw_cards(count: int) -> int:
+	var drawn: int = 0
 	for i: int in count:
 		if draw_pile.is_empty():
 			if discard_pile.is_empty():
-				return
+				break
 			draw_pile = discard_pile.duplicate()
 			discard_pile.clear()
 			_shuffle(draw_pile)
-		hand.append(draw_pile.pop_back())
+		var card: CardData = draw_pile.pop_back()
+		hand.append(card)
+		drawn += 1
+		_apply_effect(card.on_draw, -1)
+	return drawn
 
 
 func _shuffle(cards: Array[CardData]) -> void:
@@ -560,7 +861,10 @@ func apply_status(target: Combatant, status_id: String, value: int) -> bool:
 	if target.statuses.has(status_id) and not def.refresh_on_reapply:
 		status_unchanged.emit(target, status_id)
 		return false
-	if target.statuses.has(status_id):
+	if def.value_is_turns:  # story 027 (Faiblesse / Vulnérable): the value is the duration, re-applying adds turns
+		var turns: int = value + (int((target.statuses[status_id] as Dictionary)["turns"]) if target.statuses.has(status_id) else 0)
+		target.statuses[status_id] = {"value": turns, "turns": turns}
+	elif target.statuses.has(status_id):
 		var entry: Dictionary = target.statuses[status_id]
 		if def.stackable:
 			entry["value"] = int(entry["value"]) + value
@@ -690,8 +994,10 @@ func _tick_statuses(c: Combatant) -> void:
 				if int(entry["value"]) <= 0:
 					_remove_status(c, sid)
 					continue
-		if def.duration > 0:
+		if def.duration > 0 or def.value_is_turns:
 			entry["turns"] = int(entry["turns"]) - 1
+			if def.value_is_turns:
+				entry["value"] = int(entry["turns"])
 			if int(entry["turns"]) <= 0:
 				_remove_status(c, sid)
 				continue

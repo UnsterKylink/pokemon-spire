@@ -1,7 +1,7 @@
 extends SceneTree
 var fails: int = 0
 var passes: int = 0
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 var gd: GameData
 
 func ok(c: bool, msg: String) -> void:
@@ -27,6 +27,7 @@ func battle(run: RunState, deck_ids: Array, es: Array[Combatant], energy: int = 
 	run.energy_per_turn = energy
 	run.hand_size = deck_ids.size()
 	var b := run.create_battle(es, gd.get_type_chart(), rng(3))
+	b._talent_book = null  # story 027: these item tests measure plain damage; talents / Élan are covered by t27
 	b.start()
 	return b
 
@@ -195,7 +196,7 @@ func _initialize() -> void:
 	var es8: Array[Combatant] = [mk()]
 	var d: Array[CardData] = [run.deck[gi]]
 	run.deck = d; run.hand_size = 1
-	b = run.create_battle(es8, gd.get_type_chart(), rng(1)); b.start()
+	b = run.create_battle(es8, gd.get_type_chart(), rng(1)); b._talent_book = null; b.start()  # story 027: these item tests measure plain damage; talents / Élan are covered by t27
 	b.play_card(0, 0); ok(es8[0].hp == 500 - 9, "upgraded dmg in battle")
 	# per-card override + rewards path
 	var rc: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/data/cards.json"))

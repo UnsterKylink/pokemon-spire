@@ -2,7 +2,7 @@ extends SceneTree
 ## Story 018 scratch: rival (placement, counter-type starter, team growth + evolution, modifiers, rewards), new events (count,
 ## zone filter, effects), legendary events (once per run, from zone 3, fight, unique card, capture chance, exclusions),
 ## AoE / heal cards, save round trip, determinism, validation rejections, Main flow (rival room + pre-league rival).
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 const D := "res://assets/data/"
 var fails: int = 0
 var passes: int = 0

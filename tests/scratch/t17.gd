@@ -1,6 +1,6 @@
 extends SceneTree
 # Story 013b part B: roster integration.
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 var passes := 0
 var fails := 0
 func ok(c: bool, m: String) -> void:

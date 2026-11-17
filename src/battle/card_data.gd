@@ -38,6 +38,26 @@ var target_all: bool = false
 var heal: int = 0
 ## Story 018: unique legendary card (rarity stays "rare"; the UI may give it its own look). Never in reward pools.
 var legendary: bool = false
+## Story 027 (all optional, see cards.json _doc). Number of separate hits on each target (each goes through block / types).
+var hits: int = 1
+## True: the card leaves the deck until the end of the battle once played (Battle.exhaust_pile).
+var exhaust: bool = false
+## True: the card stays in hand at the end of the turn.
+var retain: bool = false
+## Damage added per point of the player's CURRENT block (1.0 = "damage equal to the block"); 0 = none.
+var damage_from_block: float = 0.0
+## Extra effect fields of the card (EffectSpec: draw, energy, strength, strength_turn, self_damage, block_per_enemy,
+## next_attack_bonus, apply); {} = none.
+var effect: Dictionary = {}
+## Conditional effects: [{"if": {type, arg}, "then": effect}] (EffectSpec.parse_conditionals).
+var conditionals: Array[Dictionary] = []
+## Effects fired when the card is drawn / when it is still in hand at the end of the turn ({} = none).
+var on_draw: Dictionary = {}
+var end_of_turn_in_hand: Dictionary = {}
+
+## Card fields read as an EffectSpec effect (block and heal keep their own historical fields).
+const EFFECT_FIELDS: Array[String] = ["draw", "energy", "strength", "strength_turn", "next_attack_bonus", "self_damage",
+		"block_per_enemy", "apply"]
 
 
 ## Builds a CardData from a JSON dictionary. Returns null (and pushes an error) if invalid.
@@ -81,6 +101,8 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 		return null
 	card.heal = int(heal_v)
 	card.legendary = bool(d.get("legendary", false))
+	if not card._parse_effects(d):
+		return null
 	var up: Variant = d.get("upgrade", {})
 	if not (up is Dictionary) or not valid_upgrade_rule(up):
 		push_error("CardData: card '%s' has an invalid 'upgrade' (expected {damage, block, cost} integers)" % card_id)
@@ -89,9 +111,76 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 	return card
 
 
-## True if the card needs an enemy target to be played (derived from its damage, or a status to inflict).
+## Story 027: reads the optional effect fields; false after push_error if one is invalid.
+func _parse_effects(d: Dictionary) -> bool:
+	var label: String = "card '%s'" % id
+	for key: String in ["exhaust", "retain", "target_all"]:
+		if d.has(key) and not (d[key] is bool):
+			push_error("CardData: %s: '%s' must be a boolean" % [label, key])
+			return false
+	exhaust = bool(d.get("exhaust", false))
+	retain = bool(d.get("retain", false))
+	var hits_v: Variant = d.get("hits", hits)
+	if not (hits_v is int or hits_v is float) or float(hits_v) < float(hits) or float(hits_v) != floorf(float(hits_v)):
+		push_error("CardData: %s: 'hits' must be an integer >= 1" % label)
+		return false
+	hits = int(hits_v)
+	var dfb: Variant = d.get("damage_from_block", 0)
+	if not (dfb is int or dfb is float) or float(dfb) < 0.0:
+		push_error("CardData: %s: 'damage_from_block' must be a number >= 0" % label)
+		return false
+	damage_from_block = float(dfb)
+	if kind == KIND_SKILL and (damage_from_block > 0.0 or d.has("hits")):
+		push_error("CardData: skill %s must not deal damage ('hits' / 'damage_from_block')" % label)
+		return false
+	var fx: Variant = EffectSpec.parse(label, d, false, EFFECT_FIELDS)
+	if fx == null:
+		return false
+	effect = fx
+	if d.has("conditional"):
+		var conds: Variant = EffectSpec.parse_conditionals(label, d["conditional"], kind == KIND_ATTACK)
+		if conds == null:
+			return false
+		conditionals = conds
+	for hook: String in ["on_draw", "end_of_turn_in_hand"]:
+		if not d.has(hook):
+			continue
+		var h: Variant = EffectSpec.parse("%s (%s)" % [label, hook], d[hook])
+		if h == null or EffectSpec.needs_target(h):
+			push_error("CardData: %s: '%s' must be an effect without target" % [label, hook])
+			return false
+		if hook == "on_draw":
+			on_draw = h
+		else:
+			end_of_turn_in_hand = h
+	return true
+
+
+## True if the card needs an enemy target to be played (damage, a status to inflict, a targeted effect or condition).
 func needs_target() -> bool:
-	return damage > 0 or not status_id.is_empty()
+	if deals_damage() or not status_id.is_empty() or EffectSpec.needs_target(effect):
+		return true
+	for c: Dictionary in conditionals:
+		if EffectSpec.needs_target(c["then"]) or String((c["if"] as Dictionary)["type"]) in EffectSpec.TARGET_CONDITIONS:
+			return true
+	return false
+
+
+## True if the card hits enemies (fixed damage or damage taken from the player's block).
+func deals_damage() -> bool:
+	return damage > 0 or damage_from_block > 0.0
+
+
+## Every status id the card may apply through its story-027 effects (not the historical `status` field).
+func effect_status_ids() -> Array[String]:
+	var out: Array[String] = EffectSpec.status_ids(effect)
+	for c: Dictionary in conditionals:
+		out.append_array(EffectSpec.status_ids(c["then"]))
+		if String((c["if"] as Dictionary)["type"]) == EffectSpec.COND_TARGET_STATUS and String((c["if"] as Dictionary)["arg"]) != EffectSpec.ANY_STATUS:
+			out.append(String((c["if"] as Dictionary)["arg"]))
+	out.append_array(EffectSpec.status_ids(on_draw))
+	out.append_array(EffectSpec.status_ids(end_of_turn_in_hand))
+	return out
 
 
 ## A copy of this card carried by another Pokémon (stolen cards, story 009).
@@ -120,6 +209,14 @@ func _copy() -> CardData:
 	copy.target_all = target_all
 	copy.heal = heal
 	copy.legendary = legendary
+	copy.hits = hits
+	copy.exhaust = exhaust
+	copy.retain = retain
+	copy.damage_from_block = damage_from_block
+	copy.effect = effect
+	copy.conditionals = conditionals
+	copy.on_draw = on_draw
+	copy.end_of_turn_in_hand = end_of_turn_in_hand
 	return copy
 
 

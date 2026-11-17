@@ -2,7 +2,7 @@ extends SceneTree
 # Story 016 — statuses: tick/duration/stacking, immunities, skip rules, thaw/wake, death, cures, items, data validation.
 var fails: int = 0
 var passes: int = 0
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 var gd: GameData
 var ev: Array = []
 
@@ -71,7 +71,7 @@ func load_with(over: Dictionary) -> bool:
 func _initialize() -> void:
 	gd = GameData.new()
 	ok(gd.load_all(), "real data loads")
-	ok(Array(gd.get_status_ids()) == ["poison", "burn", "paralysis", "sleep", "freeze"], "5 statuses")
+	ok(Array(gd.get_status_ids()) == ["poison", "burn", "paralysis", "sleep", "freeze", "weak", "vulnerable"], "5 statuses + story 027 Faiblesse / Vulnérable")
 	var bk := gd.get_status_book()
 	ok(bk.get_def("burn").attack_penalty == 2 and bk.get_def("burn").duration == 3, "burn data")
 	ok(is_equal_approx(bk.get_def("paralysis").skip_chance, 0.25) and bk.get_def("paralysis").duration == 2, "para data")

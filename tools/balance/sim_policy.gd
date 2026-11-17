@@ -12,6 +12,9 @@ extends RefCounted
 ##    lethal threat, cures when a status is on, boosters in elite / gym / league fights) -> block first if the shown attacks
 ##    total >= block_first_fraction of (HP + block) -> status skills on healthy targets -> attacks on the lowest-HP enemy
 ##    (target order = lowest HP+block), best final damage per energy, never an immune (x0) target -> spare energy on block.
+##  - Story 027: set-up skills (energy / draw / Force) are played first; attacks are scored with Battle.preview_card_damage
+##    (Force, Élan, talent bonus, conditionals, Vulnérable, multi-hit) + the value of their extra effects; switching Pokémon
+##    costs the Élan it loses (elan_loss_weight) and earns the talent it fires (talent_value).
 ##  - Rewards: score = (damage + block_weight*block + status_weight*status value) / max(cost, 0.5) + coverage bonus
 ##    (new types hit super-effectively), take if >= take_min_score, never > max_copies copies of a low-value card,
 ##    deck cap max_deck_size (then only cards >= replace_min_score).
@@ -44,6 +47,24 @@ const DEFAULTS: Dictionary = {
 	## Battle: safety cap on player turns / actions per turn (a stalled fight counts as a defeat).
 	"max_turns": 80,
 	"max_actions_per_turn": 40,
+	## Story 027. Battle + reward value of the new card effects, in "damage points" (correct, not expert).
+	## One drawn card / one energy / one Force for the battle / one Force for the turn / enemies assumed for block per enemy.
+	"draw_value": 3.0,
+	"energy_value": 4.0,
+	"strength_value": 4.0,
+	"strength_turn_value": 2.0,
+	"block_per_enemy_enemies": 1.5,
+	## HP lost by a self-damaging card (score penalty per HP); such a card is never played under self_damage_min_hp_frac.
+	"self_damage_weight": 1.0,
+	"self_damage_min_hp_frac": 0.3,
+	## Reward value of a conditional bonus = this share of its `then` (the condition is met about half the time).
+	"conditional_share": 0.5,
+	## Reward value of a "damage from block" card (typical block held when it is played).
+	"damage_from_block_value": 6.0,
+	## Battle: switching Pokémon loses the Élan: score penalty per point of Élan damage bonus lost...
+	"elan_loss_weight": 1.5,
+	## ...and gains the newcomer's talent: flat score bonus when the talent would fire.
+	"talent_value": 2.0,
 	## Reward scoring.
 	"block_weight": 0.8,
 	"status_weight": 1.0,
@@ -267,6 +288,10 @@ func _choose_card(b: Battle) -> Dictionary:
 		if ex.hp + ex.block != ey.hp + ey.block:
 			return ex.hp + ex.block < ey.hp + ey.block
 		return x < y)
+	# Story 027: set-up skills first (energy, draw, Force): they make the rest of the turn better.
+	var setup: Dictionary = _best_setup(b)
+	if not setup.is_empty():
+		return setup
 	# Pure status skills, early, on a healthy target that does not already have it and is not immune.
 	for i: int in b.hand.size():
 		var c: CardData = b.hand[i]
@@ -284,12 +309,16 @@ func _choose_card(b: Battle) -> Dictionary:
 			var best_s: float = -INF
 			for i: int in b.hand.size():
 				var c: CardData = b.hand[i]
-				if c.kind != CardData.KIND_ATTACK or c.damage <= 0 or c.cost > b.energy:
+				if c.kind != CardData.KIND_ATTACK or not c.deals_damage() or c.cost > b.energy or not _self_damage_ok(b, c):
 					continue
 				if chart.damage_multiplier(c.type_id, e.type_ids) < min_mult:
 					continue
-				var dmg: int = chart.final_damage(c.damage + b.turn_damage_bonus, c.type_id, e.type_ids)
-				var s: float = float(dmg) / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
+				# Story 027: the game's own preview (Force, Élan kept or lost, talent bonus, conditionals, Vulnérable, hits).
+				var pv: Dictionary = b.preview_card_damage(i, t)
+				var dmg: int = int(pv["amount"]) * int(pv["hits"])
+				if dmg <= 0 and min_mult >= 1.0:
+					continue
+				var s: float = (float(dmg) + _extras_value(b, c)) / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
 				if dmg >= e.hp + e.block:
 					s += float(cfg["kill_bonus"])
 				if s > best_s:
@@ -303,14 +332,59 @@ func _choose_card(b: Battle) -> Dictionary:
 	return {}
 
 
+## Story 027: block a skill gives right now (its block + block per living enemy).
+func _block_of(b: Battle, c: CardData) -> int:
+	var living: int = 0
+	for e: Combatant in b.enemies:
+		if e.is_alive():
+			living += 1
+	return c.block + int(c.effect.get("block_per_enemy", 0)) * living
+
+
+func _self_damage_ok(b: Battle, c: CardData) -> bool:
+	if not c.effect.has("self_damage"):
+		return true
+	return float(b.player.hp - int(c.effect["self_damage"])) / float(b.player.max_hp) >= float(cfg["self_damage_min_hp_frac"])
+
+
+## Story 027: value (in damage points) of what an attack card does besides its damage, in the current battle:
+## draw / energy / Force, minus self-damage, minus the Élan a switch loses, plus the talent a switch fires.
+func _extras_value(b: Battle, c: CardData) -> float:
+	var v: float = float(c.effect.get("draw", 0)) * float(cfg["draw_value"]) + float(c.effect.get("energy", 0)) * float(cfg["energy_value"]) \
+			+ float(c.effect.get("strength", 0)) * float(cfg["strength_value"]) \
+			+ float(c.effect.get("strength_turn", 0)) * float(cfg["strength_turn_value"]) \
+			- float(c.effect.get("self_damage", 0)) * float(cfg["self_damage_weight"])
+	if not c.pokemon_id.is_empty() and c.pokemon_id != b.active_pokemon_id:
+		v -= float(b.get_elan_damage_bonus()) * float(cfg["elan_loss_weight"])
+		if b.would_trigger_talent(c):
+			v += float(cfg["talent_value"])
+	return v
+
+
+## Story 027: a skill that only sets the turn up (energy / draw / Force, no target): played first when it pays for itself
+## (free, or energy is left for something else afterwards) and another card is in hand. {} if none.
+func _best_setup(b: Battle) -> Dictionary:
+	if b.hand.size() < 2:
+		return {}
+	for i: int in b.hand.size():
+		var c: CardData = b.hand[i]
+		if c.kind != CardData.KIND_SKILL or c.needs_target() or c.cost > b.energy:
+			continue
+		var gain: int = int(c.effect.get("energy", 0))
+		var useful: bool = gain > 0 or c.effect.has("draw") or c.effect.has("strength") or c.effect.has("strength_turn")
+		if useful and b.energy - c.cost + gain >= 1:
+			return {"index": i, "target": -1}
+	return {}
+
+
 func _best_block(b: Battle) -> Dictionary:
 	var best_i: int = -1
 	var best_s: float = -INF
 	for i: int in b.hand.size():
 		var c: CardData = b.hand[i]
-		if c.block <= 0 or c.kind != CardData.KIND_SKILL or c.cost > b.energy:
+		if _block_of(b, c) <= 0 or c.kind != CardData.KIND_SKILL or c.cost > b.energy:
 			continue
-		var s: float = float(c.block) / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
+		var s: float = float(_block_of(b, c)) / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
 		if s > best_s:
 			best_s = s
 			best_i = i
@@ -323,10 +397,31 @@ func _best_block(b: Battle) -> Dictionary:
 
 ## Base value of a card per energy (no deck context).
 func card_value(c: CardData) -> float:
-	var raw: float = float(c.damage) + float(cfg["block_weight"]) * float(c.block)
+	var raw: float = float(c.damage * c.hits) + float(cfg["block_weight"]) * float(c.block)
 	if not c.status_id.is_empty():
 		raw += float(cfg["status_weight"]) * float(c.status_value)
+	raw += _effect_value(c.effect)  # story 027
+	if c.damage_from_block > 0.0:
+		raw += float(cfg["damage_from_block_value"]) * c.damage_from_block
+	for cond: Dictionary in c.conditionals:
+		var then: Dictionary = cond["then"]
+		raw += float(cfg["conditional_share"]) * (float(int(then.get("damage", 0)) * c.hits + int(then.get("hits", 0)) * c.damage) + _effect_value(then))
+	raw += float(cfg["conditional_share"]) * _effect_value(c.end_of_turn_in_hand) + _effect_value(c.on_draw)
 	return raw / maxf(float(c.cost), float(cfg["zero_cost_energy"]))
+
+
+## Story 027: deck-building value of an EffectSpec effect (draw, energy, Force, block per enemy, statuses, self-damage).
+func _effect_value(fx: Dictionary) -> float:
+	if fx.is_empty():
+		return 0.0
+	var v: float = float(fx.get("draw", 0)) * float(cfg["draw_value"]) + float(fx.get("energy", 0)) * float(cfg["energy_value"]) \
+			+ float(fx.get("strength", 0)) * float(cfg["strength_value"]) + float(fx.get("strength_turn", 0)) * float(cfg["strength_turn_value"]) \
+			+ float(fx.get("next_attack_bonus", 0)) + float(cfg["block_weight"]) * float(fx.get("block", 0)) \
+			+ float(cfg["block_weight"]) * float(fx.get("block_per_enemy", 0)) * float(cfg["block_per_enemy_enemies"]) \
+			+ float(cfg["block_weight"]) * float(fx.get("heal", 0)) - float(fx.get("self_damage", 0)) * float(cfg["self_damage_weight"])
+	for a: Dictionary in fx.get("apply", []):
+		v += float(cfg["status_weight"]) * float(a["value"])
+	return v
 
 
 ## Types (ids) that some attack card of the deck hits for >= coverage_min_mult.

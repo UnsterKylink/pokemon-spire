@@ -1,7 +1,7 @@
 extends SceneTree
 ## Story 017 scratch: capture with Poké Balls (formula, determinism, team join, removal/win, room rules, bag limit, energy,
 ## shop/loot/event balls, save round trip incl. old save, data validation).
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 const D := "res://assets/data/"
 var fails: int = 0
 var passes: int = 0

@@ -2,7 +2,7 @@ extends SceneTree
 ## Throwaway: story 007 data half (evolutions + Champion).
 var fails: int = 0
 var passes: int = 0
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 
 func ok(c: bool, msg: String) -> void:
 	if c: passes += 1

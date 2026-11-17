@@ -1,7 +1,7 @@
 extends SceneTree
 ## Story 015 scratch test: SaveGame round trips, RNG determinism across a quit/resume, error handling, deletion, atomic write.
 
-const D := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/t19_files/"
+const D := "user://t19_files/"
 var passes: int = 0
 var fails: int = 0
 var gd: GameData

@@ -2,7 +2,7 @@ extends SceneTree
 var passes := 0
 var fails := 0
 var hits: Array = []
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 const IDS := ["normal","fire","water","electric","grass","ice","fighting","poison","ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy"]
 const NAMES := {"normal":"Normal","fire":"Feu","water":"Eau","electric":"Électrik","grass":"Plante","ice":"Glace","fighting":"Combat","poison":"Poison","ground":"Sol","flying":"Vol","psychic":"Psy","bug":"Insecte","rock":"Roche","ghost":"Spectre","dragon":"Dragon","dark":"Ténèbres","steel":"Acier","fairy":"Fée"}
 # attacker: [SE, NVE, IM]

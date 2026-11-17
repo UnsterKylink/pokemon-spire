@@ -32,6 +32,8 @@ const DEFAULT_LEAGUE_PATH: String = "res://assets/data/league.json"
 const DEFAULT_STATUSES_PATH: String = "res://assets/data/statuses.json"
 const DEFAULT_BALLS_PATH: String = "res://assets/data/balls.json"
 const DEFAULT_ROSTER_PATH: String = "res://assets/data/roster.json"
+## Story 027: talents + Élan rules ("" = skipped: no talents, no Élan).
+const DEFAULT_TALENTS_PATH: String = "res://assets/data/talents.json"
 ## Prefix of an encounter id GENERATED from the roster: "roster:<id>,<id>,..." (wild / elite fights, auto gym teams).
 ## create_enemies / get_encounter_enemy_ids decode it; it is never stored in pokemon.json.
 const ROSTER_ENCOUNTER_PREFIX: String = "roster:"
@@ -52,6 +54,7 @@ const MAX_POKEMON_TYPES: int = 2
 
 var _type_chart: TypeChart = TypeChart.neutral_chart()
 var _status_book: StatusBook = StatusBook.new()  # statuses.json (story 016)
+var _talent_book: TalentBook = null  # talents.json (story 027); null = none
 var _cards: Dictionary = {}    # String -> CardData
 var _players: Dictionary = {}  # String -> Dictionary (raw definition)
 var _enemies: Dictionary = {}  # String -> Dictionary (raw definition)
@@ -102,7 +105,8 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
 		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH,
 		statuses_path: String = DEFAULT_STATUSES_PATH, balls_path: String = DEFAULT_BALLS_PATH,
-		rival_path: String = DEFAULT_RIVAL_PATH) -> bool:
+		rival_path: String = DEFAULT_RIVAL_PATH, talents_path: String = DEFAULT_TALENTS_PATH) -> bool:
+	_talent_book = null
 	_type_chart = TypeChart.neutral_chart()
 	_status_book = StatusBook.new()
 	_cards.clear()
@@ -201,6 +205,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	if not rival_path.is_empty():  # story 018: last (needs zones, roster, evolutions, types)
 		var rival_root: Dictionary = _read_json(rival_path)
 		ok = (not rival_root.is_empty() and _load_rival(rival_root)) and ok
+	if not talents_path.is_empty():  # story 027: after every Pokémon source (players, enemies, roster, evolved forms)
+		var talents_root: Dictionary = _read_json(talents_path)
+		ok = (not talents_root.is_empty() and _load_talents(talents_root)) and ok
 	return ok
 
 
@@ -2002,7 +2009,45 @@ func get_pokemon_info(pokemon_id: String) -> Dictionary:
 	if raw_types is Array:
 		for t: Variant in (raw_types as Array):
 			types.append(String(t))
-	return {"id": pokemon_id, "name": String(def.get("name", "")), "sprite_path": String(def.get("sprite", "")), "types": types}
+	return {"id": pokemon_id, "name": String(def.get("name", "")), "sprite_path": String(def.get("sprite", "")), "types": types,
+			"talent": String(def.get("talent", "")) if def.get("talent", "") is String else ""}
+
+
+## Story 027: the talent book (talents + Élan rules), or null when none is loaded.
+func get_talent_book() -> TalentBook:
+	return _talent_book
+
+
+## Story 027: talent of ANY Pokémon id for the UI: {id, name, description}; {} if it has none.
+func get_talent_info(pokemon_id: String) -> Dictionary:
+	var info: Dictionary = get_pokemon_info(pokemon_id)
+	if _talent_book == null or info.is_empty():
+		return {}
+	var tid: String = _talent_book.talent_for(pokemon_id, String(info["talent"]), info["types"])
+	if tid.is_empty():
+		return {}
+	return {"id": tid, "name": _talent_book.name_of(tid), "description": _talent_book.description_of(tid)}
+
+
+func _load_talents(root: Dictionary) -> bool:
+	var book: TalentBook = TalentBook.from_dict(root, _type_chart.get_type_ids(), _status_book)
+	if book == null:
+		return false
+	var ok: bool = true
+	for pid: String in book.by_pokemon.keys():
+		if get_pokemon_info(pid).is_empty():
+			push_error("GameData: talents 'by_pokemon' references unknown pokemon '%s'" % pid)
+			ok = false
+	for source: Dictionary in [_players, _enemies, _evolved_forms]:
+		for pid: String in source.keys():
+			var def: Variant = source[pid]
+			if def is Dictionary and (def as Dictionary).has("talent") \
+					and not ((def as Dictionary)["talent"] is String and book.has(String((def as Dictionary)["talent"]))):
+				push_error("GameData: pokemon '%s' has unknown talent '%s'" % [pid, str((def as Dictionary)["talent"])])
+				ok = false
+	if ok:
+		_talent_book = book
+	return ok
 
 
 ## Every player + enemy Pokémon id.
@@ -2067,6 +2112,12 @@ func _load_cards(cards_root: Dictionary) -> bool:
 				elif card.description.find(_status_book.name_of(card.status_id)) < 0:
 					push_error("GameData: card '%s' description must mention its status '%s'" % [card_id, _status_book.name_of(card.status_id)])
 					card = null
+			if card != null:  # story 027: statuses named by the effect grammar must exist
+				for sid: String in card.effect_status_ids():
+					if not _status_book.has(sid):
+						push_error("GameData: card '%s' effect names unknown status '%s'" % [card_id, sid])
+						card = null
+						break
 			if card != null and not _check_type_ref("card '%s'" % card_id, card.type_id,
 					card.kind == CardData.KIND_ATTACK):
 				card = null

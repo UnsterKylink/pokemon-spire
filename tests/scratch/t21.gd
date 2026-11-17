@@ -1,6 +1,6 @@
 extends SceneTree
 ## Story 019 scratch: simulator determinism + legality, dual-type attack data, per-type card coverage.
-const SCR: String = "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR: String = "user://"
 const SimRun: GDScript = preload("res://tools/balance/sim_run.gd")
 const Simulate: GDScript = preload("res://tools/balance/simulate.gd")
 var fails: int = 0

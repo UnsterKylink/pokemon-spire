@@ -193,7 +193,8 @@ func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: Random
 	var battle := Battle.new(build_player_combatant(), enemies, deck.duplicate(), effective_energy_per_turn(),
 			effective_hand_size(), rng, type_chart, get_pokemon_info, starter_pokemon_id, items, potions,
 			_data.get_status_book() if _data != null else null, _data.get_capture_rules() if _data != null else null,
-			_data.get_ball_book() if _data != null else {}, balls, capture_allowed)
+			_data.get_ball_book() if _data != null else {}, balls, capture_allowed,
+			_data.get_talent_book() if _data != null else null)
 	battle.potion_used.connect(_on_battle_potion_used)
 	battle.ball_thrown.connect(_on_battle_ball_thrown)
 	# Story 018: statuses queued by events hit the player before the first turn (they act on that turn), then are gone.

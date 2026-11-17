@@ -1,7 +1,7 @@
 extends SceneTree
 var fails: int = 0
 var passes: int = 0
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 var gd: GameData
 
 func ok(c: bool, msg: String) -> void:
@@ -113,7 +113,9 @@ func _initialize() -> void:
 	ok(hit.size() == 1 and hit[0][4] == 1, "switch before hit")
 	ok(pika.hp < e_hp, "hit landed")
 	ok(pika.intent.type == "attack" and pika.intent.value == 0 and pika.intent.display_text() == "Attaque 0", "intent 0 vs geodude")
-	ok(b.player.block == blk, "block shared across switch")
+	# Story 027: the newcomer's talent fires on entry (geodude: Fermeté gives block); the block already held is kept.
+	var talent_block: int = int(gd.get_talent_book().effect_of(String(gd.get_talent_info("geodude")["id"])).get("block", 0))
+	ok(b.player.block == blk + talent_block, "block shared across switch (+ entry talent)")
 	ok(sc[0] > 0, "state_changed")
 	var hp0: int = run.hp
 	var pre_hp: int = b.player.hp

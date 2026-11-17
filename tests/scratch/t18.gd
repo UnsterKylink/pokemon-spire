@@ -1,7 +1,7 @@
 extends SceneTree
 ## Story 014 scratch test: in-run evolutions up to stage 3 (starter at badges 1 / 4, team carriers by battles won).
 
-const SCR := "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR := "user://"
 const P := "res://assets/data/"
 var passes: int = 0
 var fails: int = 0

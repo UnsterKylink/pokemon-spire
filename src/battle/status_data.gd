@@ -36,6 +36,13 @@ var thaw_types: Array[String] = []
 var immune_types: Array[String] = []
 ## Enemy intent text while it will lose its turn ("Dort").
 var skip_label: String = ""
+## Story 027 (Faiblesse / Vulnérable). True: the applied value IS the number of turns (re-applying adds turns; -1 at the
+## end of each of the carrier's turns; the displayed value always equals the turns left).
+var value_is_turns: bool = false
+## Multiplier on the damage the carrier DEALS (0.75 = 25 % less) / TAKES (1.5 = 50 % more), applied to the attack value
+## before the type multiplier, rounded down. 1.0 = no effect.
+var damage_dealt_multiplier: float = 1.0
+var damage_taken_multiplier: float = 1.0
 
 
 ## Builds a StatusData; null (after push_error) if invalid. `known_types` (type ids) validates the type lists when non-empty.
@@ -97,10 +104,26 @@ static func from_dict(status_id: String, d: Dictionary, known_types: Array[Strin
 	s.skip_label = String(d.get("skip_label", ""))
 	if s.skip_turns > 0 and s.skip_label.is_empty():
 		s.skip_label = s.display_name
+	if d.has("value_is_turns") and not (d["value_is_turns"] is bool):
+		push_error("StatusData: status '%s': 'value_is_turns' must be a boolean" % status_id)
+		return null
+	s.value_is_turns = bool(d.get("value_is_turns", false))
+	var neutral: float = s.damage_dealt_multiplier
+	for key: String in ["damage_dealt_multiplier", "damage_taken_multiplier"]:
+		var m: Variant = d.get(key, neutral)
+		if not ((m is int or m is float) and float(m) >= 0.0):
+			push_error("StatusData: status '%s': '%s' must be a number >= 0" % [status_id, key])
+			return null
+	s.damage_dealt_multiplier = float(d.get("damage_dealt_multiplier", neutral))
+	s.damage_taken_multiplier = float(d.get("damage_taken_multiplier", neutral))
+	var modifies: bool = s.damage_dealt_multiplier != neutral or s.damage_taken_multiplier != neutral
+	if modifies and not (s.value_is_turns or s.duration > 0):
+		push_error("StatusData: status '%s': a damage multiplier needs value_is_turns or a duration" % status_id)
+		return null
 	if s.value_decay > 0 and not s.tick_damage:
 		push_error("StatusData: status '%s': value_decay needs tick_damage" % status_id)
 		return null
-	if not (s.tick_damage or s.attack_penalty > 0 or s.skip_turns > 0 or s.skip_chance > 0.0):
+	if not (s.tick_damage or s.attack_penalty > 0 or s.skip_turns > 0 or s.skip_chance > 0.0 or modifies):
 		push_error("StatusData: status '%s' has no effect (tick_damage / attack_penalty / skip_turns / skip_chance)" % status_id)
 		return null
 	if s.tick_damage and s.value_decay == 0 and s.duration == 0:

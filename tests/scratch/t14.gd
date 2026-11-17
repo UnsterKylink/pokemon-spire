@@ -1,6 +1,6 @@
 extends SceneTree
 ## Story 012 scratch: zones, gyms, badges.
-const SCR: String = "/tmp/claude-0/-home-user-pokemon-spire/a2b72075-2d8b-51e2-a914-9e4b612c161d/scratchpad/"
+const SCR: String = "user://"
 var fails: int = 0
 var passes: int = 0
 var main: Main
