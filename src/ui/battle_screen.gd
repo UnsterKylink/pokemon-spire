@@ -261,6 +261,35 @@ var _ev_wait: float = 0.0
 const TEXT_SPEED: String = "Animations : %s"
 const TEXT_SPEED_TIP: String = "Vitesse des animations de combat. Un clic ou Espace passe l'animation en cours."
 const TEXT_BLOCKED: String = "Bloqué"
+# --- Story 027: Élan counter, talent pill / banner, Force chips, keyword tooltip, exhaust counter ---------------
+const TEXT_ELAN: String = "%s %d/%d"
+const TEXT_ELAN_BONUS: String = "+%d dég."
+const TEXT_TALENT_USED: String = "%s · utilisé"
+const TEXT_TALENT_TIP: String = "Talent : %s\n%s\n%s"
+const TEXT_TALENT_BANNER: String = "%s !"
+const TEXT_FORCE: String = "Force %d"
+const TEXT_FORCE_TURN: String = "Force +%d (tour)"
+const TEXT_NEXT_ATTACK: String = "Prochaine attaque +%d"
+const TEXT_NEXT_ATTACK_TIP: String = "Chaque coup de ta prochaine attaque inflige %d dégâts de plus."
+const TEXT_EXHAUST_COUNT: String = "Épuisées : %d"
+const TEXT_EXHAUSTED: String = "Épuisée"
+const TEXT_TALENT_PREFIX: String = "En entrant : "
+const CHIP_FONT: int = 14
+const ELAN_PIP: Vector2 = Vector2(7, 12)
+const TALENT_FLOAT_FONT: int = 18
+var _talent_pill: Label
+var _talent_float: FloatText
+var _elan_box: PanelContainer
+var _elan_label: Label
+var _elan_pips: HBoxContainer
+var _elan_bonus: Label
+var _force_chips: HBoxContainer
+var _exhaust_label: Label
+var _keyword_tip: KeywordTooltip
+var _elan_shown: int = 0
+var _preview_target: int = -1
+var _rec_hit_count: int = 0
+var _rec_tail: Array[Dictionary] = []
 const TEXT_IMMUNE_SHORT: String = "Immunisé"
 
 
@@ -531,6 +560,9 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_hide_float(_potion_float)
 	_hide_float(_player_status_float)
 	_hide_float(_capture_float)
+	_hide_float(_talent_float)
+	_preview_target = -1
+	_elan_shown = 0
 	_capture_mode = false
 	_pending_items.clear()
 	_lost_turn_status = ""
@@ -556,6 +588,10 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.capture_failed.connect(_on_capture_failed)
 	_battle.enemy_acted.connect(_on_enemy_acted)
 	_battle.card_played.connect(_on_card_played)
+	_battle.elan_changed.connect(_on_elan_changed)
+	_battle.talent_triggered.connect(_on_talent_triggered)
+	_battle.strength_changed.connect(_on_strength_changed)
+	_battle.card_exhausted.connect(_on_card_exhausted)
 	_recording = false
 	_hold_fighters = false
 	_fx.skip()
@@ -745,9 +781,21 @@ func _build_ui() -> void:
 	_player_caption.add_theme_color_override("font_color", COLOR_ACTIVE_CAPTION)
 	player_box.add_child(_player_caption)
 	_outline(_player_caption, OUTLINE_SMALL)
+	var name_row := HBoxContainer.new()
+	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	name_row.add_theme_constant_override("separation", 8)
+	player_box.add_child(name_row)
 	_player_name = _make_label(28)
 	_outline(_player_name, OUTLINE_BIG)
-	player_box.add_child(_player_name)
+	name_row.add_child(_player_name)
+	_talent_pill = _make_label(CHIP_FONT)
+	_talent_pill.name = "TalentPill"
+	_talent_pill.mouse_filter = Control.MOUSE_FILTER_PASS  # tooltip = the talent's description
+	_talent_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_talent_pill.add_theme_font_override("font", UiStyle.font_bold())
+	_talent_pill.visible = false
+	name_row.add_child(_talent_pill)
 	_player_type_badge = CardView.make_type_badge_row()
 	player_box.add_child(_player_type_badge)
 	_player_sprite = _make_sprite_holder("PlayerSprite", PLAYER_SPRITE_SCALE)
@@ -764,8 +812,47 @@ func _build_ui() -> void:
 	_player_block.add_theme_color_override("font_color", UiStyle.BLOCK_BLUE)
 	_outline(_player_block, OUTLINE_SMALL)
 	player_hp_row.add_child(_player_block)
+	# Story 027: statuses, Élan and Force share one centred line (no extra row: the hand must keep fitting in 720p).
+	var status_line := HBoxContainer.new()
+	status_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	status_line.alignment = BoxContainer.ALIGNMENT_CENTER
+	status_line.add_theme_constant_override("separation", 6)
+	player_box.add_child(status_line)
 	_player_chips = StatusChipRow.new()
-	player_box.add_child(_player_chips)
+	status_line.add_child(_player_chips)
+	_elan_box = PanelContainer.new()
+	_elan_box.name = "ElanBox"
+	_elan_box.mouse_filter = Control.MOUSE_FILTER_PASS
+	var esb: StyleBoxFlat = UiStyle.panel(Color(0.12, 0.08, 0.06, 0.88), 8, 2)
+	esb.border_color = UiStyle.ELAN
+	esb.content_margin_left = 6
+	esb.content_margin_right = 6
+	esb.content_margin_top = 1
+	esb.content_margin_bottom = 1
+	_elan_box.add_theme_stylebox_override("panel", esb)
+	_elan_box.visible = false
+	status_line.add_child(_elan_box)
+	var elan_row := HBoxContainer.new()
+	elan_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	elan_row.add_theme_constant_override("separation", 5)
+	_elan_box.add_child(elan_row)
+	_elan_label = _make_label(CHIP_FONT)
+	_elan_label.add_theme_color_override("font_color", UiStyle.ELAN)
+	_elan_label.add_theme_font_override("font", UiStyle.font_bold())
+	elan_row.add_child(_elan_label)
+	_elan_pips = HBoxContainer.new()
+	_elan_pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_elan_pips.add_theme_constant_override("separation", 2)
+	_elan_pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	elan_row.add_child(_elan_pips)
+	_elan_bonus = _make_label(CHIP_FONT)
+	_elan_bonus.add_theme_font_override("font", UiStyle.font_bold())
+	elan_row.add_child(_elan_bonus)
+	_force_chips = HBoxContainer.new()
+	_force_chips.name = "ForceChips"
+	_force_chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_force_chips.add_theme_constant_override("separation", 4)
+	status_line.add_child(_force_chips)
 
 	_enemies_box = HBoxContainer.new()
 	_enemies_box.name = "EnemiesBox"
@@ -814,6 +901,12 @@ func _build_ui() -> void:
 	_discard_label = _make_label(18)
 	_outline(_discard_label, OUTLINE_SMALL)
 	info.add_child(_discard_label)
+	_exhaust_label = _make_label(18)
+	_exhaust_label.name = "ExhaustCounter"
+	_exhaust_label.add_theme_color_override("font_color", UiStyle.EXHAUST_BURN.lightened(0.25))
+	_outline(_exhaust_label, OUTLINE_SMALL)
+	_exhaust_label.visible = false
+	info.add_child(_exhaust_label)
 	_deck_label = _make_label(18)
 	_outline(_deck_label, OUTLINE_SMALL)
 	info.add_child(_deck_label)
@@ -921,12 +1014,16 @@ func _build_ui() -> void:
 	_potion_float = _make_float_text()
 	_player_status_float = _make_float_text()
 	_capture_float = _make_float_text()
+	_talent_float = _make_float_text()
+	_talent_float.label.add_theme_font_size_override("font_size", TALENT_FLOAT_FONT)
 	_fx_layer = Control.new()
 	_fx_layer.name = "FxLayer"
 	_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_fx_layer)
 	move_child(_fx_layer, _end_dim.get_index())
+	_keyword_tip = KeywordTooltip.new()
+	add_child(_keyword_tip)
 
 
 func _make_label(font_size: int) -> Label:
@@ -1026,6 +1123,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.panel.add_theme_constant_override("separation", PANEL_SEPARATION)
 		v.panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.panel.gui_input.connect(_on_enemy_input.bind(i))
+		v.panel.mouse_entered.connect(_on_enemy_hover.bind(i))
 		_enemies_box.add_child(v.panel)
 		v.name_label = _make_label(24)
 		_outline(v.name_label, OUTLINE_BIG)
@@ -1083,6 +1181,7 @@ func _refresh_active_pokemon(p: Combatant) -> void:
 	_player_name.text = p.display_name
 	_set_badge_row(_player_type_badge, p.type_ids)
 	_player_sprite.show_pokemon(p.sprite_path, true)
+	_refresh_talent_pill()
 
 
 ## A card brought another Pokémon in (fired before the hit): update the left panel, show
@@ -1403,6 +1502,9 @@ func _on_hit_resolved(target: Combatant, amount: int, multiplier: float) -> void
 				"enemy_hit": target == _battle.player, "attacker": null}
 		if target != _battle.player and _rec_card != null:
 			ev["type_id"] = _rec_card.type_id
+			ev["hit_index"] = _rec_hit_count
+			ev["multi"] = _rec_card.hits > 1 or _rec_hit_count > 0
+			_rec_hit_count += 1
 			if _rec_first_hit:
 				_rec_first_hit = false
 				_push({"kind": "attack", "target": target, "type_id": _rec_card.type_id})
@@ -1531,6 +1633,8 @@ func _refresh() -> void:
 	_energy_gem.modulate = Color.WHITE if _battle.energy > 0 else Color(1, 1, 1, 0.55)
 	_draw_label.text = "Pioche : %d" % _battle.draw_pile.size()
 	_discard_label.text = "Défausse : %d" % _battle.discard_pile.size()
+	_exhaust_label.text = TEXT_EXHAUST_COUNT % _battle.exhaust_pile.size()
+	_exhaust_label.visible = not _battle.exhaust_pile.is_empty()
 	_deck_label.text = "Deck : %d cartes" % _deck_size
 
 	var over: bool = _battle.state != Battle.State.PLAYER_TURN
@@ -1553,6 +1657,10 @@ func _refresh() -> void:
 			_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 			_refresh_capture_box(_enemy_views[i], i)
 	_player_chips.refresh()
+	if not _hold_fighters:
+		_refresh_talent_pill()
+		_set_elan_display(_battle.get_elan(), false)
+		_refresh_force_chips()
 	_rebuild_hand()
 	# Victory goes straight to the reward screen (Main); the overlay is for defeat only.
 	if _battle.state == Battle.State.LOST and not _hold_fighters:
@@ -1620,6 +1728,8 @@ func _rebuild_hand() -> void:
 	for child: Node in _hand_box.get_children():
 		_hand_box.remove_child(child)
 		child.queue_free()
+	if _keyword_tip != null:
+		_keyword_tip.visible = false
 	var n: int = _battle.hand.size()
 	# Large hands (badge / item draw bonuses): tighten spacing, then narrow the cards to fit the width.
 	var sep: int = HAND_SEPARATION if n <= 6 else HAND_SEPARATION_TIGHT
@@ -1634,7 +1744,9 @@ func _rebuild_hand() -> void:
 		b.custom_minimum_size = card_size
 		# Story 020: the hand row is SELECT_LIFT taller than a card: cards sit at the bottom, the selected one at the top.
 		b.size_flags_vertical = Control.SIZE_SHRINK_BEGIN if i == _selected_index else Control.SIZE_SHRINK_END
-		_fill_card_content(b, card)
+		_fill_card_content(b, card, _hand_extras(i, card))
+		b.mouse_entered.connect(_show_card_tip.bind(i, b))
+		b.mouse_exited.connect(func() -> void: _keyword_tip.visible = false)
 		b.disabled = not _battle.can_play(i)
 		var kind_color: Color = COLOR_SKILL if card.kind == CardData.KIND_SKILL else COLOR_ATTACK
 		var sb := StyleBoxFlat.new()
@@ -1665,8 +1777,8 @@ func _rebuild_hand() -> void:
 
 
 ## Builds the visual content of a card button (shared look, see CardView).
-func _fill_card_content(b: Button, card: CardData) -> void:
-	CardView.fill_card_content(b, card, _data.get_type_chart(), _data.get_pokemon_info)
+func _fill_card_content(b: Button, card: CardData, extras: Dictionary = {}) -> void:
+	CardView.fill_card_content(b, card, _data.get_type_chart(), _data.get_pokemon_info, extras)
 
 
 
@@ -1681,8 +1793,13 @@ func _logic(fn: Callable, limit_key: String = "max_action_seconds") -> Variant:
 	_snapshot_shown()
 	_rec_first_hit = true
 	_rec_fizzled = false
+	_rec_hit_count = 0
+	_rec_tail.clear()
 	_recording = true
 	var result: Variant = fn.call()
+	for ev: Dictionary in _rec_tail:
+		_push(ev)  # story 027: the exhaust burn plays after the card's hits
+	_rec_tail.clear()
 	_recording = false
 	_rec_card = null
 	if _queue.is_empty():
@@ -1870,6 +1987,13 @@ func _play_event(ev: Dictionary, _instant: bool) -> void:
 			await _play_hit(ev)
 		"gain":
 			await _play_gain(ev)
+		"elan":
+			_set_elan_display(int(ev["value"]), true)
+			await _fx.wait(_fx.t(BattleFxDirector.cfg_f("elan", "seconds", 0.3)))
+		"talent":
+			await _play_talent(ev)
+		"exhaust":
+			await _play_exhaust(ev)
 		"ball":
 			var target: Combatant = ev["target"]
 			var tsp: AnimatedPokemon = _sprite_of(target)
@@ -1920,8 +2044,14 @@ func _play_hit(ev: Dictionary) -> void:
 	if spr != null:
 		var at: Vector2 = _center_of(spr)
 		var key: String = "super" if mult > 1.0 else ("resisted" if mult < 1.0 else "normal")
+		var multi: bool = bool(ev.get("multi", false))
+		var hit_i: int = int(ev.get("hit_index", 0))
+		var small_k: float = BattleFxDirector.cfg_f("multi_hit", "scale", 0.65) if multi else 1.0
+		if multi:  # story 027: N small impacts, each number a little aside so they read one by one
+			at += Vector2((float(hit_i % 3) - 1.0) * BattleFxDirector.cfg_f("multi_hit", "spread_x", 30.0),
+					-float(hit_i) * BattleFxDirector.cfg_f("multi_hit", "step_y", 8.0))
 		if mult > 0.0:
-			dur = maxf(dur, _fx.fx_impact(_fx_layer, String(ev["type_id"]), at, BattleFxDirector.cfg_f("impact_strength", key, 1.0)))
+			dur = maxf(dur, _fx.fx_impact(_fx_layer, String(ev["type_id"]), at, BattleFxDirector.cfg_f("impact_strength", key, 1.0) * small_k))
 			if lost > 0:
 				dur = maxf(dur, _fx.shake(spr))
 				_fx.flash(spr)
@@ -1940,6 +2070,8 @@ func _play_hit(ev: Dictionary) -> void:
 		elif mult < 1.0:
 			color = BattleFxDirector.cfg_color("number", "color_resisted", Color(0.7, 0.7, 0.75))
 			size = int(BattleFxDirector.cfg_f("number", "font_size_resisted", 24.0))
+		if multi:
+			size = roundi(float(size) * BattleFxDirector.cfg_f("multi_hit", "font_scale", 0.85))
 		dur = maxf(dur, _fx.number(_fx_layer, text, color, size, at + Vector2(0, BattleFxDirector.cfg_f("number", "start_offset_y", -34.0))))
 		var gen: int = _fx.generation()
 		await _fx.wait(_fx.t(0.12))  # the bar moves right after the impact starts
@@ -1980,6 +2112,8 @@ func _on_fx_finished() -> void:
 			v.ko_faded = true
 	_fx.reset_node(_player_block)
 	_fx.reset_node(_player_chips)
+	_fx.reset_node(_elan_box)
+	_fx.reset_node(_talent_pill)
 	_refresh()
 
 
@@ -1997,3 +2131,277 @@ func _on_background_input(event: InputEvent) -> void:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
 			click_background()
+
+
+
+# --- Story 027: Élan, talents, Force, keywords, exhaust ----------------------------------------------------------
+
+## Élan counter text shown next to the player ("Élan 3/5 +3 dég."; "" when Élan is off), for the QA harness.
+func get_elan_text() -> String:
+	if _elan_box == null or not _elan_box.visible:
+		return ""
+	return ("%s %s" % [_elan_label.text, _elan_bonus.text]).strip_edges()
+
+
+## Talent pill text of the active Pokémon ("Brasier", "Brasier · utilisé"; "" when none), for the QA harness.
+func get_talent_pill_text() -> String:
+	return _talent_pill.text if _talent_pill != null and _talent_pill.visible else ""
+
+
+## Force / next-attack chip texts on the player side, for the QA harness.
+func get_force_chip_texts() -> PackedStringArray:
+	var out := PackedStringArray()
+	for c: Node in _force_chips.get_children():
+		if not c.is_queued_for_deletion():
+			out.append((c.get_node("Text") as Label).text)
+	return out
+
+
+## "Épuisées : N" counter text ("" while the exhaust pile is empty), for the QA harness.
+func get_exhaust_counter_text() -> String:
+	return _exhaust_label.text if _exhaust_label.visible else ""
+
+
+## QA-ONLY: shows the keyword tooltip of hand card `index` as a hover would; returns its texts.
+func qa_show_keyword_tooltip(index: int) -> PackedStringArray:
+	if index < 0 or index >= _hand_box.get_child_count():
+		return PackedStringArray()
+	_show_card_tip(index, _hand_box.get_child(index) as Button)
+	return _keyword_tip.get_texts()
+
+
+func _talent_info_of(pokemon_id: String) -> Dictionary:
+	var tid: String = _battle.get_talent_id(pokemon_id) if _battle != null else ""
+	var book: TalentBook = _data.get_talent_book() if _data != null else null
+	if tid.is_empty() or book == null:
+		return {}
+	return {"id": tid, "name": book.name_of(tid), "description": book.description_of(tid)}
+
+
+func _keyword_text(kid: String) -> String:
+	var book: TalentBook = _data.get_talent_book() if _data != null else null
+	return String((book.keywords.get(kid, {}) as Dictionary).get("description", "")) if book != null else ""
+
+
+## Talent pill under the active Pokémon's name: gold, grey + "utilisé" once it fired (once per battle).
+func _refresh_talent_pill() -> void:
+	if _talent_pill == null or _battle == null:
+		return
+	var info: Dictionary = _talent_info_of(_battle.active_pokemon_id)
+	_talent_pill.visible = not info.is_empty()
+	if info.is_empty():
+		return
+	var used: bool = _battle.is_talent_used(_battle.active_pokemon_id)
+	_talent_pill.text = TEXT_TALENT_USED % String(info["name"]) if used else String(info["name"])
+	_talent_pill.tooltip_text = TEXT_TALENT_TIP % [String(info["name"]), String(info["description"]), _keyword_text("talent")]
+	var bg: Color = UiStyle.TALENT_USED if used else UiStyle.TALENT
+	var sb: StyleBoxFlat = CardFace._pill(bg, UiStyle.OUTLINE)
+	sb.content_margin_left = 7
+	sb.content_margin_right = 7
+	_talent_pill.add_theme_stylebox_override("normal", sb)
+	_talent_pill.add_theme_color_override("font_color", UiStyle.TEXT_DARK if not used else UiStyle.TEXT)
+
+
+## Élan counter: pips (filled up to `value`), "Élan v/cap", damage bonus. `animate`: pulse when it grows, a grey
+## flash when it drops (reset by a switch). Hidden when Élan is off in data (cap 0).
+func _set_elan_display(value: int, animate: bool) -> void:
+	if _elan_box == null or _battle == null:
+		return
+	var cap: int = _battle.get_elan_cap()
+	_elan_box.visible = cap > 0
+	if cap <= 0:
+		return
+	var book: TalentBook = _data.get_talent_book()
+	var per: int = book.elan_damage_per_stack if book != null else 0
+	var kname: String = String((book.keywords.get("elan", {}) as Dictionary).get("name", "Élan")) if book != null else "Élan"
+	if _elan_pips.get_child_count() != cap:
+		for c: Node in _elan_pips.get_children():
+			_elan_pips.remove_child(c)
+			c.queue_free()
+		for i: int in cap:
+			var pip := Panel.new()
+			pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pip.custom_minimum_size = ELAN_PIP
+			_elan_pips.add_child(pip)
+	for i: int in cap:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = UiStyle.ELAN if i < value else UiStyle.ELAN_EMPTY
+		sb.set_corner_radius_all(2)
+		sb.border_color = UiStyle.OUTLINE
+		sb.set_border_width_all(1)
+		(_elan_pips.get_child(i) as Panel).add_theme_stylebox_override("panel", sb)
+	_elan_label.text = TEXT_ELAN % [kname, value, cap]
+	_elan_bonus.text = TEXT_ELAN_BONUS % (value * per) if value > 0 and per > 0 else ""
+	_elan_bonus.visible = not _elan_bonus.text.is_empty()
+	_elan_box.modulate = Color.WHITE if value > 0 else Color(1, 1, 1, 0.7)
+	_elan_box.tooltip_text = _keyword_text("elan")
+	if animate and value > _elan_shown:
+		_fx.pulse(_elan_box, BattleFxDirector.cfg_f("elan", "pulse_scale", 1.3), BattleFxDirector.cfg_f("elan", "seconds", 0.3))
+	elif animate and value < _elan_shown:
+		_fx.flash(_elan_box, BattleFxDirector.cfg_color("elan", "reset_modulate", Color(0.45, 0.45, 0.55, 0.6)))
+	_elan_shown = value
+
+
+## Force (battle), Force of the turn and the next-attack bonus as chips on the player side.
+func _refresh_force_chips() -> void:
+	if _force_chips == null or _battle == null:
+		return
+	for c: Node in _force_chips.get_children():
+		_force_chips.remove_child(c)
+		c.queue_free()
+	var force_tip: String = _keyword_text("strength")
+	if _battle.get_strength() != 0:
+		_force_chips.add_child(_make_combat_chip(TEXT_FORCE % _battle.get_strength(), UiStyle.FORCE, force_tip))
+	if _battle.get_turn_strength() != 0:
+		_force_chips.add_child(_make_combat_chip(TEXT_FORCE_TURN % _battle.get_turn_strength(), UiStyle.FORCE.lightened(0.15), force_tip))
+	if _battle.get_next_attack_bonus() > 0:
+		_force_chips.add_child(_make_combat_chip(TEXT_NEXT_ATTACK % _battle.get_next_attack_bonus(), UiStyle.NEXT_ATTACK,
+				TEXT_NEXT_ATTACK_TIP % _battle.get_next_attack_bonus()))
+
+
+func _make_combat_chip(text: String, color: Color, tip: String) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = tip
+	var sb: StyleBoxFlat = UiStyle.badge(color)
+	chip.add_theme_stylebox_override("panel", sb)
+	var l: Label = _make_label(CHIP_FONT)
+	l.name = "Text"
+	l.text = text
+	l.add_theme_font_override("font", UiStyle.font_bold())
+	l.add_theme_color_override("font_color", UiStyle.TEXT_DARK if color.get_luminance() > 0.5 else UiStyle.TEXT)
+	chip.add_child(l)
+	return chip
+
+
+## Live data of hand card `i`: damage against the previewed target (Force, Élan, Faiblesse / Vulnérable, talent bonus,
+## type), keyword badges, talent mark when playing it would fire its carrier's talent.
+func _hand_extras(i: int, card: CardData) -> Dictionary:
+	var book: TalentBook = _data.get_talent_book()
+	var extras: Dictionary = {"keywords": CardView.keyword_badges(card, book), "talent": ""}
+	if card.deals_damage():
+		var tgt: int = _preview_target_index()
+		if tgt >= 0:
+			var pv: Dictionary = _battle.preview_card_damage(i, tgt)
+			var amount: int = int(pv.get("amount", 0))
+			var hits: int = int(pv.get("hits", 1))
+			extras["damage_text"] = (CardView.TEXT_MULTI_HIT % [hits, amount]) if hits > 1 else str(amount)
+			extras["damage_delta"] = signi(amount - card.damage) if hits == card.hits else 1
+	if _battle.would_trigger_talent(card):
+		extras["talent"] = String(_talent_info_of(card.pokemon_id).get("name", ""))
+	return extras
+
+
+func _preview_target_index() -> int:
+	if _preview_target >= 0 and _battle.is_valid_target(_preview_target):
+		return _preview_target
+	for i: int in _battle.enemies.size():
+		if _battle.is_valid_target(i):
+			return i
+	return -1
+
+
+func _on_enemy_hover(enemy_index: int) -> void:
+	if _preview_target == enemy_index or _hold_fighters or _battle == null:
+		return
+	_preview_target = enemy_index
+	_rebuild_hand()
+
+
+func _show_card_tip(i: int, b: Button) -> void:
+	if _battle == null or i >= _battle.hand.size() or not is_instance_valid(b):
+		return
+	var card: CardData = _battle.hand[i]
+	var entries: Array[Dictionary] = []
+	for k: Dictionary in CardView.card_keywords(card, _data.get_talent_book()):
+		entries.append({"name": k["name"], "description": k["description"]})
+	if _battle.would_trigger_talent(card):
+		var info: Dictionary = _talent_info_of(card.pokemon_id)
+		entries.append({"name": "Talent : %s" % String(info.get("name", "")), "description": String(info.get("description", ""))})
+	_keyword_tip.show_for(entries, b.get_global_rect())
+
+
+func _on_elan_changed(value: int) -> void:
+	if _recording:
+		_push({"kind": "elan", "value": value})
+		return
+	_set_elan_display(value, false)
+
+
+func _on_talent_triggered(pokemon_id: String, talent_id: String) -> void:
+	if _recording:
+		_push({"kind": "talent", "pid": pokemon_id, "tid": talent_id})
+		return
+	_refresh_talent_pill()
+	_refresh_force_chips()
+	_show_float(_talent_float, _player_sprite, _talent_banner_text(pokemon_id), UiStyle.TALENT, 0.12)
+
+
+func _talent_banner_text(pokemon_id: String) -> String:
+	var info: Dictionary = _talent_info_of(pokemon_id)
+	var desc: String = String(info.get("description", "")).trim_prefix(TEXT_TALENT_PREFIX)
+	return "%s\n%s" % [TEXT_TALENT_BANNER % String(info.get("name", "")), desc.left(1).to_upper() + desc.substr(1)]
+
+
+func _on_strength_changed(_battle_value: int, _turn_value: int) -> void:
+	if not _recording:
+		_refresh_force_chips()
+
+
+func _on_card_exhausted(card: CardData) -> void:
+	if _recording:
+		_rec_tail.append({"kind": "exhaust", "card": card})
+
+
+## Talent banner (« Brasier ! » + its effect) over the player, gold burst, pill pulse; block / heal of the talent shown.
+func _play_talent(ev: Dictionary) -> void:
+	var at: Vector2 = _center_of(_player_sprite)
+	var info: Dictionary = _talent_info_of(String(ev["pid"]))
+	var desc: String = String(info.get("description", "")).trim_prefix(TEXT_TALENT_PREFIX)
+	var dur: float = _fx.number(_fx_layer, TEXT_TALENT_BANNER % String(info.get("name", "")), UiStyle.TALENT,
+			int(BattleFxDirector.cfg_f("talent", "font_size", 34.0)), at + Vector2(0, BattleFxDirector.cfg_f("talent", "offset_y", -96.0)))
+	_fx.number(_fx_layer, desc.left(1).to_upper() + desc.substr(1), UiStyle.CREAM, int(BattleFxDirector.cfg_f("talent", "desc_font_size", 17.0)),
+			at + Vector2(0, BattleFxDirector.cfg_f("talent", "offset_y", -96.0) + 34.0))
+	dur = maxf(dur, _fx.burst(_fx_layer, at, UiStyle.TALENT, 14, BattleFxDirector.cfg_f("talent", "burst_radius", 70.0), _fx.t(0.5)))
+	_refresh_talent_pill()
+	_refresh_force_chips()
+	dur = maxf(dur, _fx.pulse(_talent_pill, 1.25, 0.35))
+	dur = maxf(dur, _apply_snaps(ev))
+	await _fx.wait(maxf(dur, _fx.t(BattleFxDirector.cfg_f("talent", "hold_seconds", 0.7))))
+
+
+## Exhaust: a ghost of the played card above the hand glows orange, shrinks and dissolves in sparks.
+func _play_exhaust(ev: Dictionary) -> void:
+	var card: CardData = ev["card"]
+	var ghost := PanelContainer.new()
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb: StyleBoxFlat = UiStyle.panel(Color(0.2, 0.1, 0.06, 0.95), 8, 2)
+	sb.border_color = UiStyle.EXHAUST_BURN
+	ghost.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	ghost.add_child(box)
+	var n: Label = _make_label(16)
+	n.text = card.display_name
+	box.add_child(n)
+	var e: Label = _make_label(14)
+	e.text = TEXT_EXHAUSTED
+	e.add_theme_color_override("font_color", UiStyle.EXHAUST_BURN)
+	box.add_child(e)
+	ghost.custom_minimum_size = Vector2(130, 90)
+	_fx_layer.add_child(ghost)
+	ghost.size = ghost.custom_minimum_size
+	var hand_c: Vector2 = _hand_box.get_global_rect().get_center()
+	var c: Vector2 = _fx_layer.get_global_transform().affine_inverse() * (hand_c + Vector2(0, -CARD_SIZE.y * 0.5))
+	ghost.position = c - ghost.size * 0.5
+	ghost.pivot_offset = ghost.size * 0.5
+	var secs: float = _fx.t(BattleFxDirector.cfg_f("exhaust", "seconds", 0.6))
+	var tw: Tween = _fx.new_tween(ghost)
+	tw.tween_property(ghost, "modulate", Color(2.0, 1.1, 0.5, 1.0), secs * 0.3)
+	tw.tween_property(ghost, "scale", Vector2.ONE * 0.6, secs * 0.7)
+	tw.parallel().tween_property(ghost, "modulate:a", 0.0, secs * 0.7)
+	tw.parallel().tween_property(ghost, "position:y", ghost.position.y - 30.0, secs * 0.7)
+	tw.tween_callback(ghost.queue_free)
+	_fx.burst(_fx_layer, c, UiStyle.EXHAUST_BURN, 16, 80.0, secs)
+	await _fx.wait(secs)

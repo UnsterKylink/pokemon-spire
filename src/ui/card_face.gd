@@ -91,6 +91,11 @@ var _desc_label: Label
 var _art_rect: TextureRect
 var _effect: EffectArt
 var _tab: Label
+## Story 027: live damage pill, keyword badge line, "Talent" mark (see set_extras).
+var _dmg_label: Label
+var _kw_label: Label
+var _talent_label: Label
+var _kw_text: String = ""
 # Rects computed by _layout (local px), used by _draw.
 var _s: float = 1.0
 var _body: Rect2
@@ -120,6 +125,33 @@ static func create(card_data: CardData, color: Color, type_label_text: String, c
 	f.offset_bottom = -INSET
 	f._build()
 	return f
+
+
+## Story 027: combat extras drawn over the illustration window: `damage_text` = damage pill top-left ("" = none;
+## green when `damage_delta` > 0, grey when < 0), `keyword_badges` = one line above the carrier strip
+## ("Épuisement · Rétention"), `talent_name` != "" = gold "Talent" mark under the damage pill. Display only.
+func set_extras(damage_text: String, damage_delta: int, keyword_badges: PackedStringArray, talent_name: String) -> void:
+	if not damage_text.is_empty():
+		if _dmg_label == null:
+			_dmg_label = _make_label("CardDamage", UiStyle.TEXT, 3)
+			_dmg_label.add_theme_font_override("font", UiStyle.font_number())
+		_dmg_label.text = damage_text
+		var bg: Color = UiStyle.DAMAGE_UP if damage_delta > 0 else (UiStyle.DAMAGE_DOWN if damage_delta < 0 else UiStyle.DAMAGE_BASE)
+		_dmg_label.add_theme_stylebox_override("normal", _pill(bg, UiStyle.OUTLINE))
+	_kw_text = " · ".join(keyword_badges)
+	if not _kw_text.is_empty():
+		if _kw_label == null:
+			_kw_label = _make_label("CardKeywords", UiStyle.CREAM, 2)
+			_kw_label.add_theme_font_override("font", UiStyle.font_bold())
+			_kw_label.add_theme_stylebox_override("normal", _pill(UiStyle.KEYWORD_BG, UiStyle.TALENT))
+		_kw_label.text = _kw_text
+	if not talent_name.is_empty():
+		if _talent_label == null:
+			_talent_label = _make_label("CardTalent", UiStyle.TEXT_DARK, 0)
+			_talent_label.add_theme_font_override("font", UiStyle.font_bold())
+			_talent_label.add_theme_stylebox_override("normal", _pill(UiStyle.TALENT, UiStyle.OUTLINE))
+		_talent_label.text = talent_name
+	_layout()
 
 
 ## Hover highlight (white glow around the face + lift); kept for callers of story 020. See hover().
@@ -318,6 +350,23 @@ func _layout() -> void:
 		var tw: float = font.get_string_size(type_name, HORIZONTAL_ALIGNMENT_LEFT, -1, small).x + 10.0 * s
 		tw = minf(tw, inner.size.x)
 		_place(_type_label, Rect2(inner.end.x - tw, inner.position.y, tw, pill_h), small)
+	# Story 027 extras: damage pill + talent mark top-left, keyword line above the carrier strip.
+	var extra_y: float = inner.position.y
+	if _dmg_label != null:
+		var dfs: int = small + roundi(3.0 * s)
+		var dw: float = _dmg_label.get_theme_font("font").get_string_size(_dmg_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, dfs).x + 10.0 * s
+		_place(_dmg_label, Rect2(inner.position, Vector2(minf(dw, inner.size.x * 0.5), pill_h * 1.25)), dfs)
+		extra_y += pill_h * 1.25 + 2.0 * s
+	if _talent_label != null:
+		var tfs0: int = maxi(8, small - 1)
+		var tw0: float = minf(inner.size.x * 0.6, _talent_label.get_theme_font("font").get_string_size(_talent_label.text,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, tfs0).x + 10.0 * s)
+		_place(_talent_label, Rect2(Vector2(inner.position.x, extra_y), Vector2(tw0, pill_h)), _fit_one_line(_talent_label,
+				_talent_label.text, tfs0, 7, tw0 - 6.0 * s))
+	if _kw_label != null:
+		var kfs: int = _fit_one_line(_kw_label, _kw_text, small, maxi(7, small - 4), inner.size.x - 10.0 * s)
+		var kw: float = minf(inner.size.x, _kw_label.get_theme_font("font").get_string_size(_kw_text, HORIZONTAL_ALIGNMENT_LEFT, -1, kfs).x + 10.0 * s)
+		_place(_kw_label, Rect2(Vector2(inner.position.x + (inner.size.x - kw) * 0.5, strip.position.y - pill_h - 1.0 * s), Vector2(kw, pill_h)), kfs)
 	# Description: biggest font that fits the cream box.
 	var text_rect: Rect2 = _desc.grow_individual(-5.0 * s, -3.0 * s, -5.0 * s, -3.0 * s)
 	_place(_desc_label, text_rect, _fit_multiline(_desc_label, card.description, roundi(FONT_DESC * s), roundi(FONT_DESC_MIN * s), text_rect.size))

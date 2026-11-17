@@ -1,5 +1,5 @@
 extends SceneTree
-## Story 027 scratch: talents (fire when a Pokémon enters, once per turn, the starter enters at battle start) and Élan
+## Story 027 scratch: talents (fire when a Pokémon enters, once per battle, the starter enters at battle start) and Élan
 ## (built by attacks of the already-active Pokémon, capped, reset by a switch). Uses the real talents.json.
 const P := "res://assets/data/"
 const HP: int = 200
@@ -63,7 +63,7 @@ func _initialize() -> void:
 	gd = GameData.new()
 	ok(gd.load_all(), "real data loads")
 	tb = gd.get_talent_book()
-	ok(tb != null and tb.once_per_turn and tb.elan_cap == 5 and tb.elan_damage_per_stack == 1 and tb.elan_gain_per_attack == 1, "talents.json rules")
+	ok(tb != null and tb.trigger == TalentBook.TRIGGER_ONCE_PER_BATTLE and tb.elan_cap == 5 and tb.elan_damage_per_stack == 1 and tb.elan_gain_per_attack == 1, "talents.json rules")
 	_data()
 	_starter_and_elan()
 	_switch()
@@ -152,21 +152,53 @@ func _switch() -> void:
 	ok(b.get_elan() == 0 and elans == [1, 2, 0] and fired == ["brasier", "torrent"] and b.player.block == 3, "switch: Élan 0, Torrent gives 3 block")
 	ok(play(b, "s3") == DMG and fired.size() == 2, "back to the starter the same turn: Brasier does not re-fire, no Élan")
 	ok(play(b, "q2") == DMG and fired.size() == 2 and b.player.block == 3 and b.get_elan() == 0, "ping-pong: Torrent does not re-fire either")
+	ok(b.is_talent_used("salameche") and b.is_talent_used("squirtle") and not b.is_talent_used("bulbasaur"), "is_talent_used after both entries")
 	b.end_turn()
 	var hand_id: String = b.hand[0].id
+	ok(not b.would_trigger_talent(b.hand[0]), "next turn: no talent preview, both are used for this battle")
+	play(b, hand_id)
+	ok(fired.size() == 2, "once per battle: next turn a returning Pokémon's talent does NOT fire again (%s)" % str(fired))
+	b.end_turn()
+	for c: CardData in b.hand.duplicate():
+		play(b, c.id)
+	ok(fired.size() == 2, "still once per battle two turns later")
+	# talent_trigger once_per_turn: a newcomer fires again next turn.
+	var root: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(P + "talents.json"))
+	root["talent_trigger"] = "once_per_turn"
+	var per_turn: TalentBook = TalentBook.from_dict(root, gd.get_type_chart().get_type_ids(), gd.get_status_book())
+	ok(per_turn != null and per_turn.trigger == TalentBook.TRIGGER_ONCE_PER_TURN, "talent_trigger once_per_turn parsed")
+	b = mk(cards, "salameche", per_turn)
+	fired = []
+	b.talent_triggered.connect(func(pid: String, tid: String) -> void: fired.append(tid))
+	b.start()
+	play(b, "q1")
+	play(b, "s1")
+	ok(fired == ["brasier", "torrent"], "once_per_turn: no re-fire within the turn (%s)" % str(fired))
+	b.end_turn()
+	hand_id = b.hand[0].id
 	var is_sq: bool = b.hand[0].pokemon_id == "squirtle"
 	play(b, hand_id)
-	ok(fired.size() == (2 if is_sq else 3), "next turn a newcomer's talent fires again")
-	# talent_once_per_turn false: every entry fires.
-	var root: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(P + "talents.json"))
-	root["talent_once_per_turn"] = false
+	ok(fired.size() == (3 if is_sq else 2), "once_per_turn: next turn a newcomer's talent fires again")
+	# talent_trigger every_entry (and the legacy talent_once_per_turn false): every entry fires.
+	root["talent_trigger"] = "every_entry"
 	var loose: TalentBook = TalentBook.from_dict(root, gd.get_type_chart().get_type_ids(), gd.get_status_book())
 	b = mk(cards, "salameche", loose)
 	b.start()
 	play(b, "q1")
 	play(b, "s1")
 	play(b, "q2")
-	ok(b.player.block == 6, "once_per_turn false: Torrent fired twice (block %d)" % b.player.block)
+	ok(b.player.block == 6, "every_entry: Torrent fired twice (block %d)" % b.player.block)
+	var legacy: Dictionary = root.duplicate(true)
+	legacy.erase("talent_trigger")
+	legacy["talent_once_per_turn"] = false
+	var lb: TalentBook = TalentBook.from_dict(legacy, gd.get_type_chart().get_type_ids(), gd.get_status_book())
+	ok(lb != null and lb.trigger == TalentBook.TRIGGER_EVERY_ENTRY, "legacy talent_once_per_turn false = every_entry")
+	legacy.erase("talent_once_per_turn")
+	ok(TalentBook.from_dict(legacy, gd.get_type_chart().get_type_ids(), gd.get_status_book()).trigger == TalentBook.TRIGGER_ONCE_PER_BATTLE, "default rule: once_per_battle")
+	print("--- error expected below (bad talent_trigger) ---")
+	legacy["talent_trigger"] = "sometimes"
+	ok(TalentBook.from_dict(legacy, gd.get_type_chart().get_type_ids(), gd.get_status_book()) == null, "unknown talent_trigger rejected")
+	print("--- end of expected error ---")
 	# Élan disabled in data.
 	root["elan"] = {"gain_per_attack": 0, "cap": 0, "damage_per_stack": 0}
 	var flat: TalentBook = TalentBook.from_dict(root, gd.get_type_chart().get_type_ids(), gd.get_status_book())

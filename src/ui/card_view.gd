@@ -23,6 +23,13 @@ const TEXT_LEGENDARY: String = "Légendaire"
 const COLOR_LEGENDARY: Color = UiStyle.LEGENDARY
 const COLOR_LEGENDARY_INNER: Color = UiStyle.LEGENDARY_INNER
 
+## Story 027: fallback keyword names (the real texts come from talents.json `keywords`, see card_keywords).
+const KEYWORD_NAMES: Dictionary = {"exhaust": "Épuisement", "retain": "Rétention", "weak": "Faiblesse", "vulnerable": "Vulnérable",
+		"strength": "Force", "elan": "Élan", "talent": "Talent", "hits": "Multi-coups"}
+## Badge of an Élan condition ("Élan 2+") and the multi-hit damage pill ("3× 4").
+const TEXT_ELAN_COND: String = "%s %d+"
+const TEXT_MULTI_HIT: String = "%d× %d"
+
 ## Cache of cropped card icons (path -> Texture2D): pure display cache, no game state.
 static var _cropped_cache: Dictionary = {}
 
@@ -91,7 +98,11 @@ static func set_badge(badge: PanelContainer, type_id: String, chart: TypeChart) 
 ## carrier: the effect word, e.g. « Protection », « Sommeil », see EffectArt.label_of), description, rarity gem.
 ## `pokemon_lookup(pokemon_id) -> Dictionary` ({name, sprite_path, ...}, e.g. GameData.get_pokemon_info). The face is
 ## inset by CardFace.INSET px so the caller's own border (rarity / selection) stays visible. Owns no state.
-static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokemon_lookup: Callable = Callable()) -> void:
+## Story 027: `extras` (optional) = live combat data from the battle hand: {"damage_text" (e.g. "9" or "3× 4"),
+## "damage_delta" (sign vs the printed damage: colours the pill), "keywords" (badge texts; default keyword_badges with
+## fallback names), "talent" (talent name when playing the card would fire its carrier's talent)}.
+static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokemon_lookup: Callable = Callable(),
+		extras: Dictionary = {}) -> void:
 	var known_type: bool = chart != null and not card.type_id.is_empty() and chart.is_known_type(card.type_id)
 	var color: Color = UiStyle.type_color(card.type_id, chart) if known_type else UiStyle.SKILL
 	var type_text: String = chart.get_type_name(card.type_id) if known_type else ""
@@ -108,6 +119,9 @@ static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokem
 			tex = cropped_sprite(sprite_path)
 			pixel = true
 	var face: CardFace = CardFace.create(card, color, type_text, carrier, tex, pixel)
+	var badges: PackedStringArray = extras.get("keywords", keyword_badges(card, null))
+	var dmg: String = String(extras.get("damage_text", (TEXT_MULTI_HIT % [card.hits, card.damage]) if card.hits > 1 and card.damage > 0 else ""))
+	face.set_extras(dmg, int(extras.get("damage_delta", 0)), badges, String(extras.get("talent", "")))
 	b.add_child(face)
 	# Story 020b: every card lifts / tilts under the cursor (so unplayable cards can be read); only playable ones glow.
 	b.mouse_entered.connect(func() -> void: face.hover(true, not b.disabled))
@@ -171,3 +185,53 @@ static func rarity_name(rarity: String) -> String:
 ## Rarity colour (used for the reward card border); see UiStyle.rarity_color.
 static func rarity_color(rarity: String) -> Color:
 	return UiStyle.rarity_color(rarity)
+
+
+## Story 027: keywords of `card`, in display order: [{id, badge (text on the card, "" = tooltip only), name,
+## description}]. Names / descriptions from `book.keywords` (talents.json); null book = fallback names, no description.
+static func card_keywords(card: CardData, book: TalentBook) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var ids: Array[String] = []
+	if card.exhaust:
+		ids.append("exhaust")
+	if card.retain:
+		ids.append("retain")
+	var statuses: Array[String] = []
+	if not card.status_id.is_empty():
+		statuses.append(card.status_id)
+	for a: Variant in card.effect.get(EffectSpec.FIELD_APPLY, []):
+		if a is Dictionary:
+			statuses.append(String((a as Dictionary).get("status", "")))
+	for sid: String in ["weak", "vulnerable"]:
+		if sid in statuses:
+			ids.append(sid)
+	if int(card.effect.get("strength", 0)) > 0 or int(card.effect.get("strength_turn", 0)) > 0:
+		ids.append("strength")
+	var elan_need: int = 0
+	for c: Dictionary in card.conditionals:
+		var cond: Variant = c.get("if", {})
+		if cond is Dictionary and String((cond as Dictionary).get("type", "")) == "elan_at_least":
+			elan_need = int((cond as Dictionary).get("arg", 0))
+	if elan_need > 0:
+		ids.append("elan")
+	if card.hits > 1:
+		ids.append("hits")
+	for kid: String in ids:
+		var info: Dictionary = book.keywords.get(kid, {}) if book != null else {}
+		var kname: String = String(info.get("name", KEYWORD_NAMES.get(kid, kid)))
+		var badge: String = kname
+		if kid == "elan":
+			badge = TEXT_ELAN_COND % [kname, elan_need]
+		elif kid == "hits":
+			badge = ""  # shown by the damage pill ("3× 4")
+		out.append({"id": kid, "badge": badge, "name": kname, "description": String(info.get("description", ""))})
+	return out
+
+
+## Story 027: badge texts of `card` (see card_keywords; tooltip-only keywords skipped).
+static func keyword_badges(card: CardData, book: TalentBook) -> PackedStringArray:
+	var out := PackedStringArray()
+	for k: Dictionary in card_keywords(card, book):
+		if not String(k["badge"]).is_empty():
+			out.append(String(k["badge"]))
+	return out

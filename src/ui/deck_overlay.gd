@@ -12,7 +12,7 @@ extends Control
 ## team in deck order -- with sprite, name, types, card count, evolution progress (RunState.team_progress) and a
 ## "Capturé" tag for the captured ones (RunState.captured, or a pre-evolution of it).
 
-enum Tab { DECK, DRAW, DISCARD, TEAM }
+enum Tab { DECK, DRAW, DISCARD, TEAM, EXHAUST }
 
 const PANEL_SIZE: Vector2 = Vector2(1180, 612)
 const CARD_SIZE: Vector2 = Vector2(170, 200)
@@ -29,6 +29,9 @@ const TEXT_HINT_DRAW: String = "Cartes triées par nom : l'ordre de pioche reste
 const TEXT_EMPTY: String = "Aucune carte."
 const TEXT_CLOSE: String = "Fermer"
 const TEXT_TAB_TEAM: String = "Équipe (%d)"
+## Story 027: exhaust pile tab (battle only).
+const TEXT_TAB_EXHAUST: String = "Épuisées (%d)"
+const TEXT_HINT_EXHAUST: String = "Cartes épuisées : retirées jusqu'à la fin du combat."
 const TEXT_TITLE_TEAM: String = "Ton équipe"
 const TEXT_HINT_TEAM: String = "Chaque Pokémon porte ses cartes ; il entre sur le terrain quand tu joues l'une d'elles."
 const TEXT_TEAM_CARDS: String = "%d carte%s"
@@ -172,6 +175,7 @@ func open(run: RunState, data: GameData, battle: Battle = null, tab: Tab = Tab.D
 	_tab_row.visible = true  # story 017: Deck / Équipe outside a battle, + Pioche / Défausse in a battle
 	_tab_buttons[Tab.DRAW].visible = battle != null
 	_tab_buttons[Tab.DISCARD].visible = battle != null
+	_tab_buttons[Tab.EXHAUST].visible = battle != null
 	show_tab(tab if battle != null or tab == Tab.TEAM else Tab.DECK)
 	visible = true
 
@@ -187,10 +191,11 @@ func show_tab(tab: Tab) -> void:
 	_tab_buttons[Tab.DISCARD].text = TEXT_TAB_DISCARD % (_battle.discard_pile.size() if _battle != null else 0)
 	var team: Array[Dictionary] = team_rows(_run, _data) if _data != null else []
 	_tab_buttons[Tab.TEAM].text = TEXT_TAB_TEAM % team.size()
+	_tab_buttons[Tab.EXHAUST].text = TEXT_TAB_EXHAUST % (_battle.exhaust_pile.size() if _battle != null else 0)
 	_tab_buttons[tab].set_pressed_no_signal(true)
 	_title.text = TEXT_TITLE_BATTLE if _battle != null else TEXT_TITLE_RUN % deck_n
-	_hint.text = TEXT_HINT_DRAW if tab == Tab.DRAW else ""
-	_hint.visible = tab == Tab.DRAW
+	_hint.text = TEXT_HINT_DRAW if tab == Tab.DRAW else (TEXT_HINT_EXHAUST if tab == Tab.EXHAUST else "")
+	_hint.visible = tab == Tab.DRAW or tab == Tab.EXHAUST
 	_grid.visible = tab != Tab.TEAM
 	_team_box.visible = tab == Tab.TEAM
 	if tab == Tab.TEAM:
@@ -205,6 +210,8 @@ func show_tab(tab: Tab) -> void:
 		cards = _battle.draw_pile
 	elif tab == Tab.DISCARD:
 		cards = _battle.discard_pile
+	elif tab == Tab.EXHAUST:
+		cards = _battle.exhaust_pile
 	_fill(cards)
 	_scroll.scroll_vertical = 0
 

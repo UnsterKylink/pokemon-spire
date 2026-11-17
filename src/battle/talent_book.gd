@@ -9,8 +9,14 @@ var _order: Array[String] = []
 var default_by_type: Dictionary = {}
 ## Pokémon id -> talent id (overrides kept in talents.json for Pokémon whose own file is generated).
 var by_pokemon: Dictionary = {}
-## True: a Pokémon's talent fires at most once per player turn (no switch ping-pong).
-var once_per_turn: bool = true
+## When a Pokémon's talent may fire again (talents.json `talent_trigger`):
+## "once_per_battle" (default) = the first time it enters during the fight (the starter at battle start counts);
+## "once_per_turn" = at most once per player turn; "every_entry" = every time it enters.
+const TRIGGER_ONCE_PER_BATTLE := "once_per_battle"
+const TRIGGER_ONCE_PER_TURN := "once_per_turn"
+const TRIGGER_EVERY_ENTRY := "every_entry"
+const TRIGGERS: Array[String] = [TRIGGER_ONCE_PER_BATTLE, TRIGGER_ONCE_PER_TURN, TRIGGER_EVERY_ENTRY]
+var trigger: String = TRIGGER_ONCE_PER_BATTLE
 ## Élan: stacks gained per attack card of the already-active Pokémon, the cap, and the flat damage per stack on each hit.
 var elan_gain_per_attack: int = 0
 var elan_cap: int = 0
@@ -84,11 +90,18 @@ static func from_dict(root: Dictionary, known_types: Array[String] = [], status_
 			ok = false
 		else:
 			book.by_pokemon[pid] = String((overrides as Dictionary)[pid])
-	if root.has("talent_once_per_turn") and not (root["talent_once_per_turn"] is bool):
-		push_error("TalentBook: 'talent_once_per_turn' must be a boolean")
-		ok = false
-	else:
-		book.once_per_turn = bool(root.get("talent_once_per_turn", true))
+	if root.has("talent_trigger"):
+		if not (root["talent_trigger"] is String) or String(root["talent_trigger"]) not in TRIGGERS:
+			push_error("TalentBook: 'talent_trigger' must be one of %s" % str(TRIGGERS))
+			ok = false
+		else:
+			book.trigger = String(root["talent_trigger"])
+	elif root.has("talent_once_per_turn"):  # legacy flag (before the once-per-battle rule)
+		if not (root["talent_once_per_turn"] is bool):
+			push_error("TalentBook: 'talent_once_per_turn' must be a boolean")
+			ok = false
+		else:
+			book.trigger = TRIGGER_ONCE_PER_TURN if bool(root["talent_once_per_turn"]) else TRIGGER_EVERY_ENTRY
 	var elan: Variant = root.get("elan", {})
 	if not (elan is Dictionary):
 		push_error("TalentBook: 'elan' must be an object {gain_per_attack, cap, damage_per_stack}")

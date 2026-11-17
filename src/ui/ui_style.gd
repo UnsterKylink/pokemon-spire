@@ -515,3 +515,21 @@ class _Sheen extends Node2D:
 		if p == null or tex == null or p.size.x <= 0.0 or p.size.y <= 0.0:
 			return
 		draw_texture_rect(tex, Rect2(Vector2.ZERO, p.size), false)
+
+
+# --- Story 027: combat depth accents (Élan pips, talent pill, Force chips, keyword badges, exhaust burn) ---------
+## Élan pip (filled) and empty pip.
+const ELAN: Color = Color("#FF8A3D")
+const ELAN_EMPTY: Color = Color(0.24, 0.22, 0.3)
+## Talent pill (gold) and its used-up state (grey).
+const TALENT: Color = Color("#F2C94C")
+const TALENT_USED: Color = Color(0.4, 0.4, 0.46)
+## Force chips (battle / turn) and the next-attack bonus chip.
+const FORCE: Color = Color("#E5533D")
+const NEXT_ATTACK: Color = Color("#FFB347")
+## Keyword badge line on cards, exhaust burn, live damage pill (base / raised / lowered).
+const KEYWORD_BG: Color = Color(0.1, 0.08, 0.2, 0.9)
+const EXHAUST_BURN: Color = Color("#FF7A2F")
+const DAMAGE_BASE: Color = Color(0.62, 0.13, 0.11)
+const DAMAGE_UP: Color = Color(0.13, 0.52, 0.22)
+const DAMAGE_DOWN: Color = Color(0.38, 0.38, 0.44)

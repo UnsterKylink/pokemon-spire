@@ -77,7 +77,7 @@ var exhaust_pile: Array[CardData] = []
 var elan: int = 0
 var next_attack_bonus: int = 0
 var _cards_played_this_turn: int = 0
-var _talents_fired: Dictionary = {}  # pokemon id -> true (this player turn)
+var _talents_fired: Dictionary = {}  # pokemon id -> true (this battle, or this turn with trigger once_per_turn)
 var _talent_book: TalentBook = null
 ## Held items active in this battle (story 006); their triggers are fired by this class.
 var items: Array[ItemData] = []
@@ -341,11 +341,19 @@ func get_talent_id(pokemon_id: String) -> String:
 	return _talent_book.talent_for(pokemon_id, explicit, types)
 
 
-## True if playing `card` now would make its Pokémon's talent fire (it would enter and has not fired this turn).
+## True if playing `card` now would make its Pokémon's talent fire (it would enter and its talent is not used up).
 func would_trigger_talent(card: CardData) -> bool:
 	if not bool(_card_context(card)["entered"]):
 		return false
-	return not get_talent_id(card.pokemon_id).is_empty() and not (_talent_book.once_per_turn and _talents_fired.has(card.pokemon_id))
+	return not get_talent_id(card.pokemon_id).is_empty() and not is_talent_used(card.pokemon_id)
+
+
+## True if the talent of `pokemon_id` already fired and may not fire again (talents.json talent_trigger:
+## once_per_battle = for the rest of the fight, once_per_turn = this player turn, every_entry = never used up).
+func is_talent_used(pokemon_id: String) -> bool:
+	if _talent_book == null or _talent_book.trigger == TalentBook.TRIGGER_EVERY_ENTRY:
+		return false
+	return _talents_fired.has(pokemon_id)
 
 
 ## Pure preview (no RNG, no signal) of hand[index] against enemies[target_index] if played NOW:
@@ -445,10 +453,10 @@ func _set_elan(value: int) -> void:
 	elan_changed.emit(elan)
 
 
-## Fires the talent of `pokemon_id` (it just entered the field) unless it already fired this turn.
+## Fires the talent of `pokemon_id` (it just entered the field) unless it is used up (see is_talent_used).
 func _trigger_talent(pokemon_id: String) -> void:
 	var tid: String = get_talent_id(pokemon_id)
-	if tid.is_empty() or (_talent_book.once_per_turn and _talents_fired.has(pokemon_id)):
+	if tid.is_empty() or is_talent_used(pokemon_id):
 		return
 	_talents_fired[pokemon_id] = true
 	_apply_effect(_talent_book.effect_of(tid), -1)
@@ -787,7 +795,8 @@ func _start_player_turn(first: bool = false) -> void:
 	energy_lost = 0
 	_end_turn_strength()
 	_cards_played_this_turn = 0
-	_talents_fired.clear()
+	if first or (_talent_book != null and _talent_book.trigger == TalentBook.TRIGGER_ONCE_PER_TURN):
+		_talents_fired.clear()
 	# Asleep / frozen team: it loses player_energy_loss energy (whole turn if absent), still draws and plays with the rest.
 	var lost_turn: String = _consume_skip_turn(player)
 	if not lost_turn.is_empty():
