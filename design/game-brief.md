@@ -39,7 +39,7 @@
 ## Out of scope — not building this
 - PV individuels par Pokémon, K.O. individuels (barre de PV commune à la place).
 - Multijoueur.
-- Publication / distribution publique (propriété intellectuelle Pokémon).
+- Publication / distribution publique (propriété intellectuelle Pokémon). **Décision du joueur (2026-11-18) : le jeu reste privé** (Pokémon officiels conservés) ; basculer plus tard vers un jeu original reste possible (tout est en données).
 
 ## Build order
 1. Un combat contre 1 ennemi avec des cartes simples — prouver que le cœur est fun.
