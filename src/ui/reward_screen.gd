@@ -178,8 +178,7 @@ func set_captures(captures: Array[Dictionary]) -> void:
 		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_theme_constant_override("separation", 8)
 		var sprite := TextureRect.new()
-		sprite.texture = CardView.cropped_sprite(String(row.get("sprite", "")))
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		PokemonArt.apply(sprite, String(row.get("sprite", "")))  # story 033: official artwork
 		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		sprite.custom_minimum_size = Vector2.ONE * CAPTURE_SPRITE_SIDE

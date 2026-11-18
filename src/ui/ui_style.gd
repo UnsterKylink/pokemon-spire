@@ -25,9 +25,25 @@ const HP_RED: Color = Color("#FF4F45")
 const BLOCK_BLUE: Color = Color("#5AB4FF")
 const SUCCESS: Color = Color("#5BD16E")
 const SKILL: Color = Color("#7E9CCF")
-const DISABLED_BG: Color = Color("#5A6078")
-const DISABLED_TEXT: Color = Color("#A0A6BC")
+## Story 033: disabled buttons are light grey with dark grey text — greyed but readable on white windows and on the
+## dark battle screen alike.
+const DISABLED_BG: Color = Color("#C9CEDA")
+const DISABLED_TEXT: Color = Color("#555C72")
 const SHADOW: Color = Color(0, 0, 0, 0.35)
+
+# --- Story 033: « menu Pokémon » windows (art bible §4) ----------------------------------------------
+## Frame band, outer outline, inner white box, secondary dark text and the frame thickness of the menu windows.
+const FRAME_BLUE: Color = Color("#4F86D9")
+const FRAME_OUTLINE: Color = Color("#1B2440")
+const PANEL_WHITE: Color = Color("#FBFCFF")
+const TEXT_SUB: Color = Color("#4A5578")
+const MENU_FRAME_PAD: int = 5
+## Light sub-box inside a window (rows, cells, nested panels).
+const SUB_FILL: Color = Color("#EAF1FC")
+## Accent colours readable on white (titles of special screens, gains, warnings).
+const INK_GOLD: Color = Color("#9A6B00")
+const INK_GREEN: Color = Color("#1F7A35")
+const INK_RED: Color = Color("#B3261E")
 
 ## Rarity colours (art bible §2); legendary cards use LEGENDARY (+ LEGENDARY_INNER for the inner trim).
 const RARITY_COLORS: Dictionary = {
@@ -283,6 +299,88 @@ static func badge(color: Color) -> StyleBoxFlat:
 	return sb
 
 
+## Story 033: « menu Pokémon » window (art bible §4): thick `frame` band with a dark outline and a drop shadow around a
+## rounded white box; `pad_x` / `pad_y` = inner margins of the content inside the white box.
+static func menu_panel(frame: Color = FRAME_BLUE, pad_x: float = 18.0, pad_y: float = 12.0) -> MenuBox:
+	var mb := MenuBox.new()
+	mb.frame_color = frame
+	var edge: float = float(MENU_FRAME_PAD + 1)
+	mb.content_margin_left = edge + pad_x
+	mb.content_margin_right = edge + pad_x
+	mb.content_margin_top = edge + pad_y
+	mb.content_margin_bottom = edge + pad_y
+	return mb
+
+
+## Story 033 (moved from map_screen, story 020b): outer frame of a menu window: `col` band, dark outline, rounded,
+## drop shadow; content margin = the frame thickness (put a menu_inner box inside).
+static func menu_frame(col: Color = FRAME_BLUE) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = col
+	sb.border_color = FRAME_OUTLINE
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(18)
+	sb.shadow_color = SHADOW
+	sb.shadow_size = 6
+	sb.shadow_offset = Vector2(0, 3)
+	sb.set_content_margin_all(MENU_FRAME_PAD + 1)
+	sb.anti_aliasing = true
+	return sb
+
+
+## Story 033 (moved from map_screen, story 020b): inner white box of a menu window (thin darker rim of `frame`).
+static func menu_inner(frame: Color = FRAME_BLUE, pad_x: float = 14.0, pad_y: float = 5.0) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = PANEL_WHITE
+	sb.border_color = frame.darkened(0.35)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(13)
+	sb.content_margin_left = pad_x
+	sb.content_margin_right = pad_x
+	sb.content_margin_top = pad_y
+	sb.content_margin_bottom = pad_y
+	sb.anti_aliasing = true
+	return sb
+
+
+## Story 033: light sub-box inside a menu window (a row, a cell, a nested panel): pale blue fill, thin blue rim.
+static func menu_sub_panel(rim: Color = FRAME_BLUE, pad: float = 10.0) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = SUB_FILL
+	sb.border_color = rim.lightened(0.15)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(10)
+	sb.set_content_margin_all(pad)
+	sb.anti_aliasing = true
+	return sb
+
+
+## Story 033: dark text on a white window (no outline, no shadow), colour `col`.
+static func dark_label(l: Label, col: Color = TEXT_DARK) -> void:
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_constant_override("outline_size", 0)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	l.set_meta("menu_ink", true)
+
+
+## Story 033: readable version of colour `c` on a white window (white -> TEXT_DARK, light grey -> TEXT_SUB, bright
+## colours darkened until they read; dark colours unchanged). `big` = title-sized text.
+static func ink_on_white(c: Color, big: bool = false) -> Color:
+	if c.get_luminance() <= 0.42:
+		return Color(c, 1.0) if c.a > 0.0 else c
+	if c.s < 0.28:
+		return TEXT_DARK if c.v > 0.86 or big else TEXT_SUB
+	var h: float = c.h
+	if big and h > 0.09 and h < 0.19:  # yellow / gold titles
+		return TEXT_DARK
+	var out: Color = c
+	for i: int in 8:
+		if out.get_luminance() <= 0.36:
+			break
+		out = out.darkened(0.14)
+	return Color(out, 1.0)
+
+
 ## Applies the five button states + white outlined text to `b` (base colour `base`).
 static func apply_button(b: Button, base: Color = ACCENT_BLUE) -> void:
 	for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
@@ -292,7 +390,7 @@ static func apply_button(b: Button, base: Color = ACCENT_BLUE) -> void:
 		b.add_theme_color_override(key, text)
 	b.add_theme_color_override("font_disabled_color", DISABLED_TEXT)
 	b.add_theme_color_override("font_outline_color", OUTLINE)
-	b.add_theme_constant_override("outline_size", 4 if text == TEXT else 0)
+	b.add_theme_constant_override("outline_size", 0)  # story 033: the dark outline made greyed text unreadable
 
 
 ## Applies a typography role ("title", "heading", "number", "body", "caption", "dark") to `l`.
@@ -329,11 +427,11 @@ static func make_theme() -> Theme:
 	t.set_color("font_focus_color", "Button", TEXT)
 	t.set_color("font_disabled_color", "Button", DISABLED_TEXT)
 	t.set_color("font_outline_color", "Button", OUTLINE)
-	t.set_constant("outline_size", "Button", 4)
+	t.set_constant("outline_size", "Button", 0)  # story 033
 	t.set_color("font_color", "Label", TEXT)
 	t.set_color("font_outline_color", "Label", OUTLINE)
-	t.set_stylebox("panel", "PanelContainer", panel())
-	t.set_stylebox("panel", "Panel", panel())
+	t.set_stylebox("panel", "PanelContainer", menu_panel())  # story 033: menu windows by default
+	t.set_stylebox("panel", "Panel", menu_panel())
 	var tip: StyleBoxFlat = panel(BG_PANEL_LIGHT, 8, 2)
 	tip.content_margin_top = 6.0
 	tip.content_margin_bottom = 6.0
@@ -361,34 +459,63 @@ static func _load_type_colors() -> void:
 
 ## Story 020 (screens pass): gives `root` the art-bible theme and keeps re-skinning its subtree as it is built:
 ## plain Buttons get the bright outlined buttons (theme), custom StyleBoxFlat panels / buttons get rounded
-## corners, a dark outline when they had none, a palette background when theirs was a plain dark grey and a soft
-## shadow; big labels (>= 24 px) get the title font and a dark text outline; very big labels (>= LOGO_MIN_SIZE) with no
-## colour of their own get the Pokémon-logo look (apply_logo). Card buttons (CardFace child) are left untouched.
-## Display only; the helper node is internal, so get_children() of the screen is unchanged.
-static func style_screen(root: Control) -> void:
+## corners, a dark outline when they had none and a soft shadow; big labels (>= 24 px) get the title font; very big
+## labels (>= LOGO_MIN_SIZE) with no colour of their own get the Pokémon-logo look (apply_logo). Card buttons
+## (CardFace child) are left untouched. Display only; the helper nodes are internal, so get_children() is unchanged.
+## Story 033 (cohérence visuelle): the « menu Pokémon » look by default — `backdrop` adds the shared MenuBackdrop
+## behind the screen (opaque full-screen dark ColorRects directly under `root` are then hidden; pass false for
+## overlays drawn over another screen); dark panels become white menu windows (MenuBox; nested ones become light
+## sub-boxes), dark buttons become blue buttons, and every label on a white window gets dark ink (ink_on_white),
+## re-checked a few times per second so colours set later by the screen are converted too.
+static func style_screen(root: Control, backdrop: bool = true) -> void:
 	root.theme = make_theme()
+	root.set_meta("menu_style", true)
+	if backdrop:
+		var bd := MenuBackdrop.new()
+		bd.name = "MenuBackdrop"
+		bd.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(bd, false, Node.INTERNAL_MODE_FRONT)
+		root.set_meta("menu_backdrop", bd)
 	var p := _ScreenPolisher.new()
 	p.name = "StylePolisher"
 	root.add_child(p, false, Node.INTERNAL_MODE_BACK)
 
 
+## Story 033: the shared backdrop added by style_screen under `root` (null when none).
+static func screen_backdrop(root: Control) -> MenuBackdrop:
+	return root.get_meta("menu_backdrop", null) as MenuBackdrop if root.has_meta("menu_backdrop") else null
+
+
 ## Re-skins one node in place (see style_screen). Idempotent.
 static func polish_node(n: Node) -> void:
+	var menu: bool = _menu_root(n) != null
 	if n is Label:
 		var l: Label = n
 		if l.has_theme_font_size_override("font_size") and not l.has_theme_font_override("font") \
 				and l.get_theme_font_size("font_size") >= TITLE_FONT_MIN_SIZE:
 			l.add_theme_font_override("font", font_title())  # story 020b
-			if l.get_theme_font_size("font_size") >= LOGO_MIN_SIZE and not l.has_theme_color_override("font_color"):
+			if l.get_theme_font_size("font_size") >= LOGO_MIN_SIZE and not l.has_theme_color_override("font_color") \
+					and not (menu and _on_light(l)):
 				apply_logo(l, 8)
 				return
+		if menu:
+			ink_label(l)
+			return
 		if l.has_theme_font_size_override("font_size") and not l.has_theme_constant_override("outline_size"):
 			var fs: int = l.get_theme_font_size("font_size")
 			if fs >= 24:
 				l.add_theme_constant_override("outline_size", 8 if fs >= 32 else 6)
 				l.add_theme_color_override("font_outline_color", OUTLINE)
+	elif n is ColorRect:
+		if menu and n.get_parent() == _menu_root(n) and screen_backdrop(_menu_root(n)) != null:
+			var cr: ColorRect = n
+			if cr.color.a > 0.9 and cr.color.v < 0.4 and cr.anchor_right == 1.0 and cr.anchor_bottom == 1.0:
+				cr.self_modulate.a = 0.0  # the shared backdrop shows instead
 	elif n is PanelContainer or n is Panel:
 		var c: Control = n
+		if menu and not c.has_meta("menu_keep"):
+			_menu_panel_node(c)
 		if c.has_theme_stylebox_override("panel") and c.get_theme_stylebox("panel") is StyleBoxFlat:
 			_skin_box(c.get_theme_stylebox("panel") as StyleBoxFlat, true)
 		add_sheen(c, true)
@@ -397,10 +524,141 @@ static func polish_node(n: Node) -> void:
 		for child: Node in b.get_children():
 			if child is CardFace:
 				return
+		if menu and not b.has_meta("menu_keep"):
+			_menu_button(b)
 		for state: String in ["normal", "hover", "pressed", "disabled"]:
 			if b.has_theme_stylebox_override(state) and b.get_theme_stylebox(state) is StyleBoxFlat:
 				_skin_box(b.get_theme_stylebox(state) as StyleBoxFlat, false)
 		add_sheen(b, false)
+
+
+## Story 033: gives label `l` dark ink when it sits on a light window (idempotent; re-converts when the screen set a
+## new colour since the last pass). Labels on the backdrop / dark boxes keep light text with a dark outline.
+static func ink_label(l: Label) -> void:
+	if l.has_meta("menu_ink") or l.has_meta("menu_keep") or _in_card(l):
+		return
+	if l.has_theme_color_override("font_outline_color") and l.get_theme_color("font_outline_color") == LOGO_BLUE:
+		return  # logo look: readable everywhere
+	var light: bool = _on_light(l)
+	var cur: Color = l.get_theme_color("font_color") if l.has_theme_color_override("font_color") else TEXT
+	if light:
+		if l.has_meta("ink_out") and Color(l.get_meta("ink_out")) == cur and l.get_meta("ink_light", false):
+			return
+		var big: bool = l.get_theme_font_size("font_size") >= 28
+		var ink: Color = ink_on_white(cur, big)
+		l.add_theme_color_override("font_color", ink)
+		l.add_theme_constant_override("outline_size", 0)
+		l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+		l.set_meta("ink_out", ink)
+		l.set_meta("ink_light", true)
+	elif l.get_meta("ink_light", true) or not l.has_meta("ink_out"):
+		l.set_meta("ink_light", false)
+		l.set_meta("ink_out", cur)
+		if not l.has_theme_constant_override("outline_size") or l.get_theme_constant("outline_size") == 0:
+			var fs: int = l.get_theme_font_size("font_size")
+			l.add_theme_constant_override("outline_size", 8 if fs >= 32 else (6 if fs >= 22 else 4))
+			l.add_theme_color_override("font_outline_color", OUTLINE)
+
+
+## Story 033: true inside a card button / card face (cards keep their own look).
+static func _in_card(n: Node) -> bool:
+	var p: Node = n.get_parent()
+	while p != null and not p.has_meta("menu_style"):
+		if p is CardFace or p.has_meta("menu_keep"):
+			return true
+		if p is Button:
+			for c: Node in p.get_children():
+				if c is CardFace:
+					return true
+		p = p.get_parent()
+	return false
+
+
+## Story 033: the style_screen root above `n` (or `n` itself), null when `n` is not on a menu-styled screen.
+static func _menu_root(n: Node) -> Control:
+	var p: Node = n
+	while p != null:
+		if p is Control and p.has_meta("menu_style"):
+			return p as Control
+		p = p.get_parent()
+	return null
+
+
+## Story 033: true when the nearest opaque box behind `n` (panel or button) is light (white window, cream, pale).
+static func _on_light(n: Node) -> bool:
+	var p: Node = n.get_parent()
+	while p != null:
+		var sb: StyleBox = null
+		if p is PanelContainer or p is Panel:
+			sb = (p as Control).get_theme_stylebox("panel")
+		elif p is Button:
+			sb = (p as Control).get_theme_stylebox("normal")
+		if sb is MenuBox:
+			return true
+		if sb is StyleBoxFlat and (sb as StyleBoxFlat).draw_center and (sb as StyleBoxFlat).bg_color.a > 0.6:
+			return (sb as StyleBoxFlat).bg_color.get_luminance() > 0.62
+		if p.has_meta("menu_style"):
+			return false
+		p = p.get_parent()
+	return false
+
+
+## Story 033: a dark panel becomes a white menu window (top level) or a light sub-box (inside a window).
+static func _menu_panel_node(c: Control) -> void:
+	if c.has_meta("menu_done"):
+		return
+	c.set_meta("menu_done", true)
+	var sb: StyleBox = c.get_theme_stylebox("panel")
+	var flat: StyleBoxFlat = sb as StyleBoxFlat
+	if sb is MenuBox:
+		return
+	if flat != null and not (flat.draw_center and flat.bg_color.a > 0.8 and flat.bg_color.v < 0.42):
+		return  # light, coloured or see-through boxes keep their look
+	var margins: Array[float] = [10.0, 10.0, 10.0, 10.0]
+	if flat != null:
+		margins = [flat.content_margin_left, flat.content_margin_top, flat.content_margin_right,
+				flat.content_margin_bottom]
+		for i: int in 4:
+			margins[i] = maxf(margins[i], 0.0)
+	if _inside_window(c):
+		var sub: StyleBoxFlat = menu_sub_panel()
+		sub.content_margin_left = margins[0]
+		sub.content_margin_top = margins[1]
+		sub.content_margin_right = margins[2]
+		sub.content_margin_bottom = margins[3]
+		c.add_theme_stylebox_override("panel", sub)
+		c.set_meta("ui_sheen", true)  # no grain on the pale box
+		return
+	var mb: MenuBox = menu_panel()
+	var edge: float = float(MENU_FRAME_PAD + 1)
+	mb.content_margin_left = edge + maxf(margins[0], 12.0)
+	mb.content_margin_top = edge + maxf(margins[1], 10.0)
+	mb.content_margin_right = edge + maxf(margins[2], 12.0)
+	mb.content_margin_bottom = edge + maxf(margins[3], 10.0)
+	c.add_theme_stylebox_override("panel", mb)
+
+
+static func _inside_window(n: Node) -> bool:
+	var p: Node = n.get_parent()
+	while p != null and not p.has_meta("menu_style"):
+		if (p is PanelContainer or p is Panel) and (p as Control).get_theme_stylebox("panel") is MenuBox:
+			return true
+		p = p.get_parent()
+	return false
+
+
+## Story 033: a button with a dark custom box becomes a standard blue button (keeps its size and text).
+static func _menu_button(b: Button) -> void:
+	if b.has_meta("menu_done"):
+		return
+	b.set_meta("menu_done", true)
+	if not b.has_theme_stylebox_override("normal"):
+		return
+	var flat: StyleBoxFlat = b.get_theme_stylebox("normal") as StyleBoxFlat
+	if flat == null or not flat.draw_center or flat.bg_color.a < 0.8 or flat.bg_color.v >= 0.42 \
+			or flat.bg_color.s > 0.5:
+		return
+	apply_button(b, ACCENT_BLUE)
 
 
 ## Story 020b: adds the material finish (grain, soft light gradient, inner top highlight; ui_sheen.gdshader) over the
@@ -475,9 +733,23 @@ class _ScreenPolisher extends Node:
 	var _pending: Array[Node] = []
 	var _queued: bool = false
 
+	var _frames: int = 0
+
 	func _ready() -> void:
 		_walk(get_parent())
 		get_tree().node_added.connect(_on_node_added)
+
+	## Story 033: re-inks the labels every few frames (colours / parents set after the build are converted too).
+	func _process(_delta: float) -> void:
+		_frames += 1
+		if _frames % 12 == 0 and get_parent() != null and get_parent().is_visible_in_tree():
+			_ink(get_parent())
+
+	func _ink(n: Node) -> void:
+		if n is Label:
+			UiStyle.ink_label(n as Label)
+		for c: Node in n.get_children():
+			_ink(c)
 
 	func _walk(n: Node) -> void:
 		UiStyle.polish_node(n)

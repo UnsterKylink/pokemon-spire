@@ -39,13 +39,14 @@ const LEGEND_ORDER: Array[String] = ["wild", "elite", "rival", "event", "center"
 const TEXT_RIVAL_TIP: String = "%s et son %s t'attendent"
 const LEGEND_ICON_SIDE: float = 30.0
 ## Story 020b: Pokémon menu panels (thick frame + white box) and the sea of the Town Map.
-const FRAME_BLUE: Color = Color("#4F86D9")
-const FRAME_OUTLINE: Color = Color("#1B2440")
-const PANEL_WHITE: Color = Color("#FBFCFF")
-const TEXT_SUB: Color = Color("#4A5578")
+## Story 033: moved to UiStyle (menu_frame / menu_inner / dark_label / MenuBackdrop); kept as aliases.
+const FRAME_BLUE: Color = UiStyle.FRAME_BLUE
+const FRAME_OUTLINE: Color = UiStyle.FRAME_OUTLINE
+const PANEL_WHITE: Color = UiStyle.PANEL_WHITE
+const TEXT_SUB: Color = UiStyle.TEXT_SUB
 const FLOOR_RED: Color = Color("#D0342A")
 ## Frame thickness (outer panel padding) and sea inset (margin between the sea edge and the scrolling map).
-const FRAME_PAD: int = 5
+const FRAME_PAD: int = UiStyle.MENU_FRAME_PAD
 const SEA_INSET: int = 8
 ## Where the "next floor" row sits in the visible map area when scrolling to it (0 = top, 1 = bottom).
 const FOCUS_RATIO: float = 0.5
@@ -60,7 +61,7 @@ var _banner_title: Label
 var _banner_sub: Label
 var _banner_rule: Label
 var _legend: HBoxContainer
-var _backdrop: MapBackdrop
+var _backdrop: MenuBackdrop
 var _header: PanelContainer
 var _header_icon: MapCanvas.RoomIcon
 var _sheet_box: PanelContainer
@@ -175,7 +176,7 @@ func _build_ui() -> void:
 		return
 	_built = true
 	theme = UiStyle.make_theme()
-	_backdrop = MapBackdrop.new()
+	_backdrop = MenuBackdrop.new()
 	_backdrop.name = "ZoneBackdrop"
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -193,11 +194,11 @@ func _build_ui() -> void:
 	_header = PanelContainer.new()
 	_header.name = "Header"
 	_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_header.add_theme_stylebox_override("panel", _frame_box(FRAME_BLUE))
+	_header.add_theme_stylebox_override("panel", UiStyle.menu_frame(FRAME_BLUE))
 	root.add_child(_header)
 	var header_inner := PanelContainer.new()
 	header_inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	header_inner.add_theme_stylebox_override("panel", _white_box(FRAME_BLUE, 14.0, 5.0))
+	header_inner.add_theme_stylebox_override("panel", UiStyle.menu_inner(FRAME_BLUE, 14.0, 5.0))
 	_header.add_child(header_inner)
 	var header := HBoxContainer.new()
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -216,7 +217,7 @@ func _build_ui() -> void:
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	UiStyle.apply_label(_title, "heading")
 	_title.add_theme_font_size_override("font_size", 26)
-	_dark_label(_title, UiStyle.TEXT_DARK)
+	UiStyle.dark_label(_title, UiStyle.TEXT_DARK)
 	titles.add_child(_title)
 	var sub := HBoxContainer.new()
 	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -225,12 +226,12 @@ func _build_ui() -> void:
 	_floor = CardView.make_label(20)
 	_floor.name = "Floor"
 	_floor.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_dark_label(_floor, FLOOR_RED)
+	UiStyle.dark_label(_floor, FLOOR_RED)
 	sub.add_child(_floor)
 	_info = CardView.make_label(18)
 	_info.name = "Info"
 	_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_dark_label(_info, TEXT_SUB)
+	UiStyle.dark_label(_info, TEXT_SUB)
 	sub.add_child(_info)
 	var deck_button := Button.new()
 	deck_button.name = "DeckButton"
@@ -244,12 +245,12 @@ func _build_ui() -> void:
 	_banner = PanelContainer.new()
 	_banner.name = "ZoneBanner"
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_banner_frame = _frame_box(FRAME_BLUE)
+	_banner_frame = UiStyle.menu_frame(FRAME_BLUE)
 	_banner.add_theme_stylebox_override("panel", _banner_frame)
 	root.add_child(_banner)
 	var banner_inner := PanelContainer.new()
 	banner_inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_banner_inner = _white_box(FRAME_BLUE, 16.0, 4.0)
+	_banner_inner = UiStyle.menu_inner(FRAME_BLUE, 16.0, 4.0)
 	banner_inner.add_theme_stylebox_override("panel", _banner_inner)
 	_banner.add_child(banner_inner)
 	var banner_box := VBoxContainer.new()
@@ -258,15 +259,15 @@ func _build_ui() -> void:
 	banner_inner.add_child(banner_box)
 	_banner_title = CardView.make_label(28)
 	_banner_title.name = "BannerTitle"
-	_dark_label(_banner_title, UiStyle.TEXT_DARK)
+	UiStyle.dark_label(_banner_title, UiStyle.TEXT_DARK)
 	banner_box.add_child(_banner_title)
 	_banner_sub = CardView.make_label(17)
 	_banner_sub.name = "BannerSub"
-	_dark_label(_banner_sub, TEXT_SUB)
+	UiStyle.dark_label(_banner_sub, TEXT_SUB)
 	banner_box.add_child(_banner_sub)
 	_banner_rule = CardView.make_label(16)
 	_banner_rule.name = "BannerRule"
-	_dark_label(_banner_rule, COLOR_ZONE_RULE)
+	UiStyle.dark_label(_banner_rule, COLOR_ZONE_RULE)
 	_banner_rule.visible = false
 	banner_box.add_child(_banner_rule)
 	# Story 020b: the Town Map window (legend panel + sea with the scrollable region), centred over the backdrop.
@@ -275,7 +276,7 @@ func _build_ui() -> void:
 	_sheet_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sheet_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_sheet_box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_sheet_box.add_theme_stylebox_override("panel", _frame_box(FRAME_BLUE))
+	_sheet_box.add_theme_stylebox_override("panel", UiStyle.menu_frame(FRAME_BLUE))
 	root.add_child(_sheet_box)
 	var sheet_col := VBoxContainer.new()
 	sheet_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -284,7 +285,7 @@ func _build_ui() -> void:
 	var legend_panel := PanelContainer.new()
 	legend_panel.name = "LegendPanel"
 	legend_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	legend_panel.add_theme_stylebox_override("panel", _white_box(FRAME_BLUE, 12.0, 2.0))
+	legend_panel.add_theme_stylebox_override("panel", UiStyle.menu_inner(FRAME_BLUE, 12.0, 2.0))
 	sheet_col.add_child(legend_panel)
 	_legend = HBoxContainer.new()
 	_legend.name = "Legend"
@@ -347,7 +348,7 @@ func _build_legend(names: Dictionary, accent: Color) -> void:
 		item.add_child(icon)
 		var l: Label = CardView.make_label(16)
 		l.text = String(names.get(rt, rt))
-		_dark_label(l, UiStyle.TEXT_DARK)
+		UiStyle.dark_label(l, UiStyle.TEXT_DARK)
 		item.add_child(l)
 		_legend.add_child(item)
 	_size_sheet()
@@ -359,43 +360,6 @@ func _size_sheet() -> void:
 		return
 	var w: float = _run.act.graph.width * MapCanvas.COL_SPACING + (FRAME_PAD + SEA_INSET) * 2.0 + 40.0
 	_sheet_box.custom_minimum_size = Vector2(minf(w, 1256.0), 0)
-
-
-## Story 020b: dark text on a white Pokémon panel (no outline, no shadow).
-func _dark_label(l: Label, col: Color) -> void:
-	l.add_theme_color_override("font_color", col)
-	l.add_theme_constant_override("outline_size", 0)
-	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
-
-
-## Story 020b: outer frame of a Pokémon menu window: thick `col` band, dark outline, rounded, drop shadow.
-func _frame_box(col: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.border_color = FRAME_OUTLINE
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(18)
-	sb.shadow_color = UiStyle.SHADOW
-	sb.shadow_size = 6
-	sb.shadow_offset = Vector2(0, 3)
-	sb.set_content_margin_all(FRAME_PAD + 1)
-	sb.anti_aliasing = true
-	return sb
-
-
-## Story 020b: inner white box of a Pokémon menu window (thin darker rim of the frame colour).
-func _white_box(frame: Color, pad_x: float, pad_y: float) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = PANEL_WHITE
-	sb.border_color = frame.darkened(0.35)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(13)
-	sb.content_margin_left = pad_x
-	sb.content_margin_right = pad_x
-	sb.content_margin_top = pad_y
-	sb.content_margin_bottom = pad_y
-	sb.anti_aliasing = true
-	return sb
 
 
 ## Scrolls so the row after the current floor (the next choice) sits mid-view.
@@ -508,38 +472,3 @@ class SeaView extends Control:
 				var a: float = -PI / 2.0 + (i + s / 6.0) * PI / 2.0
 				pts.append(corners[i] + Vector2.from_angle(a) * rad)
 		return pts
-
-
-## Story 020b: screen background behind the Town Map window, like a Pokémon menu backdrop: blue gradient tinted by the
-## gym type, soft diagonal stripes and a big faint Poké Ball watermark. Display only.
-class MapBackdrop extends Control:
-	var type_id: String = ""
-	var tint: Color = UiStyle.SUCCESS
-
-	## Sets the zone's gym type and colour, then redraws.
-	func set_zone(zone_type_id: String, color: Color) -> void:
-		type_id = zone_type_id
-		tint = color
-		queue_redraw()
-
-	func _notification(what: int) -> void:
-		if what == NOTIFICATION_RESIZED:
-			queue_redraw()
-
-	func _draw() -> void:
-		var w: float = size.x
-		var h: float = size.y
-		var top: Color = Color("#5C9BE6").lerp(tint, 0.28)
-		var bottom: Color = Color("#2D5EB0").lerp(tint.darkened(0.3), 0.25)
-		draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(w, 0), Vector2(w, h), Vector2(0, h)]),
-				PackedColorArray([top, top, bottom, bottom]))
-		var x: float = -h
-		while x < w:  # diagonal stripes
-			draw_colored_polygon(PackedVector2Array([Vector2(x, h), Vector2(x + h, 0), Vector2(x + h + 26.0, 0),
-					Vector2(x + 26.0, h)]), Color(1, 1, 1, 0.05))
-			x += 64.0
-		var c := Vector2(w - 120.0, h - 90.0)  # Poké Ball watermark
-		var wm: Color = Color(1, 1, 1, 0.08)
-		draw_arc(c, 190.0, 0.0, TAU, 96, wm, 22.0, true)
-		draw_line(c - Vector2(190, 0), c + Vector2(190, 0), wm, 22.0)
-		draw_circle(c, 52.0, wm)

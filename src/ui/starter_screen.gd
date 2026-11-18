@@ -68,8 +68,8 @@ func _make_choice_widget(data: GameData, pokemon_id: String, index: int) -> Butt
 	var sprite := TextureRect.new()
 	sprite.name = "Sprite"
 	sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sprite.texture = CardView.cropped_sprite(String(info["sprite_path"]))  # 96 px sources have wide margins
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.custom_minimum_size = SPRITE_SIZE
+	PokemonArt.apply(sprite, String(info["sprite_path"]))  # story 033: official artwork
 	sprite.custom_minimum_size = SPRITE_SIZE
 	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

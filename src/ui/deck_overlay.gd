@@ -339,8 +339,7 @@ func _make_team_row(row: Dictionary) -> Control:
 	h.add_theme_constant_override("separation", 16)
 	panel.add_child(h)
 	var sprite := TextureRect.new()
-	sprite.texture = CardView.cropped_sprite(String(row["sprite"]))
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	PokemonArt.apply(sprite, String(row["sprite"]))  # story 033: official artwork
 	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	sprite.custom_minimum_size = Vector2.ONE * TEAM_SPRITE_SIDE

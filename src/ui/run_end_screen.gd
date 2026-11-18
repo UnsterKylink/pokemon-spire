@@ -102,7 +102,7 @@ func setup(data: GameData, run: RunState, victory: bool) -> void:
 				run.league_stage + 1, run.league.size()]
 	else:
 		_subtitle.text = TEXT_DEFEAT_SUB_ZONES % [String(s["name"]), int(s["zone"]), int(s["zone_count"]), String(zone["type_name"])]
-	_sprite.texture = CardView.cropped_sprite(String(s["sprite"]))
+	PokemonArt.apply(_sprite, String(s["sprite"]))  # story 033: official artwork
 	_sprite.modulate = Color.WHITE if victory else Color(0.6, 0.6, 0.65, 0.85)
 	_name_label.text = String(s["name"])
 	var types: Array[String] = []

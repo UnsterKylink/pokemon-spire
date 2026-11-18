@@ -81,7 +81,7 @@ func _init() -> void:
 	box.add_child(_encounter)
 	_sprite = TextureRect.new()
 	_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_sprite.custom_minimum_size = SPRITE_SIZE
@@ -128,7 +128,7 @@ func setup(info: Dictionary) -> void:
 	for path: Variant in info.get("team", []):
 		var t := TextureRect.new()
 		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		t.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		t.custom_minimum_size = TEAM_SPRITE_SIZE
@@ -173,4 +173,4 @@ func _unhandled_input(event: InputEvent) -> void:
 static func _load(path: String) -> Texture2D:
 	if path.is_empty() or not ResourceLoader.exists(path):
 		return null
-	return CardView.cropped_sprite(path)
+	return PokemonArt.texture_for_sprite(path)  # story 033: official artwork

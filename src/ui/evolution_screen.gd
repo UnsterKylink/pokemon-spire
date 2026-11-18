@@ -330,8 +330,7 @@ func _form_panel(caption: String, pokemon_name: String, sprite_path: String, typ
 	var sprite := TextureRect.new()
 	sprite.name = "Sprite"
 	sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sprite.texture = CardView.cropped_sprite(sprite_path)
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	PokemonArt.apply(sprite, sprite_path)  # story 033: official artwork
 	sprite.custom_minimum_size = SPRITE_SIZE
 	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -372,8 +371,7 @@ func _team_row(row: Dictionary) -> PanelContainer:
 	for side: String in ["from", "to"]:
 		var sprite := TextureRect.new()
 		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sprite.texture = CardView.cropped_sprite(String(row.get(side + "_sprite", "")))
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		PokemonArt.apply(sprite, String(row.get(side + "_sprite", "")))  # story 033
 		sprite.custom_minimum_size = TEAM_SPRITE_SIZE
 		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

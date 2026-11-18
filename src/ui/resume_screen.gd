@@ -143,8 +143,7 @@ func _set_lines(texts: Array[String]) -> void:
 func _make_sprite(path: String) -> TextureRect:
 	var sprite := TextureRect.new()
 	sprite.name = "Sprite"
-	sprite.texture = CardView.cropped_sprite(path)
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	PokemonArt.apply(sprite, path)  # story 033: official artwork
 	sprite.custom_minimum_size = SPRITE_SIZE
 	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

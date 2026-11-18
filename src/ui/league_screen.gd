@@ -119,7 +119,7 @@ func setup(data: GameData, run: RunState, last_heal: int) -> void:
 		var ids: Array[String] = data.get_encounter_enemy_ids(String(fight.get("encounter", "")))
 		if not ids.is_empty():
 			var path: String = String(data.get_pokemon_info(ids[0]).get("sprite_path", ""))
-			_boss_sprite.texture = CardView.cropped_sprite(path) if not path.is_empty() else null
+			PokemonArt.apply(_boss_sprite, path)  # story 033: official artwork
 			_boss_sprite.visible = _boss_sprite.texture != null
 	_list_caption.text = TEXT_LIST % [stage + 1, run.league.size()]
 	_list_caption.visible = not _boss_intro  # the final-boss intro needs the room for the sprite (fits 1280x720)
