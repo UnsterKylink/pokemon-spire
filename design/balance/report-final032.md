@@ -1,49 +1,58 @@
-# Rapport d'équilibrage — s032h
+> **Story 032 — résumé.** Zones de 4 étages (3 salles + l'arène) ; règle légère de l'arène sur les combats sauvages / élites
+> de la zone ; cartes et objets du type de la zone plus fréquents. Cible joueur vs résultat (2000 parties, graine 1) :
+> victoires complètes **35.0 %** (cible ≈ 35 %) ; ≥ 3 badges **80.0 %** (≥ 75 %) ; Conseil 4 atteint **60.9 %** (≥ 50 %) ;
+> défaites en zone 1 **4.2 %** (≤ 5 %) ; étape la plus meurtrière Éthernatos **17.4 %** des défaites (≤ ~20 %) ;
+> **combats par partie gagnée : 29.2** (avant ≈ 45–50 ; cible 25–30). Types de starter 20.0–47.5 %.
+> Robustesse (300 parties, graine 7, `report-rob032.md`) : 39.7 % (IC 34.3–45.3), zone 1 4.0 %, 29.3 combats par partie gagnée.
+> Leviers : évolutions d'équipe [4, 9] → [2, 5], 4 cartes proposées (au lieu de 3), raretés 50/35/15, arènes et combats de zone
+> allégés (zone 1 ×0.5), élites ×1.1 PV, soin de Ligue 22 %, Éthernatos ×1.0. Détail : `changes.md` (section Story 032).
 
-Parties simulées : **2000** (commit dba6d71, données modifiées non commitées). 
+# Rapport d'équilibrage — final032
+
+Parties simulées : **2000** (commit 6db7dba, données modifiées non commitées). 
 
 ## Résultat
 
-- Victoires complètes (8 badges + Conseil 4 + Maître + Éthernatos) : **709 / 2000 = 35.4 %** (IC 95 % Wilson : 33.4 – 37.6 %)
+- Victoires complètes (8 badges + Conseil 4 + Maître + Éthernatos) : **700 / 2000 = 35.0 %** (IC 95 % Wilson : 32.9 – 37.1 %)
 - Objectif joueur : environ 35 % des parties complètes gagnées.
 
 ## Où les parties se terminent (distribution des défaites)
 
 | Étape | Parties arrêtées | % des parties | % de celles qui l'atteignent |
 |---|---:|---:|---:|
-| zone1_wild | 5 | 0.2 % | 0.2 % |
+| zone1_wild | 4 | 0.2 % | 0.2 % |
 | zone1_elite | 15 | 0.8 % | 0.8 % |
 | zone1_boss | 64 | 3.2 % | 3.2 % |
 | zone2_wild | 3 | 0.1 % | 0.2 % |
-| zone2_elite | 40 | 2.0 % | 2.1 % |
-| zone2_boss | 85 | 4.2 % | 4.5 % |
+| zone2_elite | 41 | 2.0 % | 2.1 % |
+| zone2_boss | 87 | 4.3 % | 4.6 % |
 | zone3_wild | 6 | 0.3 % | 0.3 % |
-| zone3_elite | 48 | 2.4 % | 2.7 % |
-| zone3_boss | 83 | 4.2 % | 4.8 % |
+| zone3_elite | 49 | 2.5 % | 2.8 % |
+| zone3_boss | 85 | 4.2 % | 4.9 % |
 | zone4_wild | 6 | 0.3 % | 0.4 % |
-| zone4_elite | 77 | 3.9 % | 4.7 % |
-| zone4_boss | 99 | 5.0 % | 6.3 % |
+| zone4_elite | 75 | 3.8 % | 4.6 % |
+| zone4_boss | 96 | 4.8 % | 6.1 % |
 | zone5_wild | 5 | 0.2 % | 0.3 % |
 | zone5_elite | 22 | 1.1 % | 1.5 % |
-| zone5_boss | 35 | 1.8 % | 2.4 % |
-| zone6_wild | 9 | 0.5 % | 0.6 % |
+| zone5_boss | 33 | 1.6 % | 2.3 % |
+| zone6_wild | 10 | 0.5 % | 0.7 % |
 | zone6_elite | 29 | 1.4 % | 2.1 % |
-| zone6_boss | 45 | 2.2 % | 3.3 % |
+| zone6_boss | 41 | 2.0 % | 3.0 % |
 | zone7_wild | 1 | 0.1 % | 0.1 % |
-| zone7_elite | 7 | 0.3 % | 0.5 % |
-| zone7_boss | 16 | 0.8 % | 1.2 % |
+| zone7_elite | 4 | 0.2 % | 0.3 % |
+| zone7_boss | 17 | 0.8 % | 1.3 % |
 | zone8_wild | 1 | 0.1 % | 0.1 % |
-| zone8_elite | 3 | 0.1 % | 0.2 % |
+| zone8_elite | 2 | 0.1 % | 0.2 % |
 | zone8_boss | 15 | 0.8 % | 1.2 % |
-| league_member_1 | 79 | 4.0 % | 6.2 % |
-| league_member_2 | 38 | 1.9 % | 3.2 % |
-| league_member_3 | 28 | 1.4 % | 2.4 % |
-| league_member_4 | 27 | 1.4 % | 2.4 % |
-| league_champion | 48 | 2.4 % | 4.3 % |
-| league_eternatus | 260 | 13.0 % | 24.5 % |
-| **Victoire** | 709 | 35.5 % | - |
+| league_member_1 | 83 | 4.2 % | 6.4 % |
+| league_member_2 | 42 | 2.1 % | 3.5 % |
+| league_member_3 | 39 | 1.9 % | 3.4 % |
+| league_member_4 | 43 | 2.1 % | 3.8 % |
+| league_champion | 66 | 3.3 % | 6.1 % |
+| league_eternatus | 226 | 11.3 % | 22.2 % |
+| **Victoire** | 700 | 35.0 % | - |
 
-Autres étapes (rival, combats d'événement) : `rival_final` (21), `zone2_event_elite` (2), `zone2_rival` (38), `zone3_event_legendary` (7), `zone4_event_legendary` (3), `zone4_rival` (7), `zone5_event_legendary` (4), `zone6_event_elite` (1), `zone6_event_legendary` (4), `zone6_rival` (3), `zone7_event_legendary` (1), `zone8_event_legendary` (1)
+Autres étapes (rival, combats d'événement) : `rival_final` (18), `zone2_event_elite` (2), `zone2_rival` (38), `zone3_event_legendary` (7), `zone4_event_legendary` (3), `zone4_rival` (7), `zone5_event_legendary` (4), `zone6_event_elite` (1), `zone6_event_legendary` (4), `zone6_rival` (4), `zone7_event_legendary` (1), `zone8_event_legendary` (1)
 
 Zones : `wild`/`elite` = salles de combat de la carte, `boss` = arène. « % de celles qui l'atteignent » = défaites à cette étape / parties encore en vie en y arrivant (étapes dans l'ordre de la partie).
 
@@ -51,106 +60,106 @@ Zones : `wild`/`elite` = salles de combat de la carte, `boss` = arène. « % de 
 
 | Badges | Parties |
 |---:|---:|
-| 0 | 84 |
-| 1 | 168 |
-| 2 | 144 |
-| 3 | 192 |
-| 4 | 66 |
-| 5 | 91 |
-| 6 | 25 |
-| 7 | 20 |
-| 8 | 1210 |
+| 0 | 83 |
+| 1 | 171 |
+| 2 | 147 |
+| 3 | 187 |
+| 4 | 64 |
+| 5 | 89 |
+| 6 | 23 |
+| 7 | 19 |
+| 8 | 1217 |
 
 ### Progression garantie (exigence joueur du 2026-10-24)
 
 | Mesure | Valeur | Repère joueur |
 |---|---:|---|
-| Parties avec au moins 3 badges | 80.2 % | >= 75 % |
-| Parties qui atteignent le Conseil 4 | 60.5 % | >= 50 % |
+| Parties avec au moins 3 badges | 80.0 % | >= 75 % |
+| Parties qui atteignent le Conseil 4 | 60.9 % | >= 50 % |
 | Défaites en zone 1 (toutes salles) | 4.2 % des parties | <= 5 % |
-| Étape la plus meurtrière : league_eternatus | 20.1 % des défaites (13.0 % des parties) | <= ~20 % des défaites |
-| Victoire parmi les parties qui atteignent Éthernatos | 73.2 % | difficile mais battable |
+| Étape la plus meurtrière : league_eternatus | 17.4 % des défaites (11.3 % des parties) | <= ~20 % des défaites |
+| Victoire parmi les parties qui atteignent Éthernatos | 75.6 % | difficile mais battable |
 
 ## PV perdus par zone (moyenne sur les parties qui y entrent)
 
 | Zone | Parties entrées | PV perdus / partie |
 |---|---:|---:|
 | Zone 1 | 2000 | 29.7 |
-| Zone 2 | 1916 | 77.9 |
-| Zone 3 | 1748 | 71.1 |
-| Zone 4 | 1604 | 91.7 |
-| Zone 5 | 1412 | 69.0 |
-| Zone 6 | 1346 | 95.4 |
-| Zone 7 | 1255 | 60.7 |
-| Zone 8 | 1230 | 118.6 |
-| Ligue | 1210 | 239.9 |
+| Zone 2 | 1917 | 77.9 |
+| Zone 3 | 1746 | 71.1 |
+| Zone 4 | 1599 | 91.9 |
+| Zone 5 | 1412 | 68.9 |
+| Zone 6 | 1348 | 94.7 |
+| Zone 7 | 1259 | 60.1 |
+| Zone 8 | 1236 | 118.3 |
+| Ligue | 1217 | 226.0 |
 
 ## Moyennes par partie
 
-- Combats : 20.9 (parties gagnées : 29.2); badges : 5.86
+- Combats : 20.9 (parties gagnées : 29.2); badges : 5.87
 - Taille du deck en fin de partie : 28.6 (parties gagnées : 34.8)
-- Potions utilisées : 2.73; potions achetées : 0.41; objets tenus : 11.09
+- Potions utilisées : 2.76; potions achetées : 0.42; objets tenus : 11.10
 
 ## Taux de défaite par type de salle
 
 | Salle | Combats | Défaites | Défaite / combat |
 |---|---:|---:|---:|
-| boss | 12163 | 442 | 3.6 % |
-| elite | 4232 | 244 | 5.8 % |
-| league | 6401 | 480 | 7.5 % |
-| legendary | 97 | 20 | 20.6 % |
-| legendary_seen | 191 | 0 | 0.0 % |
-| legendary_won | 77 | 0 | 0.0 % |
-| rival | 4866 | 48 | 1.0 % |
-| rival_final | 1210 | 21 | 1.7 % |
-| wild | 12822 | 36 | 0.3 % |
+| boss | 12172 | 438 | 3.6 % |
+| elite | 4237 | 240 | 5.7 % |
+| league | 6342 | 499 | 7.9 % |
+| legendary | 96 | 20 | 20.8 % |
+| legendary_seen | 189 | 0 | 0.0 % |
+| legendary_won | 76 | 0 | 0.0 % |
+| rival | 4864 | 49 | 1.0 % |
+| rival_final | 1217 | 18 | 1.5 % |
+| wild | 12834 | 36 | 0.3 % |
 
 ## Type du starter vs victoire
 
 | Type | Parties | Victoires | Taux |
 |---|---:|---:|---:|
-| normal | 313 | 84 | 26.8 % |
-| water | 303 | 146 | 48.2 % |
-| grass | 256 | 79 | 30.9 % |
-| bug | 224 | 62 | 27.7 % |
-| fire | 178 | 72 | 40.4 % |
+| normal | 313 | 87 | 27.8 % |
+| water | 303 | 144 | 47.5 % |
+| grass | 256 | 80 | 31.2 % |
+| bug | 224 | 65 | 29.0 % |
+| fire | 178 | 70 | 39.3 % |
 | electric | 101 | 40 | 39.6 % |
-| poison | 86 | 28 | 32.6 % |
-| dark | 75 | 32 | 42.7 % |
-| rock | 71 | 33 | 46.5 % |
-| ghost | 62 | 21 | 33.9 % |
-| psychic | 58 | 13 | 22.4 % |
-| ground | 57 | 20 | 35.1 % |
-| dragon | 43 | 14 | 32.6 % |
-| fairy | 41 | 19 | 46.3 % |
-| ice | 40 | 18 | 45.0 % |
-| fighting | 40 | 9 | 22.5 % |
-| steel | 36 | 11 | 30.6 % |
-| flying | 16 | 8 | 50.0 % |
+| poison | 86 | 27 | 31.4 % |
+| dark | 75 | 34 | 45.3 % |
+| rock | 71 | 31 | 43.7 % |
+| ghost | 62 | 18 | 29.0 % |
+| psychic | 58 | 14 | 24.1 % |
+| ground | 57 | 18 | 31.6 % |
+| dragon | 43 | 13 | 30.2 % |
+| fairy | 41 | 15 | 36.6 % |
+| ice | 40 | 17 | 42.5 % |
+| fighting | 40 | 8 | 20.0 % |
+| steel | 36 | 12 | 33.3 % |
+| flying | 16 | 7 | 43.8 % |
 
 ## Principaux tueurs (ennemis encore en vie à la défaite)
 
 | Ennemi | Parties terminées par lui |
 |---|---:|
-| eternatus | 260 |
-| machamp | 54 |
-| dragonite | 48 |
-| alakazam | 43 |
-| houndoom | 30 |
-| hitmonchan | 29 |
-| aegislash | 23 |
-| centiskorch | 22 |
-| espeon | 21 |
+| eternatus | 226 |
+| dragonite | 66 |
+| machamp | 65 |
+| alakazam | 48 |
+| hitmonchan | 38 |
+| houndoom | 37 |
+| aegislash | 28 |
+| gengar | 22 |
+| centiskorch | 21 |
+| espeon | 19 |
+| salamence | 18 |
+| probopass | 16 |
+| ceruledge | 16 |
 | simisear | 16 |
 | gholdengo | 16 |
-| lapras | 15 |
-| armarouge | 15 |
-| gengar | 15 |
-| ceruledge | 14 |
 
-Rencontres où l'on meurt le plus : `final_eternatus` (260), `league_fighting` (53), `league_champion` (48), `league_psychic` (43), `league_dark` (23), `league_steel` (23), `league_ice` (15), `league_ghost` (15), `legendary_rayquaza` (14), `elite_3` (5)
+Rencontres où l'on meurt le plus : `final_eternatus` (226), `league_champion` (66), `league_fighting` (64), `league_psychic` (48), `league_dark` (30), `league_steel` (28), `league_ghost` (22), `league_ice` (15), `legendary_rayquaza` (14), `elite_3` (5)
 
-Contrôles : combats bloqués (plafond de tours) = 11; actions refusées par le jeu = 0.
+Contrôles : combats bloqués (plafond de tours) = 10; actions refusées par le jeu = 0.
 
 ## Joueur automatique (« correct, pas expert »)
 

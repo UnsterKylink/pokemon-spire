@@ -44,7 +44,7 @@ func _go() -> void:
 	var gd := GameData.new()
 	ok(gd.load_all(), "data loads")
 	ok(gd.has_league() and gd.get_league_member_count() == 4 and gd.get_league_fight_count() == 6, "league counts")
-	ok(gd.get_league_heal_percent() == 25.0, "heal 25% (story 032; 031: 20, before: 40)")
+	ok(gd.get_league_heal_percent() == 22.0, "heal 22% (story 032; 031: 20, before: 40)")
 	var pool: Array[String] = gd.get_league_type_pool()
 	# 1. member draw: 4 distinct, not among gym types, deterministic
 	for s: int in range(1, 201):

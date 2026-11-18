@@ -175,3 +175,54 @@ Valeurs modifiées :
 Vérifiés, inchangés : Blizzard, Laser Glace, Fracass'Tête, Luminocanon, Machination (leur excès venait surtout de l'Élan à 5 ; aucune n'apparaît comme facteur après le plafond 3), objets (`items.json`, prix / butin de `shop.json` ; Éclat Magique passe mécaniquement de plafond 7 à 5), soins du Centre et des badges (`badge_heal_percent` 50), rareté des récompenses, argent, PV / énergie / deck du joueur, rival, légendaires, événements. Le vocabulaire `burn_costliest_card` reste disponible (testé par t30) mais n'est plus utilisé.
 
 Attentes de tests mises à jour (valeurs de données seulement) : `tests/scratch/t27_talent_elan.gd` (plafond Élan 5 → 3, Brasier +2 → +1 : 11 assertions), `tests/scratch/t29_items.gd` (Éclat Magique 5 → 7 devient 3 → 5, plafond sans objet 3, Élan avant changement 3, Scope Lens garde floor(3 × 50 %) = 1 : 5 assertions).
+
+## Story 032 — rythme de la partie (4 étages par zone) et règles de zone
+
+Contexte : chaque zone passe de 6 à 4 étages (1 = combat sauvage, ou le rival dans les zones 2/4/6 ; 2 = étage libre avec au
+moins une option élite ; 3 = Centre Pokémon ; 4 = arène). Une partie gagnée passe d'environ 45–50 combats à **29.2** (simulateur).
+Chaque zone applique une règle légère (`zone_<type>` de field_rules.json) à ses combats sauvages et élites, et favorise les
+cartes / objets du type de l'arène (rewards.json `zone_type_bias`). Moins de combats = moins de récompenses, d'où le rééquilibrage.
+
+Itérations (graine 1, joueur auto inchangé) :
+
+| Itér. | Parties | Victoires | ≥ 3 badges | Conseil 4 | Combats / partie gagnée | Décision |
+|---|---:|---:|---:|---:|---:|---|
+| 032-a (structure seule) | 400 | 15.8 % | 61.5 % | 32.0 % | 28.8 | joueur trop faible : moins de cartes, d'évolutions et d'améliorations |
+| 032-b | 400 | 14.8 % | 67.0 % | 34.0 % | 28.7 | évolutions d'équipe [4, 9] → [2, 5] ; raretés des récompenses 60/30/10 → 50/35/15 |
+| 032-c | 400 | 22.0 % | 73.0 % | 49.0 % | 29.1 | arènes / combats de zone allégés (tableau ci-dessous) |
+| 032-d | 400 | 26.8 % | 73.0 % | 51.8 % | 29.1 | cartes proposées 3 → 4 |
+| 032-e | 400 | 30.8 % | 80.5 % | 56.8 % | 29.2 | arènes zones 1–3 encore allégées (zone 1 ×0.5) |
+| 032-f | 800 | 31.2 % | 81.8 % | 59.8 % | 29.1 | élites ×1.2 → ×1.1 PV |
+| 032-g | 800 | 38.1 % | 81.8 % | 59.9 % | 29.1 | soin entre combats de Ligue 20 → 30 %, arène zone 4 ×0.95 |
+| 032-h | 2000 | 35.4 % | 80.2 % | 60.5 % | 29.2 | soin Ligue 25 % ; Éthernatos 20.1 % des défaites |
+| 032-i | 2000 | 35.4 % | 80.0 % | 60.9 % | 29.2 | règles de zone Plante / Fée : plus de soin des ennemis (un combat bloqué par soin + deck sans dégâts) ; Éthernatos 20.7 % |
+| 032-j | 2000 | 37.8 % | 80.0 % | 60.9 % | 29.2 | Éthernatos PV ×1.05 → ×1.0 |
+| **final032** | **2000** | **35.0 %** (IC 32.9–37.1) | **80.0 %** | **60.9 %** | **29.2** | soin Ligue 22 % ; zone 1 4.2 % ; étape max Éthernatos 17.4 % des défaites ; types de starter 20.0–47.5 % → `report-final032.md` |
+| rob032 (graine 7) | 300 | 39.7 % (IC 34.3–45.3) | 81.0 % | 67.3 % | 29.3 | zone 1 4.0 % ; Éthernatos 23.8 % des défaites (petit échantillon) — cohérent avec rob031 (39.3 %) |
+
+Valeurs modifiées :
+
+| Fichier | Clé | Avant | Après | Pourquoi |
+|---|---|---|---|---|
+| act1.json | map.floors | 6 | 4 | rythme : partie gagnée ≈ 1 h – 1 h 15 (choix du joueur) |
+| act1.json | placement.forced_floors | 1 wild, 5 center, 6 boss | 1 wild, 3 center, 4 boss | Centre toujours juste avant l'arène |
+| act1.json | placement.guaranteed_rooms (nouveau) | — | {"2": ["elite"]} | chaque zone garde une option élite (étage 2 avec ≥ 2 salles) |
+| act1.json | room_types.elite.min_floor | 3 | 2 | l'étage 2 est le seul étage libre |
+| act1.json | room_types.center.min_floor / boss.min_floor | 4 / 6 | 3 / 4 | nouveaux étages |
+| act1.json | room_types.rival.min_floor | 2 | 1 | rival à l'étage 1 des zones 2/4/6 |
+| act1.json | room_types.elite.modifiers.hp_multiplier | 1.2 | 1.1 | élites trop meurtrières pour un deck plus petit (s'applique aussi au rival) |
+| zones.json | zone_overrides 2/4/6 forced_floors | 1 wild, 3 rival, 5 center, 6 boss | 1 rival, 3 center, 4 boss | le rival ouvre la zone ; l'étage 2 reste libre (élite / Mart / événement) |
+| zones.json | gym_types[*].zone_rule (nouveau) | — | zone_<type> | règle de zone (18 types) |
+| zones.json | tiers[1..8].gym_modifiers (×PV +Force) | 0.7+0, 1.0+1, 1.05+1, 1.15+2, 1.2+3, 1.25+3, 1.3+4, 1.35+4 | 0.5+0, 0.8+1, 0.9+1, 0.95+1, 1.1+2, 1.15+2, 1.2+3, 1.25+3 | moins de combats avant chaque arène (deck, évolutions, améliorations) |
+| zones.json | tiers[1..8].modifiers (sauvages / élites) | 0.7+0, 0.95+1, 1.05+1, 1.1+1, 1.15+2, 1.2+2, 1.25+3, 1.3+3 | 0.7+0, 0.9+1, 0.95+1, 1.0+1, 1.05+2, 1.1+2, 1.15+3, 1.2+3 | idem |
+| pokemon.json | team_evolution.battles_per_stage | [4, 9] | [2, 5] | ~2 fois moins de combats par zone |
+| rewards.json | offer_count | 3 | 4 | moins de récompenses : plus de choix à chacune |
+| rewards.json | rarity_weights | 60 / 30 / 10 | 50 / 35 / 15 | idem |
+| rewards.json | zone_type_bias (nouveau) | — | reward_cards 0.3, shop_cards 0.3, items 0.4 | récompenses thématiques |
+| league.json | heal_percent_between_fights | 20 | 22 | le joueur arrive plus faible à la Ligue |
+| league.json | final_boss.modifiers.hp_multiplier | 1.05 | 1.0 | Éthernatos > 20 % des défaites |
+| field_rules.json | rules.zone_* (18, nouveau) | — | voir field_rules.json | ≈ moitié de la règle d'arène, ou plus espacée ; Plante = Spores (Sommeil 1 tous les 5 tours), Fée = Vulnérable 1 tous les 4 tours (pas de soin des ennemis : risque de combat bloqué) |
+
+Inchangés : evolution_after_badges [1, 4] (toujours après les badges 1 et 4), badge_rewards, loot / prix (shop.json),
+Centre (soin 50 % ou amélioration), Conseil 4 / Maître, politique du joueur auto. Contrôles : 10 combats bloqués sur 2000
+parties (031 : 5), surtout des arènes de zone 1 (règles d'arène existantes), 0 action refusée.

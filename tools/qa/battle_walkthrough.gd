@@ -28,8 +28,12 @@ extends SceneTree
 ## Story 018 (rival room on the zone-2 map, rival intro / fight / reward, event with a greyed option, card removal picker,
 ## legendary event / solo fight / legendary card, pre-league rival; see _rival_shots; filter `story-018`).
 ## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
+## Story 032 (4-floor zone maps with the « Règle de zone » banner line, wild fight with the zone-rule banner / pill; see
+## _pacing_shots; filter `story-032`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
+## Story 032: run seed of the pacing shots (zone maps / zone rule).
+const PACING_SEED: int = 3232
 const ORIGINAL_ENEMIES: Array[String] = ["rattata", "pidgey", "caterpie", "weedle", "zubat", "geodude", "poliwag", "oddish", "pikachu"]
 const ROSTER_SEED: int = 12345
 const ROSTER_TRIO_PREFIX: String = "trio_r"
@@ -1941,7 +1945,63 @@ func _enemies_shots() -> void:
 	await _shot("08-ethernatos-phase2-intention")
 
 
+## Story 032 (filter `story-032`): 4-floor zone maps of zones 1 and 4 with the zone banner and its « Règle de zone » line,
+## a wild fight of zone 1 with the zone-rule banner then the « Zone : … » pill, and the map after that room (header line).
+func _pacing_shots() -> void:
+	_main.forced_starter_id = "salameche"
+	_main.start_new_run(PACING_SEED)
+	await create_timer(0.3).timeout
+	_pacing_map_line("032 zone 1 map")
+	await _shot("01-carte-zone-1-regle")
+	_main.map_choose(_main.map_reachable_ids()[0])
+	await create_timer(0.4).timeout
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null:
+		print("032 wild fight: rule=%s pill=\"%s\" banner=%s enc=%s" % [bs.get_battle().get_field_rule(), bs.get_field_rule_pill_text(),
+				bs.get_field_banner() != null, bs.get_encounter_id()])
+		await _shot("02-combat-sauvage-banniere-zone")
+		await create_timer(4.2).timeout
+		print("032 after banner: pill=\"%s\" tooltip=\"%s\"" % [bs.get_field_rule_pill_text(), _pill_tooltip(bs)])
+		await _shot("03-combat-sauvage-pastille-zone")
+		_main.qa_win_current_fight()
+		await create_timer(0.3).timeout
+		if _main.get_current_screen_name() == "reward":
+			_main.reward_skip()
+		_drain_team_evolution()
+		await create_timer(0.3).timeout
+		_pacing_map_line("032 zone 1 after room")
+		await _shot("04-carte-zone-1-etage-1")
+	else:
+		print("032: floor 1 is not a fight (%s)" % _main.get_current_screen_name())
+	_main.qa_set_zone(3)
+	await create_timer(0.3).timeout
+	_pacing_map_line("032 zone 4 map")
+	await _shot("05-carte-zone-4-regle")
+
+
+func _pacing_map_line(tag: String) -> void:
+	var ms: MapScreen = _main.get_map_screen()
+	if ms == null:
+		print("%s: no map (%s)" % [tag, _main.get_current_screen_name()])
+		return
+	var run: RunState = _main.get_run_state()
+	var floors: Array[String] = []
+	for f: int in range(1, run.act.graph.floors + 1):
+		floors.append("%d:%s" % [f, ",".join(run.act.graph.get_floor_nodes(f).map(func(n: MapNode) -> String: return n.room_type))])
+	print("%s: title=\"%s\" banner=\"%s\" rule=\"%s\" info=\"%s\" floors=%s" % [tag, ms.get_title_text(), ms.get_banner_text(),
+			ms.get_banner_rule_text(), ms.get_info_text(), floors])
+
+
+func _pill_tooltip(bs: BattleScreen) -> String:
+	var pill: Control = bs.find_child("FieldRulePill", true, false) as Control
+	return pill.tooltip_text if pill != null else "?"
+
+
 func _run() -> void:
+	if _filter == "story-032":
+		await _pacing_shots()
+		quit(0)
+		return
 	if _filter == "options":
 		await _options_shots()
 		quit()
