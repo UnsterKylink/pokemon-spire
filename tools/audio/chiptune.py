@@ -661,7 +661,7 @@ def decode(path):
 
 def check():
     """Objective stats of every rendered track: duration, peak, RMS, silent windows, loop seam."""
-    print("%-16s %6s %6s %7s %7s %6s %9s %8s %6s" % ("track", "dur_s", "bpm", "peakdB", "rmsdB", "sil%", "seam_jump", "edge_dB", "kB"))
+    print("%-16s %6s %6s %7s %7s %6s %9s %8s %6s" % ("track", "dur_s", "bpm", "peakdB", "rmsdB", "sil%", "seam/p95", "edge_dB", "kB"))
     worst = []
     for tid, song in SONGS.items():
         path = os.path.join(OUT_DIR, tid + ".ogg")
@@ -678,7 +678,7 @@ def check():
         win = y[:len(y) // w * w].reshape(-1, w)
         wr = 20 * np.log10(np.maximum(np.sqrt(np.mean(win ** 2, axis=1)), 1e-9))
         sil = 100.0 * np.mean(wr < -45)
-        typical = float(np.median(np.abs(np.diff(y)))) or 1e-9
+        typical = float(np.percentile(np.abs(np.diff(y)), 95)) or 1e-9  # seam jump in units of a normal p95 sample step (< 1 = invisible)
         jump = abs(y[-1] - y[0]) / typical
         e = int(0.2 * OUT_SR)
         edge = 20 * math.log10(max(math.sqrt(np.mean(y[-e:] ** 2)), 1e-9)) - 20 * math.log10(max(math.sqrt(np.mean(y[:e] ** 2)), 1e-9))
@@ -690,6 +690,18 @@ def check():
     print("flagged:", worst or "none")
 
 
+def set_import_loop(path, loop):
+    """Writes loop=true/false into the Godot .import of a rendered OGG (created by `godot --headless --import`)."""
+    imp = path + ".import"
+    if not os.path.exists(imp):
+        return False
+    text = open(imp).read()
+    new = re.sub(r"(?m)^loop=(true|false)$", "loop=%s" % ("true" if loop else "false"), text)
+    if new != text:
+        open(imp, "w").write(new)
+    return True
+
+
 def main(argv):
     if "--check" in argv:
         check()
@@ -698,6 +710,8 @@ def main(argv):
     for tid in ids:
         y, info = render_song(tid)
         path = encode(tid, y)
+        if not set_import_loop(path, info["loop"]):
+            print("  (no .import yet: run godot --headless --path . --import, then this script again to set loop)")
         print("%-16s %5.1f s  %3d bpm  %2d bars  loop=%s  -> %s" % (tid, len(y) / OUT_SR, info["bpm"], info["bars"], info["loop"], path))
 
 

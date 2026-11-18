@@ -6,11 +6,14 @@
 > **Story 020b « Refonte premium »** (retour joueur : « ça fait jeu flash ») : polices embarquées, textures de matière
 > générées en code (Python PIL, `assets/art/ui/`), cadres de carte selon la rareté, effet holographique, survol animé,
 > finition d'image globale (`PostFx`). Shaders : `src/ui/shaders/` (`card_*`, `ui_*`, `post_*`).
+> **Story 033 « Cohérence visuelle »** : **un seul langage d'interface** — les fenêtres « menu Pokémon » (cadre bleu épais,
+> boîte blanche, texte sombre) de la carte sont devenues le style par défaut de tous les écrans (§4 bis), et **un seul
+> style de Pokémon hors combat** — l'illustration officielle HD (§9). Les sprites animés restent réservés au combat.
 
 ## 1. Principes
 
 - Formes **arrondies**, aplats **vifs**, **contour sombre épais** (2–3 px, `OUTLINE`), dégradés **doux** (2 teintes proches, jamais d'arc-en-ciel).
-- Lisibilité d'abord : texte clair sur fond sombre **ou** texte sombre sur fond crème ; jamais de texte posé directement sur une couleur de type vive sans contour.
+- Lisibilité d'abord : texte sombre sur fenêtre blanche / crème (cas général depuis la story 033) **ou** texte clair à contour sombre sur le fond bleu / un décor ; jamais de texte posé directement sur une couleur de type vive sans contour.
 - Écran **1280×720** fixe : rien de coupé, rien qui se chevauche. Marge minimale 8 px au bord de l'écran.
 - Un relief « jeu mobile » : bas de bouton plus sombre (4 px), ombre portée douce (4–6 px, noir 35 %).
 - Les couleurs ne sont **pas seules porteuses d'information** : chaque couleur de type ou de rareté est doublée d'un texte (nom du type, nom de la rareté).
@@ -82,9 +85,32 @@ Carte 170×200 : nom 15, coût 18, description 13 (rétrécit jusqu'à 10 si né
 ## 4. Cadres
 
 - Panneau : rayon **14**, contour **3 px** `OUTLINE`, fond `BG_PANEL`, ombre 6 px noir 35 %, marges internes 12/10.
-- Bouton : rayon **12**, contour 2 px `OUTLINE` + **bas 5 px** couleur foncée (relief). Survol : +12 % clair. Appuyé : bas 2 px (le bouton « s'enfonce »). Désactivé : gris `#5A6078`, texte `#A0A6BC`. Focus clavier : anneau `ACCENT_YELLOW` 3 px.
+- Bouton : rayon **12**, contour 2 px `OUTLINE` + **bas 5 px** couleur foncée (relief). Survol : +12 % clair. Appuyé : bas 2 px (le bouton « s'enfonce »). Texte blanc **sans contour** (story 033). Désactivé : **gris clair `#C9CEDA`, texte gris foncé `#555C72`** (grisé mais lisible, story 033 ; avant : `#5A6078` / `#A0A6BC`, illisible). Focus clavier : anneau `ACCENT_YELLOW` 3 px.
 - Pastille (badge de type, statut) : rayon 9, contour 2 px, texte 13–16.
 - **Finition matière (020b, `ui_sheen.gdshader`)** posée par `style_screen` sur chaque panneau / bouton opaque (StyleBoxFlat inchangé dessous, même rayon, sous le contour) : grain du bruit généré, léger marbrage, lumière douce en haut / ombre en bas, **liseré clair interne** sous le bord haut (biseau). Boutons : lumière plus marquée (dégradé + reflet), pas de grain fort. Panneaux et boutons transparents (< 50 %) : pas de finition.
+
+### 4 bis. Fenêtre « menu Pokémon » (story 033 — style par défaut de tous les écrans)
+
+Reprise des fenêtres de la carte (story 020b) et généralisée. Code : `UiStyle.menu_panel()` (un seul `StyleBox`, `MenuBox`),
+`UiStyle.menu_frame()` / `menu_inner()` (les deux boîtes séparées), `UiStyle.menu_sub_panel()`, `UiStyle.dark_label()`,
+fond d'écran `MenuBackdrop`.
+
+| Élément | Valeur |
+|---|---|
+| Cadre | bande `FRAME_BLUE #4F86D9` de **5 px**, contour `FRAME_OUTLINE #1B2440` 3 px, rayon 18, ombre 6 px |
+| Boîte | blanc `PANEL_WHITE #FBFCFF`, liseré 2 px du cadre assombri de 35 %, rayon 13 |
+| Sous-boîte (ligne, case, panneau imbriqué) | `SUB_FILL #EAF1FC`, liseré bleu clair 2 px, rayon 10 |
+| Texte | `TEXT_DARK #1E2233` ; secondaire `TEXT_SUB #4A5578` ; accents lisibles sur blanc : `INK_GOLD #9A6B00`, `INK_GREEN #1F7A35`, `INK_RED #B3261E` |
+| Fond d'écran | `MenuBackdrop` : dégradé bleu `#5C9BE6` → `#2D5EB0` (teinté par le type de la zone sur la carte), rayures diagonales blanches 5 %, grande Poké Ball en filigrane 8 % |
+| Titres posés sur le fond | look logo (jaune, contour bleu) ou blanc à contour sombre |
+| Cadres d'accent | légendaire : cadre or `#D9A520` ; capture : cadre rouge `ACCENT_RED` ; bannière de règle : cadre de la couleur de la règle |
+
+`UiStyle.style_screen(root)` applique ce style automatiquement : ajoute le `MenuBackdrop` (sauf pour les surcouches :
+`style_screen(root, false)` — deck, options, sélecteur de carte, intro du rival), masque le fond sombre plein écran de
+l'écran, transforme chaque panneau sombre en fenêtre blanche (imbriqué : sous-boîte claire), chaque bouton sombre en bouton
+bleu standard, et donne à chaque texte posé sur du clair une encre sombre (`UiStyle.ink_on_white` : blanc → `TEXT_DARK`,
+gris clair → `TEXT_SUB`, couleurs vives assombries jusqu'à être lisibles) — revérifié plusieurs fois par seconde pour
+suivre les couleurs posées plus tard. Les cartes (`CardFace`) et les nœuds marqués `menu_keep` ne sont pas touchés.
 
 ### Textures générées (`assets/art/ui/`, 512 px sauf bruit 256 px, raccordables)
 | Fichier | Matière | Usage |
@@ -201,3 +227,36 @@ Plus de Poké Ball : la fenêtre montre l'**effet principal** de la carte, dessi
 | Grain | ±2,2 %, rafraîchi 12 fois / s | grain de film, pas de scintillement |
 | Halo | **désactivé** (`halo_strength` 0, seuil 0,92) | voilait les décors clairs et adoucissait le texte ; réglage disponible |
 Coût : 1 appel de dessin + 1 copie d'écran par image, 2 lectures de texture par pixel (18 avec le halo). `set_enabled(false)` coupe tout (future option graphique).
+
+## 9. Story 033 — cohérence visuelle
+
+### Pokémon hors combat : illustration officielle
+`PokemonArt.texture_for(slug)` / `texture_for_sprite(sprite_path)` / `apply(rect, sprite_path)` : l'artwork officiel
+`assets/sprites/artwork/<slug>.png` (256 px, filtrage lissé), repli sur le sprite pixel recadré (filtrage net). Utilisé sur
+le choix du starter (180 px), l'évolution (avant / après, équipe), l'intro du rival (meneur + équipe), l'onglet Équipe du
+deck, les événements (dont légendaires), la ligne de capture de l'écran de récompense, la fin de partie, la reprise et la
+Route Victoire. **Combat** : sprites animés uniquement ; les sprites **de dos** sont dessinés à une **échelle entière**,
+position au pixel près, filtre « nearest » (nets au lieu d'un flou étiré ×2,2).
+
+### Événements illustrés (sans nouvelle image)
+Fond = décor peint du combat de la zone (`assets/art/backdrops/<type>.jpg`, repli `route` ; légendaires : `legendary`),
+**flouté** (réduction par moitiés successives puis agrandissement lissé) et **assombri** (voile `#0A0F24` 42 %), bande noire
+du bas retirée. À gauche, l'illustration (`events.json` → `art` : `{"pokemon": slug}`, `{"item": id}`, `{"rival": true}` =
+Pokémon actuel du rival ; légendaires : leur Pokémon) sur un halo radial blanc (or pour les légendaires) et une ombre au sol ;
+à droite la fenêtre menu (760 px ; 940 px sans illustration).
+
+### Combat
+- Mode capture : **une seule fenêtre** (cadre rouge) en bas, au-dessus de la main (atténuée à 35 %) : une ligne par ennemi
+  (nom + un bouton par Ball avec ses chances, ou « Non capturable ») ; plus rien sur les ennemis.
+- « Super efficace ! » part du milieu du sprite (`EFFECTIVENESS_FLOAT_Y`) : il ne recouvre plus l'intention.
+- Bannière de règle de zone : fenêtre menu, titre 24 / texte 17, 430 px, centrée à 56 % de la largeur et à 34 % de la
+  hauteur, visible 1,8 s (`animations.json` → `field_rule`) : les textes de Talent (colonne du joueur) restent lisibles.
+
+### Mart
+Articles en tuiles claires (cadre de la couleur de rareté / d'accent) ; vendus / pleins / trop chers : tuile gris clair
+`#E4E7EE`, contenu à 72 % (cartes : teinte grise 62 %) — grisés mais lisibles.
+
+### Transitions
+Fondu d'écran : voile `#0A0D1A` qui disparaît en **0,22 s** (`animations.json` → `screen_transition`, divisé par la
+vitesse d'animation) à chaque changement d'écran (`Main._set_screen`) ; **aucun** en vitesse « Instantané » ni sans fenêtre.
+

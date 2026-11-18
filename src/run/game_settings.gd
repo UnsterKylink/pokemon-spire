@@ -43,3 +43,17 @@ static func set_value(key: String, value: Variant) -> void:
 ## True when the type-effectiveness hint is on.
 static func type_hints_enabled() -> bool:
 	return get_bool(KEY_TYPE_HINTS)
+
+
+## Story 022: music volume 0..1 (read / written by AudioManager; default from assets/data/audio.json).
+const KEY_MUSIC_VOLUME: String = "music_volume"
+## Story 022: sound-effect volume 0..1 (also scales the Pokemon cries).
+const KEY_SFX_VOLUME: String = "sfx_volume"
+
+
+## A numeric setting, or `fallback` when absent or not a number.
+static func get_float(key: String, fallback: float) -> float:
+	var value: Variant = load_all().get(key, null)
+	if value is float or value is int:
+		return float(value)
+	return fallback

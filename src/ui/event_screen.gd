@@ -45,7 +45,7 @@ const BACKDROP_EXTENSIONS: Array[String] = ["jpg", "png"]
 const BACKDROP_FALLBACK: String = "route"
 const BACKDROP_LEGENDARY: String = "legendary"
 ## Downscale factor of the backdrop blur (bigger = blurrier) and the darkening veil over it.
-const BACKDROP_BLUR: int = 14
+const BACKDROP_BLUR: int = 24
 const BACKDROP_VEIL: Color = Color(0.04, 0.06, 0.14, 0.42)
 const ART_SIDE: float = 330.0
 const ART_ITEM_INSET: float = 62.0
@@ -467,6 +467,7 @@ func _apply_scene(event: Dictionary, run: RunState, data: GameData) -> void:
 	_art_rect.offset_bottom = -32.0 - inset
 	_art_box.visible = tex != null
 	(_art_box as ArtSpot).glow = FRAME_LEGENDARY if legendary else Color.WHITE
+	(_art_box as ArtSpot).foot_lift = inset * 0.75
 	_art_box.queue_redraw()
 	var w: float = PANEL_WIDTH_ART if tex != null else PANEL_WIDTH
 	_panel.custom_minimum_size = Vector2(w, 0)
@@ -503,10 +504,28 @@ static func blurred_backdrop(backdrop_id: String) -> Texture2D:
 			var target: int = maxi(8, w / BACKDROP_BLUR)
 			while img.get_width() / 2 >= target:
 				img.resize(img.get_width() / 2, maxi(4, img.get_height() / 2), Image.INTERPOLATE_BILINEAR)
+			img = _trim_black_bottom(img)  # some paintings end in a black band (legendary.jpg)
 			img.resize(maxi(16, w / 4), maxi(16, h / 4), Image.INTERPOLATE_CUBIC)
 			out = ImageTexture.create_from_image(img)
 	_blur_cache[id] = out
 	return out
+
+
+## Story 033: `img` without the near-black rows at its bottom (kept whole when nearly all rows are black).
+static func _trim_black_bottom(img: Image) -> Image:
+	var h: int = img.get_height()
+	var w: int = img.get_width()
+	var keep: int = h
+	while keep > h / 2:
+		var dark: bool = true
+		for i: int in 5:
+			if img.get_pixel(int(w * (0.1 + 0.2 * i)), keep - 1).get_luminance() > 0.04:
+				dark = false
+				break
+		if not dark:
+			break
+		keep -= 1
+	return img if keep == h else img.get_region(Rect2i(0, 0, w, keep))
 
 
 ## Story 033: full-screen blurred painted backdrop (cover-fit) under a dark veil. Display only.
@@ -535,14 +554,29 @@ class SceneBackdrop extends Control:
 ## Story 033: the soft light spot the event illustration stands on (radial glow + ground shadow). Display only.
 class ArtSpot extends Control:
 	var glow: Color = Color.WHITE
+	## Lifts the ground shadow (smaller item art stands higher than a Pokémon).
+	var foot_lift: float = 0.0
+	var _tex: GradientTexture2D
+	var _tex_glow: Color = Color(0, 0, 0, 0)
 
 	func _draw() -> void:
 		var c: Vector2 = size * Vector2(0.5, 0.47)
 		var r: float = minf(size.x, size.y) * 0.5
-		for i: int in 40:  # many faint discs: a smooth radial glow
-			var f: float = 1.0 - float(i) / 40.0
-			draw_circle(c, r * f, Color(glow, 0.022))
-		var foot := Vector2(size.x * 0.5, size.y - 26.0)
+		if _tex == null or _tex_glow != glow:  # smooth radial glow (gradient texture), rebuilt on colour change
+			_tex_glow = glow
+			var g := Gradient.new()
+			g.set_color(0, Color(glow, 0.62))
+			g.set_color(1, Color(glow, 0.0))
+			g.add_point(0.55, Color(glow, 0.28))
+			_tex = GradientTexture2D.new()
+			_tex.gradient = g
+			_tex.fill = GradientTexture2D.FILL_RADIAL
+			_tex.fill_from = Vector2(0.5, 0.5)
+			_tex.fill_to = Vector2(0.5, 0.0)
+			_tex.width = 256
+			_tex.height = 256
+		draw_texture_rect(_tex, Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0), false)
+		var foot := Vector2(size.x * 0.5, size.y - 26.0 - foot_lift)
 		var pts := PackedVector2Array()
 		for i: int in 32:
 			var a: float = TAU * float(i) / 32.0
