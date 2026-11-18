@@ -168,7 +168,7 @@ func _initialize() -> void:
 				ok(gd.get_card(o.card.id).pokemon_id != "" , "orig intact")
 			else:
 				ok(o.card.kind == "skill" or (gd.get_pokemon_info(o.card.pokemon_id)["types"] as Array).has(o.card.type_id), "pool carrier type-coherent (story 010)")
-		ok(st == 1 and offers.size() == 3 and seen.size() == 3, "3 distinct with stolen")
+		ok(st == 1 and offers.size() == gd.get_offer_count() and seen.size() == gd.get_offer_count(), "offer_count distinct with stolen")  # story 032: offer_count 3 -> 4
 	for e_id: String in gd.get_enemy_ids():
 		for c: CardData in gd.get_enemy_teaches(e_id):
 			if c.id == "vive_attaque":

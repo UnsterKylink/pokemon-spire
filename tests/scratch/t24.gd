@@ -54,7 +54,7 @@ func _initialize() -> void:
 		for n: MapNode in g.nodes.values():
 			if n.room_type == "rival":
 				n_rival += 1
-				ok(n.floor == 3, "rival on floor 3")
+				ok(n.floor == 1, "rival on floor 1 (story 032; was 3)")
 		ok((n_rival > 0) == (z in [2, 4, 6]), "zone %d map rival rooms %d" % [z, n_rival])
 	var encs: Array[Dictionary] = gd.get_rival_encounters()
 	ok(encs.size() == 4, "4 rival encounters")
@@ -418,7 +418,7 @@ func _go() -> void:
 			var cf: Dictionary = main.get_current_fight()
 			if not cf.is_empty() and cf["room"] == "rival":
 				met = true
-				ok(main.get_run_state().act.current_node().floor == 3, "rival room on floor 3")
+				ok(main.get_run_state().act.current_node().floor == 1, "rival room on floor 1 (story 032; was 3)")
 				main.qa_win_current_fight()
 				ok(main.get_current_screen_name() == "reward" and main.get_last_special_reward().get("kind", "") == "rival", "rival reward screen")
 				break

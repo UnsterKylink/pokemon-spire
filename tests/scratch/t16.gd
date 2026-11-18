@@ -44,7 +44,7 @@ func _go() -> void:
 	var gd := GameData.new()
 	ok(gd.load_all(), "data loads")
 	ok(gd.has_league() and gd.get_league_member_count() == 4 and gd.get_league_fight_count() == 6, "league counts")
-	ok(gd.get_league_heal_percent() == 40.0, "heal 40%")
+	ok(gd.get_league_heal_percent() == 25.0, "heal 25% (story 032; 031: 20, before: 40)")
 	var pool: Array[String] = gd.get_league_type_pool()
 	# 1. member draw: 4 distinct, not among gym types, deterministic
 	for s: int in range(1, 201):
@@ -119,12 +119,12 @@ func _go() -> void:
 		var b: Battle = main.get_battle_screen().get_battle()
 		ok(b.enemies.size() == 3 and b.enemies[0].strength >= int(run.league[stage]["modifiers"]["strength_bonus"]), "modifiers applied %d" % stage)
 		main.qa_win_league_fight()
-		ok(main.get_current_screen_name() == "reward" and main.get_reward_offers().size() == 3, "reward after fight %d" % stage)
+		ok(main.get_current_screen_name() == "reward" and main.get_reward_offers().size() == gd.get_offer_count(), "reward after fight %d" % stage)
 		ok(main.get_last_loot().is_empty(), "no loot in league")
 		main.qa_set_hp(10)
 		main.reward_skip()
 		ok(main.get_current_screen_name() == "league" and main.get_league_stage() == stage + 1 and not main.is_league_intro(), "intermission %d" % stage)
-		ok(main.get_last_league_heal() == ceili(run.max_hp * 0.4) and run.hp == 10 + main.get_last_league_heal(), "heal 40%% (%d)" % main.get_last_league_heal())
+		ok(main.get_last_league_heal() == ceili(run.max_hp * gd.get_league_heal_percent() / 100.0) and run.hp == 10 + main.get_last_league_heal(), "league heal (%d)" % main.get_last_league_heal())
 	ok(main.get_league_member()["kind"] == "final_boss" and main.get_league_stage() == 5, "stage 5 = Éthernatos")
 	main.league_continue()
 	var bb: Battle = main.get_battle_screen().get_battle()

@@ -57,11 +57,11 @@ func _go() -> void:
 				if e.type_ids.has(z["type_id"]): carriers += 1
 			ok(carriers == 3, "team of zone type %s (%d)" % [z["type_id"], carriers])
 	ok(distinct_orders.size() > 30, "draws vary across seeds (%d)" % distinct_orders.size())
-	# 2. per-zone map 6 floors, gym on top
+	# 2. per-zone map 4 floors (story 032; was 6), gym on top
 	for n: int in range(1, 9):
 		var g: MapGraph = MapGenerator.generate(gd.get_zone_act_config(n), 100 + n)
-		ok(g.floors == 6 and g.get_node(g.boss_id()).room_type == "boss" and g.get_node(g.boss_id()).floor == 6, "zone %d map 6 floors" % n)
-		for f: int in range(1, 6):
+		ok(g.floors == 4 and g.get_node(g.boss_id()).room_type == "boss" and g.get_node(g.boss_id()).floor == 4, "zone %d map 4 floors" % n)
+		for f: int in range(1, 4):
 			for node: MapNode in g.get_floor_nodes(f):
 				ok(node.room_type != "boss" and node.room_type != "", "normal room floor %d" % f)
 	# 3. modifiers rise monotonically
@@ -71,8 +71,8 @@ func _go() -> void:
 		ok(b["hp_multiplier"] >= a["hp_multiplier"] and b["strength_bonus"] >= a["strength_bonus"], "gym mods rise %d" % i)
 		var wa: Dictionary = gd.get_fight_modifiers("wild", zs[i - 1]); var wb: Dictionary = gd.get_fight_modifiers("wild", zs[i])
 		ok(wb["hp_multiplier"] >= wa["hp_multiplier"] and wb["strength_bonus"] >= wa["strength_bonus"], "wild mods rise %d" % i)
-	ok(is_equal_approx(gd.get_fight_modifiers("boss", zs[0])["hp_multiplier"], 0.7) and is_equal_approx(gd.get_fight_modifiers("boss", zs[7])["hp_multiplier"], 1.25), "gym x0.7 .. x1.25")
-	ok(is_equal_approx(gd.get_fight_modifiers("elite", zs[7])["hp_multiplier"], 1.2 * 1.2), "elite stacks room x zone")
+	ok(is_equal_approx(gd.get_fight_modifiers("boss", zs[0])["hp_multiplier"], 0.5) and is_equal_approx(gd.get_fight_modifiers("boss", zs[7])["hp_multiplier"], 1.25), "gym x0.5 .. x1.25 (story 032)")
+	ok(is_equal_approx(gd.get_fight_modifiers("elite", zs[7])["hp_multiplier"], 1.1 * 1.2), "elite stacks room x zone")
 	ok(gd.get_fight_modifiers("center", zs[7])["hp_multiplier"] == 1.0, "center neutral")
 	# wild bias toward the zone type
 	var r := rng(3)
@@ -89,7 +89,7 @@ func _go() -> void:
 	# 4. Main: full flow
 	main.start_new_run(4242, "salameche")
 	var run: RunState = main.get_run_state()
-	ok(run.zones.size() == 8 and main.get_zone_index() == 0 and run.act.graph.floors == 6, "run starts zone 1")
+	ok(run.zones.size() == 8 and main.get_zone_index() == 0 and run.act.graph.floors == 4, "run starts zone 1")
 	var t1: Array = types_of(run.zones)
 	main.start_new_run(4242, "salameche")
 	ok(types_of(main.get_run_state().zones) == t1, "--seed deterministic zones")
@@ -154,7 +154,7 @@ func _go() -> void:
 	for b: Dictionary in main.get_badges(): gains += int(b["max_hp_gain"])
 	ok(gains == 6 + 6 + 8 + 8 + 8 + 10, "badge max hp gains %d" % gains)
 	var sm: Dictionary = run.get_summary()
-	ok(sm["badges"] == 8 and sm["total_floors"] == 48 and sm["zone"] == 8, "summary %s" % sm)
+	ok(sm["badges"] == 8 and sm["total_floors"] == 32 and sm["zone"] == 8, "summary %s" % sm)
 	var bnames: Dictionary = {}
 	for b: Dictionary in main.get_badges(): bnames[b["id"]] = true
 	ok(bnames.size() == 8, "8 different badges")
@@ -172,7 +172,7 @@ func _go() -> void:
 	main.defeat_new_run()
 	main.starter_choose(0)
 	nr = main.get_run_state()
-	ok(nr.zone_index == 0 and nr.badges.is_empty() and nr.act.graph.floors == 6, "reset after defeat")
+	ok(nr.zone_index == 0 and nr.badges.is_empty() and nr.act.graph.floors == 4, "reset after defeat")
 	# 6. validation rejections
 	ok(zones_load(func(_z): pass), "unmodified copy loads")
 	ok(not zones_load(func(z): z["zone_count"] = 10), "pool smaller than zone_count")
