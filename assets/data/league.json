@@ -33,6 +33,6 @@
 			{"type": "add_junk", "value": 2}
 		]}
 	]},
-	"heal_percent_between_fights": 30,
+	"heal_percent_between_fights": 25,
 	"reward_rarity_weights": {"common": 30, "uncommon": 45, "rare": 25}
 }
