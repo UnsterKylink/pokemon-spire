@@ -179,6 +179,8 @@ func _room_fight(node: MapNode) -> bool:
 ## Fights one battle with the policy; updates the run like Main (record_battle_result). False = run lost.
 func _fight(encounter_id: String, enemies: Array[Combatant], room_type: String, stage_name: String) -> bool:
 	var battle: Battle = _run.create_battle(enemies, _data.get_type_chart(), _battle_rng)
+	SpecialFights.apply_fight_mechanics(_data, battle, room_type, _run.current_zone(),  # story 030
+			_run.current_league_fight() if room_type == SpecialFights.LEAGUE_ROOM else {})
 	var potions_before: int = battle.potions.size()
 	battle.start()
 	var hp_before: int = _run.hp

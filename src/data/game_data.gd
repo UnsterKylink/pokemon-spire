@@ -34,6 +34,8 @@ const DEFAULT_BALLS_PATH: String = "res://assets/data/balls.json"
 const DEFAULT_ROSTER_PATH: String = "res://assets/data/roster.json"
 ## Story 027: talents + Élan rules ("" = skipped: no talents, no Élan).
 const DEFAULT_TALENTS_PATH: String = "res://assets/data/talents.json"
+## Story 030: field rules of the gym Champions / league / Éthernatos phases + enemy mechanics (junk card, drain floor).
+const DEFAULT_FIELD_RULES_PATH: String = "res://assets/data/field_rules.json"
 ## Prefix of an encounter id GENERATED from the roster: "roster:<id>,<id>,..." (wild / elite fights, auto gym teams).
 ## create_enemies / get_encounter_enemy_ids decode it; it is never stored in pokemon.json.
 const ROSTER_ENCOUNTER_PREFIX: String = "roster:"
@@ -93,6 +95,9 @@ var _roster_candidates: Array[String] = []  # roster ids with roles.candidate_st
 var _starter_roster_share: float = 0.0  # pokemon.json starter_choice.roster_share
 var _rival_cfg: Dictionary = {}  # validated rival.json (story 018); {} = no rival
 var _legendary_cfg: Dictionary = {}  # validated events.json "legendary" (story 018); {} = no legendary events
+var _junk_cards: Dictionary = {}  # story 030: cards.json junk_cards (id -> CardData, kind junk)
+var _field_rules: Dictionary = {}  # story 030: rule id -> {id, name, description, effects}
+var _enemy_mechanics: Dictionary = {}  # story 030: field_rules.json enemy_mechanics (validated)
 var _legendary_events: Array[String] = []  # ids of the events flagged legendary: true (file order)
 
 
@@ -105,7 +110,8 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 		shop_path: String = DEFAULT_SHOP_PATH, zones_path: String = DEFAULT_ZONES_PATH,
 		league_path: String = DEFAULT_LEAGUE_PATH, roster_path: String = DEFAULT_ROSTER_PATH,
 		statuses_path: String = DEFAULT_STATUSES_PATH, balls_path: String = DEFAULT_BALLS_PATH,
-		rival_path: String = DEFAULT_RIVAL_PATH, talents_path: String = DEFAULT_TALENTS_PATH) -> bool:
+		rival_path: String = DEFAULT_RIVAL_PATH, talents_path: String = DEFAULT_TALENTS_PATH,
+		field_rules_path: String = DEFAULT_FIELD_RULES_PATH) -> bool:
 	_talent_book = null
 	_type_chart = TypeChart.neutral_chart()
 	_status_book = StatusBook.new()
@@ -146,6 +152,9 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_rival_cfg = {}
 	_legendary_cfg = {}
 	_legendary_events.clear()
+	_junk_cards.clear()
+	_field_rules.clear()
+	_enemy_mechanics = {}
 	var types_root: Dictionary = _read_json(types_path)
 	var cards_root: Dictionary = _read_json(cards_path)
 	var pokemon_root: Dictionary = _read_json(pokemon_path)
@@ -208,6 +217,131 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	if not talents_path.is_empty():  # story 027: after every Pokémon source (players, enemies, roster, evolved forms)
 		var talents_root: Dictionary = _read_json(talents_path)
 		ok = (not talents_root.is_empty() and _load_talents(talents_root)) and ok
+	if not field_rules_path.is_empty():  # story 030: last (references zones, league, cards, statuses, types)
+		var fr_root: Dictionary = _read_json(field_rules_path)
+		ok = (not fr_root.is_empty() and _load_field_rules(fr_root)) and ok
+	return ok
+
+
+# --- Story 030: field rules, boss phases, enemy mechanics ---------------------------------------------
+
+## A field rule {id, name, description, effects} (deep copy; {} if unknown or "").
+func get_field_rule(rule_id: String) -> Dictionary:
+	return (_field_rules.get(rule_id, {}) as Dictionary).duplicate(true)
+
+
+## Every field rule id (file order).
+func get_field_rule_ids() -> Array[String]:
+	var out: Array[String] = []
+	out.assign(_field_rules.keys())
+	return out
+
+
+## The field rule of the gym Champion of `type_id` (zones.json gym_types[type].field_rule; {} if none).
+func get_gym_field_rule(type_id: String) -> Dictionary:
+	var g: Dictionary = (_zones_cfg.get("gym_types", {}) as Dictionary).get(type_id, {})
+	return get_field_rule(String(g.get("field_rule", "")))
+
+
+## The field rule of a league fight (RunState.current_league_fight / draw_league entry): member -> members_by_type[type],
+## champion -> champion, final_boss -> final_boss (league.json field_rule; {} if none).
+func get_league_field_rule(fight: Dictionary) -> Dictionary:
+	match String(fight.get("kind", "")):
+		"member":
+			var m: Dictionary = (_league_cfg.get("members_by_type", {}) as Dictionary).get(String(fight.get("type_id", "")), {})
+			return get_field_rule(String(m.get("field_rule", "")))
+		"champion":
+			return get_field_rule(String((_league_cfg.get("champion", {}) as Dictionary).get("field_rule", "")))
+		"final_boss":
+			return get_field_rule(String((_league_cfg.get("final_boss", {}) as Dictionary).get("field_rule", "")))
+	return {}
+
+
+## The parsed phases of the final boss (Combatant.parse_phase format, field_rule_def resolved); [] if none / invalid.
+func get_boss_phases() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var raw: Variant = (_league_cfg.get("final_boss", {}) as Dictionary).get("phases", [])
+	if not (raw is Array):
+		return out
+	for i: int in (raw as Array).size():
+		var ph: Dictionary = Combatant.parse_phase("final_boss phase #%d" % i, (raw as Array)[i])
+		if ph.is_empty():
+			return [] as Array[Dictionary]
+		ph["field_rule_def"] = get_field_rule(String(ph["field_rule"]))
+		out.append(ph)
+	return out
+
+
+## The junk card added by add_junk actions / junk_each_turn rules (fresh copy; null if none configured).
+func get_junk_card() -> CardData:
+	var c: CardData = _junk_cards.get(String(_enemy_mechanics.get("junk_card", "")), null)
+	return c.duplicate_card() if c != null else null
+
+
+## Lowest energy a drain_energy action may leave the player at (field_rules.json enemy_mechanics).
+func get_min_energy_after_drain() -> int:
+	return int(_enemy_mechanics.get("min_energy_after_drain", Battle.DEFAULT_MIN_ENERGY_AFTER_DRAIN))
+
+
+func _load_field_rules(root: Dictionary) -> bool:
+	var ok: bool = true
+	var rules_v: Variant = root.get("rules", null)
+	if not (rules_v is Dictionary):
+		push_error("GameData: field_rules file needs a 'rules' object")
+		return false
+	var statuses: Array[String] = get_status_ids()
+	var types: Array[String] = _type_chart.get_type_ids()
+	for rid: String in (rules_v as Dictionary).keys():
+		var err: String = FieldRules.check_rule(rid, (rules_v as Dictionary)[rid], statuses, types)
+		if not err.is_empty():
+			push_error("GameData: " + err)
+			ok = false
+			continue
+		var r: Dictionary = ((rules_v as Dictionary)[rid] as Dictionary).duplicate(true)
+		r["id"] = rid
+		_field_rules[rid] = r
+	var mech_v: Variant = root.get("enemy_mechanics", null)
+	if not (mech_v is Dictionary) or not _junk_cards.has(String((mech_v as Dictionary).get("junk_card", ""))) \
+			or not _is_number((mech_v as Dictionary).get("min_energy_after_drain", null)) \
+			or int((mech_v as Dictionary)["min_energy_after_drain"]) < 0:
+		push_error("GameData: field_rules.enemy_mechanics needs a known 'junk_card' (cards.json junk_cards) and 'min_energy_after_drain' >= 0")
+		ok = false
+	else:
+		_enemy_mechanics = (mech_v as Dictionary).duplicate()
+	# References: gym types, league members / Maître / final boss, boss phases.
+	var refs: Array[Array] = []
+	for t: String in (_zones_cfg.get("gym_types", {}) as Dictionary).keys():
+		refs.append(["zones gym_types.%s" % t, ((_zones_cfg["gym_types"] as Dictionary)[t] as Dictionary).get("field_rule", null)])
+	for t: String in (_league_cfg.get("members_by_type", {}) as Dictionary).keys():
+		refs.append(["league members_by_type.%s" % t, ((_league_cfg["members_by_type"] as Dictionary)[t] as Dictionary).get("field_rule", null)])
+	for k: String in ["champion", "final_boss"]:
+		refs.append(["league %s" % k, (_league_cfg.get(k, {}) as Dictionary).get("field_rule", null)])
+	var phases_v: Variant = (_league_cfg.get("final_boss", {}) as Dictionary).get("phases", [])
+	if not (phases_v is Array):
+		push_error("GameData: league final_boss.phases must be an array")
+		ok = false
+	else:
+		var last: float = 1.0
+		for i: int in (phases_v as Array).size():
+			var ph: Dictionary = Combatant.parse_phase("league final_boss phase #%d" % i, (phases_v as Array)[i])
+			if ph.is_empty():
+				ok = false
+				continue
+			if float(ph["hp_below"]) >= last:
+				push_error("GameData: league final_boss phases must have decreasing 'hp_below'")
+				ok = false
+			last = float(ph["hp_below"])
+			for a: EnemyIntent in (ph["actions"] as Array):
+				if (not a.status_id.is_empty() and not _status_book.has(a.status_id)) \
+						or (not a.attack_type.is_empty() and not _type_chart.is_known_type(a.attack_type)):
+					push_error("GameData: league final_boss phase #%d has an unknown status / attack_type" % i)
+					ok = false
+			if not String(ph["field_rule"]).is_empty():
+				refs.append(["league final_boss phase #%d" % i, ph["field_rule"]])
+	for ref: Array in refs:
+		if ref[1] != null and (not (ref[1] is String) or not _field_rules.has(String(ref[1]))):
+			push_error("GameData: %s names unknown field_rule '%s'" % [String(ref[0]), str(ref[1])])
+			ok = false
 	return ok
 
 
@@ -2112,6 +2246,19 @@ func _load_cards(cards_root: Dictionary) -> bool:
 		push_error("GameData: cards file needs a 'cards' object")
 		return false
 	var ok: bool = true
+	var junk_v: Variant = cards_root.get("junk_cards", {})  # story 030: never in _cards (no deck / reward / shop pool)
+	if not (junk_v is Dictionary):
+		push_error("GameData: cards file 'junk_cards' must be an object")
+		ok = false
+	else:
+		for jid: String in (junk_v as Dictionary).keys():
+			var jd: Variant = (junk_v as Dictionary)[jid]
+			var junk: CardData = CardData.from_dict(jid, jd) if jd is Dictionary else null
+			if junk == null or not junk.is_junk():
+				push_error("GameData: junk card '%s' must be a valid card of kind 'junk'" % jid)
+				ok = false
+			else:
+				_junk_cards[jid] = junk
 	var cards_dict: Dictionary = raw
 	for card_id: String in cards_dict.keys():
 		var def: Variant = cards_dict[card_id]

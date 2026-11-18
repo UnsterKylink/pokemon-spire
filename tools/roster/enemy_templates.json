@@ -1,0 +1,31 @@
+{
+	"_doc": "Story 030 (story-030-ennemis-et-boss) : modeles d'actions par type pour tools/roster/add_enemy_variety.py. Chaque Pokemon (type principal) recoit UNE nouvelle action, choisie avec une graine (seed + slug) parmi options[type], en essayant les suivantes si elle ne s'applique pas. op : utility {type (status|heal|heal_ally|block_ally|strip_block|drain_energy|add_junk), status?, value? {tier: n} OU factor (x la valeur de la protection remplacee ; un renforcement remplace vaut buff_base_per_tier x tier + buff_base_flat)} remplace une action block/buff (sinon l'attaque la plus faible s'il en reste 2+) ; rider {status, value {tier}, damage_pct} ajoute un statut a l'attaque la plus forte (degats x damage_pct %) ; hits {hits} decoupe l'attaque la plus forte en hits coups (meme total arrondi) ; charge {factor} remplace l'attaque la plus faible (2+ attaques) par une charge de valeur x factor. Budget de degats a peu pres constant (pas d'equilibrage ici : story 031). Les Pokemon qui ont deja un statut ou une action nouvelle sont ignores (idempotent). pokemon_json_targets : ennemis de pokemon.json traites aussi (equipes d'arene et du Conseil).",
+	"seed": 30030,
+	"buff_base_per_tier": 4,
+	"buff_base_flat": 2,
+	"options": {
+		"fire":     [{"op": "utility", "type": "status", "status": "burn", "value": {"1": 2, "2": 3, "3": 4}}, {"op": "rider", "status": "burn", "value": {"1": 2, "2": 3, "3": 3}, "damage_pct": 85}],
+		"poison":   [{"op": "utility", "type": "status", "status": "poison", "value": {"1": 2, "2": 3, "3": 4}}, {"op": "rider", "status": "poison", "value": {"1": 2, "2": 2, "3": 3}, "damage_pct": 85}],
+		"electric": [{"op": "utility", "type": "status", "status": "paralysis", "value": {"1": 1, "2": 1, "3": 1}}, {"op": "utility", "type": "drain_energy", "value": {"1": 1, "2": 1, "3": 1}}],
+		"psychic":  [{"op": "utility", "type": "status", "status": "weak", "value": {"1": 1, "2": 2, "3": 2}}],
+		"ghost":    [{"op": "utility", "type": "status", "status": "vulnerable", "value": {"1": 1, "2": 2, "3": 2}}, {"op": "utility", "type": "status", "status": "sleep", "value": {"1": 1, "2": 1, "3": 1}}],
+		"rock":     [{"op": "utility", "type": "block_ally", "factor": 1.0}, {"op": "utility", "type": "strip_block", "factor": 1.2}],
+		"steel":    [{"op": "utility", "type": "block_ally", "factor": 1.0}, {"op": "utility", "type": "strip_block", "factor": 1.2}],
+		"grass":    [{"op": "utility", "type": "heal", "factor": 1.0}],
+		"normal":   [{"op": "charge", "factor": 1.8}, {"op": "hits", "hits": 2}],
+		"fighting": [{"op": "hits", "hits": 2}, {"op": "hits", "hits": 3}],
+		"ice":      [{"op": "utility", "type": "status", "status": "freeze", "value": {"1": 1, "2": 1, "3": 1}}, {"op": "rider", "status": "freeze", "value": {"1": 1, "2": 1, "3": 1}, "damage_pct": 85}],
+		"bug":      [{"op": "utility", "type": "add_junk", "value": {"1": 1, "2": 1, "3": 2}}],
+		"flying":   [{"op": "hits", "hits": 2}],
+		"ground":   [{"op": "utility", "type": "strip_block", "factor": 1.3}],
+		"dragon":   [{"op": "charge", "factor": 1.8}],
+		"dark":     [{"op": "rider", "status": "weak", "value": {"1": 1, "2": 1, "3": 2}, "damage_pct": 90}],
+		"fairy":    [{"op": "utility", "type": "heal_ally", "factor": 1.0}, {"op": "utility", "type": "status", "status": "weak", "value": {"1": 1, "2": 1, "3": 2}}],
+		"water":    [{"op": "utility", "type": "heal", "factor": 0.8}, {"op": "utility", "type": "block_ally", "factor": 1.0}]
+	},
+	"pokemon_json_targets": ["bidoof", "lechonk", "snorlax", "tepig", "fuecoco", "arcanine", "quaxly", "piplup", "vaporeon",
+		"turtwig", "rowlet", "venusaur", "shinx", "pawmi", "electabuzz", "grubbin", "wurmple", "pinsir", "bulbasaur", "oddish", "muk",
+		"pidove", "fletchling", "pidgeot", "roggenrola", "rockruff", "onix", "banette", "haunter", "gengar", "glaceon", "cloyster",
+		"lapras", "hitmonlee", "hitmonchan", "machamp", "xatu", "espeon", "alakazam", "murkrow", "umbreon", "houndoom", "scizor",
+		"probopass", "aegislash", "dragonair", "salamence", "dragonite"]
+}

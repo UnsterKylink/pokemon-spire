@@ -78,7 +78,7 @@ func _initialize() -> void:
 		var e: Combatant = data.create_enemy(pid)
 		var attacks: Array[EnemyIntent] = []
 		for act: EnemyIntent in e.actions:
-			if act.type == EnemyIntent.TYPE_ATTACK:
+			if act.type == EnemyIntent.TYPE_ATTACK or act.type == EnemyIntent.TYPE_CHARGE:  # story 030: a charge is a delayed attack
 				attacks.append(act)
 		var typed: Array[EnemyIntent] = []
 		for act: EnemyIntent in attacks:

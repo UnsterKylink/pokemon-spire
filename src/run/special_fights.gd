@@ -11,6 +11,10 @@ extends RefCounted
 ## legendary_id: the legendary Pokémon id ("" otherwise), title: French header (e.g. "Rival Régis"), capture: bool}.
 
 
+## Room type of the league fights (Main.ROOM_LEAGUE / the simulator's "league").
+const LEAGUE_ROOM: String = "league"
+
+
 ## The rival fight of the CURRENT zone's 'rival' room (rival.json kind "room" for this zone number, not won yet), drawn with
 ## `rng` (Main: the encounter rng). {} if there is none.
 static func rival_room_fight(data: GameData, run: RunState, rng: RandomNumberGenerator) -> Dictionary:
@@ -115,3 +119,19 @@ static func apply_legendary_win(data: GameData, run: RunState, legendary_id: Str
 			run.add_card(carried)
 		cards.append(carried)
 	return {"pokemon_id": legendary_id, "name": data.get_enemy_name(legendary_id), "captured": captured, "cards": cards}
+
+
+## Story 030: the field rule and boss phases of a fight, applied to `battle` BEFORE Battle.start(). `room_type`: the room of
+## the fight (GameData.ROOM_GYM = the zone's gym, "league" = `league_fight`); other rooms get nothing. Shared by Main and
+## the simulator. Returns the applied rule ({} if none).
+static func apply_fight_mechanics(data: GameData, battle: Battle, room_type: String, zone: Dictionary,
+		league_fight: Dictionary) -> Dictionary:
+	var rule: Dictionary = {}
+	if room_type == GameData.ROOM_GYM:
+		rule = data.get_gym_field_rule(String(zone.get("type_id", "")))
+	elif room_type == LEAGUE_ROOM and not league_fight.is_empty():
+		rule = data.get_league_field_rule(league_fight)
+		if String(league_fight.get("kind", "")) == "final_boss" and not battle.enemies.is_empty():
+			battle.enemies[0].phases = data.get_boss_phases()
+	battle.set_field_rule(rule)
+	return rule

@@ -16,6 +16,8 @@ def main():
     types = set(load("types.json")["types"])
     cards = load("cards.json")["cards"]
     statuses = set(load("statuses.json")["statuses"])
+    NEW_TYPES = ("attack", "block", "buff", "status", "heal", "heal_ally", "block_ally", "charge", "strip_block",
+                 "drain_energy", "add_junk")
     poke = load("pokemon.json")
     # Only true duplicates are errors: a pokemon.json enemy/player with the same id. Evolution targets in
     # pokemon.json `evolutions` (e.g. stage-3 forms added in story 014) may legitimately be roster species.
@@ -47,13 +49,17 @@ def main():
         acts = v["actions"]
         if not (2 <= len(acts) <= 4): bad(w + "actions count %d" % len(acts))
         for a in acts:
-            if a.get("type") not in ("attack", "block", "buff") or not (isinstance(a.get("value"), int) and a["value"] > 0):
+            # story 030: new action types (pokemon.json _enemies_doc); "status" carries its value in status.value
+            if a.get("type") not in NEW_TYPES or (a["type"] != "status" and not (isinstance(a.get("value"), int) and a["value"] > 0)):
                 bad(w + "action %s" % a)
-            if "status" in a:  # story 016: {id, value} on attack actions only, id from statuses.json
+            if "status" in a:  # story 016: {id, value} on attack actions (story 030: and status actions), id from statuses.json
                 st = a["status"]
-                if a["type"] != "attack" or not isinstance(st, dict) or set(st) != {"id", "value"} \
+                if a["type"] not in ("attack", "status") or not isinstance(st, dict) or set(st) != {"id", "value"} \
                         or st["id"] not in statuses or not (isinstance(st["value"], int) and st["value"] > 0):
                     bad(w + "status %s" % a)
+            if a.get("type") == "status" and "status" not in a: bad(w + "status action without status")
+            if "hits" in a and (a["type"] != "attack" or not (isinstance(a["hits"], int) and a["hits"] >= 1)): bad(w + "hits %s" % a)
+            if "attack_type" in a and a["type"] not in ("attack", "charge"): bad(w + "attack_type %s" % a)
             if v["pattern"] == "weighted" and not (isinstance(a.get("weight"), int) and a["weight"] > 0): bad(w + "weight")
             if v["pattern"] == "sequence" and "weight" in a: bad(w + "weight in sequence")
         if not any(a["type"] == "attack" for a in acts): bad(w + "no attack action")

@@ -195,6 +195,8 @@ func create_battle(enemies: Array[Combatant], type_chart: TypeChart, rng: Random
 			_data.get_status_book() if _data != null else null, _data.get_capture_rules() if _data != null else null,
 			_data.get_ball_book() if _data != null else {}, balls, capture_allowed,
 			_data.get_talent_book() if _data != null else null)
+	if _data != null:  # story 030: junk card of add_junk + drain floor
+		battle.configure_enemy_mechanics(_data.get_junk_card(), _data.get_min_energy_after_drain())
 	battle.potion_used.connect(_on_battle_potion_used)
 	battle.ball_thrown.connect(_on_battle_ball_thrown)
 	# Story 018: statuses queued by events hit the player before the first turn (they act on that turn), then are gone.
