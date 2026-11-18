@@ -6,6 +6,11 @@ extends Control
 ## Story 018: options Main reports unavailable are greyed with their reason ("Il te faut 50 P$"), money hints
 ## (+40 P$ / -20 P$) are appended to labels without a price, legendary events get a dark/gold frame with the
 ## legendary's sprite, and a pending card removal opens a DeckPicker (open_removal) that never lets play block.
+## Story 033 (cohérence visuelle): the zone's painted backdrop (gym type of the current zone, fallback route; legendary
+## events: the legendary backdrop) blurred and darkened behind everything, the event's illustration in front on the
+## left (events.json `art`: {"pokemon": slug} official artwork, {"item": id} item art, {"rival": true} the rival's
+## current Pokémon; legendary events fall back to their legendary), the text in the white « menu Pokémon » window
+## (gold frame for legendaries).
 
 ## Emitted once when the player picks option `index`.
 signal option_chosen(index: int)
@@ -34,6 +39,19 @@ const COLOR_UNAVAILABLE: Color = Color(0.55, 0.55, 0.6)
 const LEG_SPRITE_SIZE: Vector2 = Vector2(150, 150)
 ## Story 020b: side of the art of an item / potion / ball given by an option.
 const GAIN_ART_SIDE: float = 56.0
+## Story 033: painted backdrops (BattleBackdrop images), illustration side, window widths with / without art.
+const BACKDROP_PATTERN: String = "res://assets/art/backdrops/%s.%s"
+const BACKDROP_EXTENSIONS: Array[String] = ["jpg", "png"]
+const BACKDROP_FALLBACK: String = "route"
+const BACKDROP_LEGENDARY: String = "legendary"
+## Downscale factor of the backdrop blur (bigger = blurrier) and the darkening veil over it.
+const BACKDROP_BLUR: int = 14
+const BACKDROP_VEIL: Color = Color(0.04, 0.06, 0.14, 0.42)
+const ART_SIDE: float = 330.0
+const PANEL_WIDTH_ART: float = 760.0
+const OPTION_WIDTH_ART: float = 680.0
+const FRAME_LEGENDARY: Color = Color("#D9A520")
+static var _blur_cache: Dictionary = {}
 
 var _event: Dictionary = {}
 var _info: Label
@@ -57,6 +75,13 @@ var _picker: DeckPicker
 ## Story 020b: what the run held when the event opened (ids), to show the art of what the chosen option gave.
 var _before: Dictionary = {}
 var _gains: HBoxContainer
+## Story 033: blurred zone backdrop, illustration (spot + picture), main window, and the art kind shown ("" = none).
+var _scene: SceneBackdrop
+var _art_box: Control
+var _art_rect: TextureRect
+var _panel: PanelContainer
+var _menu_box: MenuBox
+var _art_kind: String = ""
 
 
 func _ready() -> void:
@@ -80,6 +105,7 @@ func setup(event: Dictionary, run: RunState, data: GameData = null, availability
 	if _gains != null:
 		_gains.visible = false
 	_apply_legendary_style(event, data)
+	_apply_scene(event, run, data)
 	for b: Button in _option_buttons:
 		_options_box.remove_child(b)
 		b.queue_free()
@@ -93,13 +119,13 @@ func setup(event: Dictionary, run: RunState, data: GameData = null, availability
 		var b := Button.new()
 		b.name = "Option%d" % i
 		b.text = option_text(option, ok)
-		b.custom_minimum_size = OPTION_SIZE
+		b.custom_minimum_size = OPTION_SIZE if _art_kind.is_empty() else Vector2(OPTION_WIDTH_ART, OPTION_SIZE.y)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		b.add_theme_font_size_override("font_size", 22)
 		b.focus_mode = Control.FOCUS_NONE
 		b.disabled = not ok
 		if not ok:
-			b.add_theme_color_override("font_disabled_color", COLOR_UNAVAILABLE)
+			b.add_theme_color_override("font_disabled_color", UiStyle.DISABLED_TEXT)  # story 033: greyed, readable
 			b.tooltip_text = TEXT_NEED_MONEY % RunHud.format_money(int(option.get("requires_money", 0)))
 		b.pressed.connect(choose.bind(i))
 		_options_box.add_child(b)
@@ -118,8 +144,9 @@ func choose(index: int) -> void:
 	_chosen = index
 	for i: int in _option_buttons.size():
 		_option_buttons[i].disabled = true
-		if i == index:
-			_option_buttons[i].add_theme_color_override("font_disabled_color", COLOR_CHOSEN)
+		if i == index:  # story 033: the chosen option stays lit (green button, dark text)
+			_option_buttons[i].add_theme_stylebox_override("disabled", UiStyle.button_box("normal", UiStyle.SUCCESS))
+			_option_buttons[i].add_theme_color_override("font_disabled_color", UiStyle.TEXT_DARK)
 	option_chosen.emit(index)
 
 
@@ -271,24 +298,55 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
+	_scene = SceneBackdrop.new()
+	_scene.name = "SceneBackdrop"
+	_scene.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_scene)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
+	var row := HBoxContainer.new()
+	row.name = "SceneRow"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 22)
+	center.add_child(row)
+	_art_box = ArtSpot.new()
+	_art_box.name = "EventArt"
+	_art_box.custom_minimum_size = Vector2(ART_SIDE, ART_SIDE)
+	_art_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_art_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_art_box.visible = false
+	row.add_child(_art_box)
+	_art_rect = TextureRect.new()
+	_art_rect.name = "ArtPicture"
+	_art_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_art_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_art_rect.offset_left = 26.0
+	_art_rect.offset_top = 20.0
+	_art_rect.offset_right = -26.0
+	_art_rect.offset_bottom = -32.0
+	_art_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_art_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_art_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_art_box.add_child(_art_rect)
 	var panel := PanelContainer.new()
+	_panel = panel
+	panel.name = "EventPanel"
 	panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
-	var sb := StyleBoxFlat.new()
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sb := StyleBoxFlat.new()  # kept for callers of the old look; the window draws _menu_box
 	sb.bg_color = COLOR_PANEL
-	sb.set_border_width_all(3)
 	sb.border_color = COLOR_BORDER
-	sb.set_corner_radius_all(12)
-	sb.set_content_margin_all(28)
-	panel.add_theme_stylebox_override("panel", sb)
 	_panel_style = sb
-	center.add_child(panel)
+	_menu_box = UiStyle.menu_panel(UiStyle.FRAME_BLUE, 24.0, 18.0)
+	panel.add_theme_stylebox_override("panel", _menu_box)
+	row.add_child(panel)
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_theme_constant_override("separation", 16)
+	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
 	_info = CardView.make_label(18)
 	box.add_child(_info)
@@ -347,15 +405,12 @@ func _apply_legendary_style(event: Dictionary, data: GameData) -> void:
 	_panel_style.bg_color = COLOR_LEG_PANEL if legendary else COLOR_PANEL
 	_panel_style.border_color = COLOR_LEG_BORDER if legendary else COLOR_BORDER
 	_panel_style.set_border_width_all(5 if legendary else 3)
+	_menu_box.frame_color = FRAME_LEGENDARY if legendary else UiStyle.FRAME_BLUE  # story 033: gold frame
 	_leg_caption.visible = legendary
+	# Story 033: the legendary is the big illustration beside the window (_apply_scene); no small sprite inside it.
 	_leg_sprite.texture = null
-	if legendary and data != null:
-		var path: String = String(data.get_pokemon_info(_legendary_pokemon_id(event, data)).get("sprite_path", ""))
-		if not path.is_empty() and ResourceLoader.exists(path):
-			_leg_sprite.texture = CardView.cropped_sprite(path)
-	_leg_sprite.visible = _leg_sprite.texture != null
-	# The sprite costs ~160 px: tighter text keeps the result + "Continuer" inside 720 px.
-	_text.add_theme_font_size_override("font_size", 20 if legendary else 22)
+	_leg_sprite.visible = false
+	_text.add_theme_font_size_override("font_size", 21 if legendary else 22)
 
 
 ## The legendary Pokémon of a legendary event: the first enemy of its start_fight encounter ("" if none).
@@ -372,5 +427,114 @@ static func _legendary_pokemon_id(event: Dictionary, data: GameData) -> String:
 func _make_wrapped_label(font_size: int) -> Label:
 	var l: Label = CardView.make_label(font_size)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(PANEL_WIDTH - 56, 0)
+	l.custom_minimum_size = Vector2(PANEL_WIDTH - 72, 0)
 	return l
+
+
+## Story 033: zone backdrop + illustration for `event`; the window narrows when there is an illustration.
+func _apply_scene(event: Dictionary, run: RunState, data: GameData) -> void:
+	var legendary: bool = bool(event.get("legendary", false))
+	var backdrop_id: String = BACKDROP_LEGENDARY if legendary else ""
+	if backdrop_id.is_empty() and run != null:
+		backdrop_id = String(run.current_zone().get("type_id", ""))
+	_scene.set_texture(blurred_backdrop(backdrop_id))
+	var tex: Texture2D = null
+	var kind: String = ""
+	var art: Variant = event.get("art", {})
+	var art_d: Dictionary = art if art is Dictionary else {}
+	var pokemon_id: String = ""
+	if art_d.has("item"):
+		tex = ItemIcon.texture_for(String(art_d["item"]))
+		kind = "item" if tex != null else ""
+	elif art_d.has("pokemon"):
+		tex = PokemonArt.texture_for(String(art_d["pokemon"]))
+		kind = "pokemon" if tex != null else ""
+	elif bool(art_d.get("rival", false)) and run != null and data != null and not run.rival_name.is_empty():
+		pokemon_id = run.rival_current_form(data)
+	if tex == null and pokemon_id.is_empty() and legendary and data != null:
+		pokemon_id = _legendary_pokemon_id(event, data)
+	if tex == null and not pokemon_id.is_empty() and data != null:
+		tex = PokemonArt.texture_for_sprite(String(data.get_pokemon_info(pokemon_id).get("sprite_path", "")))
+		kind = "pokemon" if tex != null else ""
+	_art_kind = kind
+	_art_rect.texture = tex
+	_art_box.visible = tex != null
+	(_art_box as ArtSpot).glow = FRAME_LEGENDARY if legendary else Color.WHITE
+	_art_box.queue_redraw()
+	var w: float = PANEL_WIDTH_ART if tex != null else PANEL_WIDTH
+	_panel.custom_minimum_size = Vector2(w, 0)
+	for l: Label in [_text, _result]:
+		l.custom_minimum_size = Vector2(w - 72, 0)
+
+
+## Story 033: what the event illustration shows: "pokemon", "item" or "" (none). QA.
+func get_art_kind() -> String:
+	return _art_kind
+
+
+## Story 033: the painted battle backdrop `backdrop_id` (fallback route), blurred (downscaled then smoothly upscaled)
+## for the event background. Cached; null when no image exists.
+static func blurred_backdrop(backdrop_id: String) -> Texture2D:
+	var id: String = backdrop_id if not backdrop_id.is_empty() else BACKDROP_FALLBACK
+	if _blur_cache.has(id):
+		return _blur_cache[id]
+	var src: Texture2D = null
+	for candidate: String in [id, BACKDROP_FALLBACK]:
+		for ext: String in BACKDROP_EXTENSIONS:
+			var path: String = BACKDROP_PATTERN % [candidate, ext]
+			if src == null and ResourceLoader.exists(path):
+				src = load(path) as Texture2D
+	var out: Texture2D = null
+	if src != null:
+		var img: Image = src.get_image()
+		if img != null:
+			if img.is_compressed():
+				img.decompress()
+			var w: int = img.get_width()
+			var h: int = img.get_height()
+			img.resize(maxi(8, w / BACKDROP_BLUR), maxi(8, h / BACKDROP_BLUR), Image.INTERPOLATE_BILINEAR)
+			img.resize(maxi(16, w / 3), maxi(16, h / 3), Image.INTERPOLATE_CUBIC)
+			out = ImageTexture.create_from_image(img)
+	_blur_cache[id] = out
+	return out
+
+
+## Story 033: full-screen blurred painted backdrop (cover-fit) under a dark veil. Display only.
+class SceneBackdrop extends Control:
+	var _tex: Texture2D
+
+	## Sets the (blurred) image; null = only the veil over the screen's backdrop.
+	func set_texture(tex: Texture2D) -> void:
+		_tex = tex
+		queue_redraw()
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			queue_redraw()
+
+	func _draw() -> void:
+		if _tex == null:
+			return
+		var ts: Vector2 = _tex.get_size()
+		var k: float = maxf(size.x / ts.x, size.y / ts.y)
+		var ds: Vector2 = ts * k
+		draw_texture_rect(_tex, Rect2((size - ds) * 0.5, ds), false)
+		draw_rect(Rect2(Vector2.ZERO, size), EventScreen.BACKDROP_VEIL)
+
+
+## Story 033: the soft light spot the event illustration stands on (radial glow + ground shadow). Display only.
+class ArtSpot extends Control:
+	var glow: Color = Color.WHITE
+
+	func _draw() -> void:
+		var c: Vector2 = size * Vector2(0.5, 0.47)
+		var r: float = minf(size.x, size.y) * 0.5
+		for i: int in 12:
+			var f: float = 1.0 - float(i) / 12.0
+			draw_circle(c, r * f, Color(glow, 0.05 + 0.02 * float(i)))
+		var foot := Vector2(size.x * 0.5, size.y - 26.0)
+		var pts := PackedVector2Array()
+		for i: int in 32:
+			var a: float = TAU * float(i) / 32.0
+			pts.append(foot + Vector2(cos(a) * r * 0.55, sin(a) * 12.0))
+		draw_colored_polygon(pts, Color(0, 0, 0, 0.28))

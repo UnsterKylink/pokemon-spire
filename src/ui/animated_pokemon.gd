@@ -7,6 +7,7 @@ extends TextureRect
 ## The animated frame is drawn bottom-anchored: its lower edge sits at get_feet_y() so the feet rest on the backdrop
 ## platform. Its on-screen height is normalised from the frame height (sheets range ~35-200 px): small Pokémon are
 ## scaled up, big ones down, keeping a plausible size order (see _display_scale). Nearest filtering (set by the holder).
+## Story 033: back sprites use a whole-number scale and whole-pixel position (sharp pixels).
 ## Sheets load lazily (only when a fighter is shown). Display only: owns no game state.
 
 const DATA_PATH: String = "res://assets/data/animated_sprites.json"
@@ -95,6 +96,8 @@ func get_drawn_rect() -> Rect2:
 		return Rect2(Vector2.ZERO, size)
 	var s: float = _display_scale()
 	var ds := Vector2(_w * s, _h * s)
+	if _back:  # story 033: whole-pixel position too, so the integer-scaled back sprite stays crisp
+		return Rect2(Vector2(floorf((size.x - ds.x) * 0.5), floorf(get_feet_y() - ds.y)), ds)
 	return Rect2(Vector2((size.x - ds.x) * 0.5, get_feet_y() - ds.y), ds)
 
 
@@ -128,7 +131,14 @@ func _display_scale() -> float:
 	var s: float = box_h * ratio / _h
 	var parent: Control = get_parent_control()
 	var max_w: float = maxf(size.x, parent.size.x if parent != null else size.x) * MAX_WIDTH_RATIO
-	return minf(s, max_w / _w)
+	s = minf(s, max_w / _w)
+	if _back and s >= 1.0:
+		# Story 033: back sprites (small sheets blown up ~2.4x) are drawn at a whole-number scale with nearest filtering,
+		# so every source pixel is the same size and the sprite stays sharp instead of a smeared blob.
+		s = maxf(1.0, roundf(s))
+		while s > 1.0 and (_w * s > max_w or _h * s > box_h * 1.12):
+			s -= 1.0
+	return s
 
 
 static func _metadata() -> Dictionary:

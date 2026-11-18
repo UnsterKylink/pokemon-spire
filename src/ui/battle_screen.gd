@@ -102,6 +102,8 @@ const COLOR_IMMUNE: Color = Color(0.55, 0.58, 0.68)
 const FLOAT_DURATION: float = 1.2
 const FLOAT_FADE: float = 0.4
 const FLOAT_RISE: float = 24.0
+## Story 033: start height of the enemy effectiveness float, as a fraction of the sprite box (never reaches the intent).
+const EFFECTIVENESS_FLOAT_Y: float = 0.42
 const FLOAT_SCREEN_MARGIN: float = 8.0
 const FLOAT_FONT_SIZE: int = 22
 ## Story 009: caption above the active Pokémon, switch feedback (%s = Pokémon name).
@@ -163,8 +165,12 @@ const COLOR_CAPTURE_FAILED: Color = Color(1.0, 0.62, 0.5)
 const COLOR_CAPTURE_BG: Color = Color(0.1, 0.11, 0.15, 0.92)
 const MODULATE_CAPTURABLE: Color = Color(1.0, 0.85, 0.85)
 const CAPTURE_BUTTON_SIZE: Vector2 = Vector2(120, 44)
-const BALL_BUTTON_HEIGHT: float = 28.0
-const BALL_BUTTON_ICON: float = 16.0
+const BALL_BUTTON_HEIGHT: float = 34.0
+const BALL_BUTTON_ICON: float = 20.0
+## Story 033: the single capture panel (menu window over the hand area) — title, row name width, frame colour.
+const TEXT_CAPTURE_PANEL: String = "Capture — choisis une Ball et sa cible (%d énergie)"
+const CAPTURE_NAME_WIDTH: float = 170.0
+const CAPTURE_PANEL_BOTTOM: float = 14.0
 const CAPTURE_FLOAT_Y: float = 0.9
 const INTENT_FONT_MIN: int = 14
 
@@ -195,7 +201,9 @@ class EnemyView extends RefCounted:
 	var status_float: FloatText
 	## Story 017: the enemy shown in this slot, and the capture overlay over its sprite (capture mode only).
 	var combatant: Combatant
-	var capture_box: VBoxContainer
+	## Story 033: the ball buttons of this enemy now sit in one row of the shared capture panel (not over its sprite).
+	var capture_box: HBoxContainer
+	var capture_row: HBoxContainer
 	## Story 021: the K.O. fade-out ran (the sprite stays invisible, the "K.O." label remains).
 	var ko_faded: bool = false
 
@@ -268,6 +276,10 @@ var _hint_label: Label
 var _capture_button: Button
 var _capture_mode: bool = false
 var _capture_float: FloatText
+## Story 033: the single capture panel (title + one row per enemy) and its rows box.
+var _capture_panel: PanelContainer
+var _capture_title: Label
+var _capture_rows: VBoxContainer
 var _last_throw_chance: float = 0.0
 ## Story 021: director, effects layer (above the fighters), speed button and the recording / playback state.
 var _fx: BattleFxDirector
@@ -1174,6 +1186,39 @@ func _build_ui() -> void:
 	move_child(_fx_layer, _end_dim.get_index())
 	_keyword_tip = KeywordTooltip.new()
 	add_child(_keyword_tip)
+	_build_capture_panel()
+
+
+## Story 033: the single capture panel (white menu window, red frame) over the bottom of the hand area: a title and one
+## row per enemy (name + one button per ball with its chance, or « Non capturable »). Never covers the enemies.
+func _build_capture_panel() -> void:
+	_capture_panel = PanelContainer.new()
+	_capture_panel.name = "CapturePanel"
+	_capture_panel.add_theme_stylebox_override("panel", UiStyle.menu_panel(UiStyle.ACCENT_RED, 16.0, 8.0))
+	_capture_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_capture_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_capture_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_capture_panel.offset_bottom = -CAPTURE_PANEL_BOTTOM
+	_capture_panel.visible = false
+	add_child(_capture_panel)
+	move_child(_capture_panel, _end_dim.get_index())
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	_capture_panel.add_child(col)
+	_capture_title = _make_label(19)
+	_capture_title.name = "CaptureTitle"
+	UiStyle.dark_label(_capture_title, UiStyle.INK_RED)
+	_capture_title.add_theme_font_override("font", UiStyle.font_bold())
+	col.add_child(_capture_title)
+	_capture_rows = VBoxContainer.new()
+	_capture_rows.name = "CaptureRows"
+	_capture_rows.add_theme_constant_override("separation", 6)
+	col.add_child(_capture_rows)
+
+
+## Story 033, QA: the capture panel (visible in capture mode only).
+func get_capture_panel() -> PanelContainer:
+	return _capture_panel
 
 
 func _make_label(font_size: int) -> Label:
@@ -1261,6 +1306,9 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 	for old: EnemyView in _enemy_views:
 		_free_float(old.float_text)
 		_free_float(old.status_float)
+		if old.capture_row != null and is_instance_valid(old.capture_row):
+			old.capture_row.get_parent().remove_child(old.capture_row)
+			old.capture_row.queue_free()
 	_enemy_views.clear()
 	var scale_index: int = clampi(enemies.size(), 1, ENEMY_SPRITE_SCALES.size()) - 1
 	var sprite_scale: float = ENEMY_SPRITE_SCALES[scale_index]
@@ -1313,14 +1361,27 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.float_text = _make_float_text()
 		v.status_float = _make_float_text()
 		v.combatant = enemies[i]
-		v.capture_box = VBoxContainer.new()
+		# Story 033: one row of the shared capture panel: enemy name + its ball buttons.
+		v.capture_row = HBoxContainer.new()
+		v.capture_row.name = "CaptureRow%d" % i
+		v.capture_row.add_theme_constant_override("separation", 10)
+		v.capture_row.visible = false
+		var row_name: Label = _make_label(18)
+		row_name.name = "RowName"
+		row_name.text = enemies[i].display_name
+		row_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		row_name.custom_minimum_size = Vector2(CAPTURE_NAME_WIDTH, 0)
+		row_name.clip_text = true
+		UiStyle.dark_label(row_name, UiStyle.TEXT_DARK)
+		row_name.add_theme_font_override("font", UiStyle.font_bold())
+		v.capture_row.add_child(row_name)
+		v.capture_box = HBoxContainer.new()
 		v.capture_box.name = "Capture"
-		v.capture_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-		v.capture_box.alignment = BoxContainer.ALIGNMENT_CENTER
 		v.capture_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.capture_box.add_theme_constant_override("separation", 4)
+		v.capture_box.add_theme_constant_override("separation", 8)
 		v.capture_box.visible = false
-		v.sprite.add_child(v.capture_box)
+		v.capture_row.add_child(v.capture_box)
+		_capture_rows.add_child(v.capture_row)
 		_enemy_views.append(v)
 
 
@@ -1593,14 +1654,13 @@ func _refresh_capture_box(v: EnemyView, enemy_index: int) -> void:
 		v.capture_box.remove_child(child)
 		child.queue_free()
 	v.capture_box.visible = _capture_mode and v.combatant.is_alive()
+	v.capture_row.visible = v.capture_box.visible
 	if not v.capture_box.visible:
 		return
 	if not _battle.is_capturable(enemy_index):
-		var l: Label = _make_label(16)
+		var l: Label = _make_label(17)
 		l.text = TEXT_NOT_CAPTURABLE
-		l.add_theme_color_override("font_color", COLOR_IMMUNE.lightened(0.3))
-		l.add_theme_color_override("font_outline_color", Color.BLACK)
-		l.add_theme_constant_override("outline_size", 6)
+		UiStyle.dark_label(l, UiStyle.TEXT_SUB)
 		v.capture_box.add_child(l)
 		return
 	var book: Dictionary = _data.get_ball_book()
@@ -1615,28 +1675,17 @@ func _refresh_capture_box(v: EnemyView, enemy_index: int) -> void:
 		b.text = TEXT_BALL_CHANCE % [def.display_name, pct]
 		b.custom_minimum_size = Vector2(0, BALL_BUTTON_HEIGHT)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_font_size_override("font_size", 16)
 		b.disabled = not usable
-		var accent: Color = BallIcon.color_of(bid).lightened(0.25)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = COLOR_CAPTURE_BG
-		sb.set_border_width_all(2)
-		sb.border_color = accent
-		sb.set_corner_radius_all(8)
-		sb.content_margin_left = 6.0 + BALL_BUTTON_ICON + 4.0
-		sb.content_margin_right = 8
-		var hover: StyleBoxFlat = sb.duplicate()
-		hover.bg_color = COLOR_CAPTURE_BG.lightened(0.2)
-		hover.border_color = COLOR_SELECTED
-		var dis: StyleBoxFlat = sb.duplicate()
-		dis.border_color = accent.darkened(0.5)
-		b.add_theme_stylebox_override("normal", sb)
-		b.add_theme_stylebox_override("hover", hover)
-		b.add_theme_stylebox_override("pressed", hover)
-		b.add_theme_stylebox_override("disabled", dis)
-		b.add_theme_color_override("font_color", Color.WHITE)
+		b.focus_mode = Control.FOCUS_NONE
+		UiStyle.apply_button(b, UiStyle.ACCENT_BLUE)  # story 033: standard buttons in the capture panel
+		for state: String in ["normal", "hover", "pressed", "disabled"]:
+			var st: StyleBoxFlat = b.get_theme_stylebox(state) as StyleBoxFlat
+			st.content_margin_left = 8.0 + BALL_BUTTON_ICON + 6.0
+			st.content_margin_top = 2.0
+			st.content_margin_bottom = 2.0
 		var icon: BallIcon = BallIcon.make(bid, BALL_BUTTON_ICON)
-		icon.position = Vector2(6, (BALL_BUTTON_HEIGHT - BALL_BUTTON_ICON) * 0.5)
+		icon.position = Vector2(8, (BALL_BUTTON_HEIGHT - BALL_BUTTON_ICON) * 0.5 - 1.0)
 		icon.size = Vector2.ONE * BALL_BUTTON_ICON
 		b.add_child(icon)
 		var why: String = TEXT_CAPTURE_TIP % _battle.ball_energy_cost() if usable else TEXT_CAPTURE_NO_ENERGY % _battle.ball_energy_cost()
@@ -1686,7 +1735,8 @@ func _show_effectiveness(target: Combatant, multiplier: float) -> void:
 	elif multiplier < 1.0:
 		text = TEXT_NOT_VERY_EFFECTIVE
 		color = COLOR_NOT_VERY_EFFECTIVE
-	_show_float(f, anchor, text, color)
+	# Story 033: start mid-sprite so the rising text stays below the intent pill above the sprite.
+	_show_float(f, anchor, text, color, EFFECTIVENESS_FLOAT_Y if anchor != _player_sprite else 0.0)
 
 
 ## Shows the floating label over `anchor` for FLOAT_DURATION s (drifts up, fades at the end).
@@ -1816,6 +1866,9 @@ func _refresh() -> void:
 		for i: int in _enemy_views.size():
 			_refresh_enemy(_enemy_views[i], _battle.enemies[i])
 			_refresh_capture_box(_enemy_views[i], i)
+	_capture_panel.visible = _capture_mode
+	_capture_title.text = TEXT_CAPTURE_PANEL % _battle.ball_energy_cost()
+	_hand_box.modulate.a = 0.35 if _capture_mode else 1.0
 	_player_chips.refresh()
 	if not _hold_fighters:
 		_refresh_talent_pill()

@@ -137,6 +137,10 @@ var _team_evolution_rows: Array[Dictionary] = []
 var _shop: ShopInventory
 ## Permanent money / items / potions bar (story 006), above every run screen except the starter choice.
 var _hud: RunHud
+## Story 033: screen-switch fade (dark veil over everything, fading out after each switch; animations.json
+## "screen_transition"). Off at the « Instantané » animation speed and headless.
+var _fade: ColorRect
+var _fade_tween: Tween
 ## Story 011: THE deck panel (deck / pioche / défausse), under the HUD, above every screen. Read only.
 var _deck_panel: DeckOverlay
 ## The options panel (opened from the run bar).
@@ -1669,6 +1673,37 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 		move_child(_deck_panel, get_child_count() - 1)
 	move_child(_hud, get_child_count() - 1)
 	_refresh_hud()
+	_play_screen_fade()
+
+
+## Story 033: short fade-in of the new screen (a dark veil fading out); none at speed « Instantané » or headless.
+func _play_screen_fade() -> void:
+	if _fade_tween != null and _fade_tween.is_valid():
+		_fade_tween.kill()
+	var seconds: float = BattleFxDirector.cfg_f("screen_transition", "fade_seconds", 0.0)
+	if seconds <= 0.0 or not BattleFxDirector.saved_enabled():
+		if _fade != null:
+			_fade.visible = false
+		return
+	seconds /= maxf(0.01, float(BattleFxDirector.presets().get(BattleFxDirector.load_saved_speed(), 1.0)))
+	if _fade == null:
+		_fade = ColorRect.new()
+		_fade.name = "ScreenFade"
+		_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_fade)
+	_fade.color = BattleFxDirector.cfg_color("screen_transition", "color", Color(0.04, 0.05, 0.1))
+	_fade.modulate.a = BattleFxDirector.cfg_f("screen_transition", "start_alpha", 1.0)
+	_fade.visible = true
+	move_child(_fade, get_child_count() - 1)
+	_fade_tween = create_tween()
+	_fade_tween.tween_property(_fade, "modulate:a", 0.0, seconds).set_ease(Tween.EASE_OUT)
+	_fade_tween.tween_callback(func() -> void: _fade.visible = false)
+
+
+## Story 033: true while the screen-switch fade is still on screen (QA waits for it before a shot).
+func is_screen_fading() -> bool:
+	return _fade != null and _fade.visible
 
 
 ## Redraws the HUD from the run (and the live battle's potions).
