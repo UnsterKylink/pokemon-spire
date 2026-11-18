@@ -54,14 +54,14 @@ func _init(config_path: String = CONFIG_PATH) -> void:
 
 ## Plays the music of a game context (a key of audio.json "music", e.g. "map", "wild", "boss", "final_boss_phase2")
 ## or directly a track id. Crossfades from the current track (`fade` < 0 = audio.json crossfade_seconds).
-## Does nothing when that track is already the current one; an unknown context or missing file only warns.
+## Does nothing when that track is already playing; an unknown context or missing file only warns.
 func play_music(context: String, fade: float = -1.0) -> void:
 	var track: String = music_track_for(context)
 	if track.is_empty():
 		_warn_once("context:" + context, "AudioManager: no music for context '%s'" % context)
 		return
-	if track == _current_track:
-		return
+	if track == _current_track and (_active.playing or _headless):
+		return  # a finished jingle (victoire / defaite) is replayed when asked again
 	var info: Dictionary = _tracks().get(track, {})
 	var stream: AudioStream = _load_stream(String(info.get("file", "")))
 	if stream == null:
@@ -174,6 +174,24 @@ static func cry_slug(slug_or_sprite: String) -> String:
 
 
 # ------------------------------------------------------------------------------------------------ volumes
+
+## The saved volume 0..1 of `kind` ("music" or "sfx"), or audio.json default_volumes when never set. Static: the
+## options panel reads it without an AudioManager.
+static func saved_volume(kind: String, config_path: String = CONFIG_PATH) -> float:
+	var fallback: float = 0.6 if kind == "music" else 0.8
+	if FileAccess.file_exists(config_path):
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(config_path))
+		if parsed is Dictionary and (parsed as Dictionary).get("default_volumes", null) is Dictionary:
+			fallback = float((parsed["default_volumes"] as Dictionary).get(kind, fallback))
+	var key: String = GameSettings.KEY_MUSIC_VOLUME if kind == "music" else GameSettings.KEY_SFX_VOLUME
+	return clampf(GameSettings.get_float(key, fallback), 0.0, 1.0)
+
+
+## The music context of a screen (audio.json "screens": Main screen name -> context); "" = keep the current music.
+func screen_context(screen_name: String) -> String:
+	var screens: Dictionary = _config.get("screens", {}) if _config.get("screens", {}) is Dictionary else {}
+	return String(screens.get(screen_name, ""))
+
 
 ## Music volume 0..1 (saved in GameSettings music_volume; 0 mutes the Music bus).
 func set_music_volume(volume: float) -> void:

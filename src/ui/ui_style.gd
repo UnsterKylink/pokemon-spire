@@ -482,6 +482,30 @@ static func style_screen(root: Control, backdrop: bool = true) -> void:
 	root.add_child(p, false, Node.INTERNAL_MODE_BACK)
 
 
+## Story 022: plays `on_press` when any button of the tree is pressed and `on_hover` when the mouse enters an enabled
+## one (both take no argument). Installed once by Main with AudioManager callbacks; buttons added later are hooked as
+## they enter the tree. Idempotent per button (meta "ui_sound").
+static func install_button_sounds(tree: SceneTree, on_press: Callable, on_hover: Callable) -> void:
+	var hook: Callable = func(n: Node) -> void: _hook_button_sound(n, on_press, on_hover)
+	tree.node_added.connect(hook)
+	var stack: Array[Node] = [tree.root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		hook.call(n)
+		stack.append_array(n.get_children())
+
+
+static func _hook_button_sound(n: Node, on_press: Callable, on_hover: Callable) -> void:
+	if not (n is BaseButton) or n.has_meta("ui_sound"):
+		return
+	var b: BaseButton = n
+	b.set_meta("ui_sound", true)
+	b.pressed.connect(func() -> void: on_press.call())
+	b.mouse_entered.connect(func() -> void:
+		if not b.disabled:
+			on_hover.call())
+
+
 ## Story 033: the shared backdrop added by style_screen under `root` (null when none).
 static func screen_backdrop(root: Control) -> MenuBackdrop:
 	return root.get_meta("menu_backdrop", null) as MenuBackdrop if root.has_meta("menu_backdrop") else null

@@ -1,5 +1,5 @@
 {
-	"_doc": "Musique et sons (story 022). Fichiers generes par tools/audio/chiptune.py (musique), tools/audio/sfx.py (effets) et tools/audio/fetch_cries.py (cris officiels PokeAPI) ; sources listees dans design/audio/sources.md. Lu par src/audio/audio_manager.gd (AudioManager). tracks: id -> {file (res://), loop (true = boucle sans couture ; les jingles victoire/defaite ne bouclent pas)}. music: contexte de jeu -> id de tracks (les ids de salle de la carte sont reutilises : wild, elite, boss = arene, rival, rival_final, legendary, center, mart, event ; league_member = Conseil 4, league_champion = Maitre, final_boss / final_boss_phase2 = Ethernatos avant / apres son changement de phase). sfx: id -> fichier res:// ; sfx_dir sert de repli (sfx_dir/<id>.wav). events: evenement de jeu -> id de sfx (AudioManager.play_event). cries: dossier des cris (<slug du sprite>.ogg), volume relatif (0..1, applique sur le bus SFX), play_on: evenements qui jouent le cri du Pokemon concerne (battle_enter = entree en combat de chaque ennemi / du joueur, ko = Pokemon mis K.O., capture_success, evolution). default_volumes: volumes par defaut 0..1 (music, sfx) tant que le joueur ne les a pas regles (GameSettings music_volume / sfx_volume). crossfade_seconds: fondu enchaine entre deux musiques (0 = coupe nette). sfx_polyphony: nombre de sons simultanes max.",
+	"_doc": "Musique et sons (story 022). Fichiers generes par tools/audio/chiptune.py (musique), tools/audio/sfx.py (effets) et tools/audio/fetch_cries.py (cris officiels PokeAPI) ; sources listees dans design/audio/sources.md. Lu par src/audio/audio_manager.gd (AudioManager). tracks: id -> {file (res://), loop (true = boucle sans couture ; les jingles victoire/defaite ne bouclent pas)}. music: contexte de jeu -> id de tracks (les ids de salle de la carte sont reutilises : wild, elite, boss = arene, rival, rival_final, legendary, center, mart, event ; league_member = Conseil 4, league_champion = Maitre, final_boss / final_boss_phase2 = Ethernatos avant / apres son changement de phase). screens: ecran de Main -> contexte de musique (ecran absent, ex. battle / badge / evolution = la musique continue ; le combat choisit son contexte selon la salle). sfx: id -> fichier res:// ; sfx_dir sert de repli (sfx_dir/<id>.wav). events: evenement de jeu -> id de sfx (AudioManager.play_event). cries: dossier des cris (<slug du sprite>.ogg), volume relatif (0..1, applique sur le bus SFX), play_on: evenements qui jouent le cri du Pokemon concerne (battle_enter = entree en combat de chaque ennemi / du joueur, ko = Pokemon mis K.O., capture_success, evolution). default_volumes: volumes par defaut 0..1 (music, sfx) tant que le joueur ne les a pas regles (GameSettings music_volume / sfx_volume). crossfade_seconds: fondu enchaine entre deux musiques (0 = coupe nette). sfx_polyphony: nombre de sons simultanes max.",
 	"tracks": {
 		"titre": {"file": "res://assets/audio/music/titre.ogg", "loop": true},
 		"carte": {"file": "res://assets/audio/music/carte.ogg", "loop": true},
@@ -33,8 +33,20 @@
 		"defeat": "defaite",
 		"center": "centre",
 		"mart": "mart",
-		"event": "evenement",
-		"reward": "carte"
+		"event": "evenement"
+	},
+	"screens": {
+		"resume": "title",
+		"starter": "title",
+		"map": "map",
+		"reward": "victory",
+		"room": "map",
+		"center": "center",
+		"mart": "mart",
+		"event": "event",
+		"league": "league_member",
+		"victory": "final_victory",
+		"defeat": "defeat"
 	},
 	"sfx_dir": "res://assets/audio/sfx",
 	"sfx": {
