@@ -276,7 +276,7 @@ func _apply_rule_before_intents(turn: int) -> void:
 	_rule_fired()
 
 
-## Start-of-turn rule effects BEFORE the draw. False if the player was K.O. (cannot happen with the HP floor).
+## Start-of-turn rule effects BEFORE the draw (the HP loss never K.O.s: FIELD_HP_FLOOR).
 func _apply_rule_turn_start(turn: int) -> void:
 	var fired: bool = false
 	var loss: int = _rule_total(FieldRules.PLAYER_HP_LOSS_PER_TURN, turn)
@@ -820,6 +820,11 @@ func end_turn() -> bool:
 		_lose()
 		return true
 	_in_enemy_phase = true
+	# Enemy block from the previous round expires when the enemy phase begins (story 030: before anyone acts, so block given
+	# by an ally this phase -- block_ally -- lasts through the player's next turn).
+	for e: Combatant in enemies:
+		if e.is_alive():
+			e.reset_block()
 	for e: Combatant in enemies:
 		if not e.is_alive():
 			continue
@@ -830,7 +835,6 @@ func end_turn() -> bool:
 			if skip_id.is_empty():
 				_execute_intent(e)
 			else:
-				e.reset_block()
 				turn_skipped.emit(e, skip_id)
 		if not player.is_alive():
 			break
@@ -999,7 +1003,6 @@ func _apply_identity(pokemon_id: String) -> void:
 
 func _execute_intent(enemy: Combatant) -> void:
 	var intent: EnemyIntent = enemy.intent
-	enemy.reset_block()  # block from the previous round expires when the enemy acts
 	var hit: bool = false
 	var mult: float = _type_chart.damage_multiplier(_attack_type_of(enemy, intent), player.type_ids)
 	match intent.type:

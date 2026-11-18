@@ -63,6 +63,17 @@ const COLOR_SELECTED: Color = Color(1.0, 0.85, 0.3)
 const COLOR_INTENT_ATTACK: Color = Color(1.0, 0.4, 0.35)
 const COLOR_INTENT_BLOCK: Color = Color(0.4, 0.7, 1.0)
 const COLOR_INTENT_BUFF: Color = Color(1.0, 0.9, 0.3)
+## Story 030: intents of the new enemy actions (status intents use the status colour).
+const COLOR_INTENT_HEAL: Color = Color(0.45, 0.9, 0.5)
+const COLOR_INTENT_CHARGE: Color = Color(1.0, 0.55, 0.2)
+const COLOR_INTENT_DEBUFF: Color = Color(0.85, 0.55, 1.0)
+const COLOR_JUNK: Color = Color(0.5, 0.48, 0.44)
+## Story 030: field rule pill / banners.
+const COLOR_FIELD_RULE: Color = Color(0.55, 0.85, 0.75)
+const COLOR_PHASE: Color = Color(0.95, 0.3, 0.55)
+const TEXT_FIELD_RULE_PILL: String = "Terrain : %s"
+const TEXT_FIELD_RULE_BANNER: String = "Règle de terrain : %s"
+const TEXT_FIELD_RULE_TIP: String = "%s\n%s"
 const COLOR_KO: Color = Color(0.6, 0.6, 0.6)
 const MODULATE_KO: Color = Color(0.45, 0.45, 0.45, 0.55)
 const MODULATE_TARGETABLE: Color = Color(1.0, 0.9, 0.6)
@@ -293,6 +304,9 @@ var _elan_pips: HBoxContainer
 var _elan_bonus: Label
 var _force_chips: HBoxContainer
 var _exhaust_label: Label
+## Story 030: field rule pill (info row) and the current banner (field rule / boss phase), null when none.
+var _field_pill: Label
+var _field_banner: PanelContainer
 var _keyword_tip: KeywordTooltip
 var _elan_shown: int = 0
 var _preview_target: int = -1
@@ -608,11 +622,108 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_battle.talent_triggered.connect(_on_talent_triggered)
 	_battle.strength_changed.connect(_on_strength_changed)
 	_battle.card_exhausted.connect(_on_card_exhausted)
+	_battle.field_rule_triggered.connect(_on_field_rule_triggered)
+	_battle.enemy_phase_changed.connect(_on_enemy_phase_changed)
 	_recording = false
 	_hold_fighters = false
 	_fx.skip()
 	_battle.start()
 	_refresh_active_pokemon(player)
+	_refresh()
+	_refresh_field_pill()
+	var rule: Dictionary = _battle.get_field_rule()
+	if not rule.is_empty():  # story 030: the rule is announced when the battle starts
+		_show_field_banner(TEXT_FIELD_RULE_BANNER % String(rule["name"]), String(rule["description"]), COLOR_FIELD_RULE)
+
+
+# --- Story 030: field rule pill / banner, boss phase banner --------------------------------------------------
+
+## Field rule pill text ("" when the battle has no rule). QA.
+func get_field_rule_pill_text() -> String:
+	return _field_pill.text if _field_pill != null and _field_pill.visible else ""
+
+
+## The banner (field rule / boss phase) while shown, null otherwise. QA.
+func get_field_banner() -> PanelContainer:
+	return _field_banner if is_instance_valid(_field_banner) and not _field_banner.is_queued_for_deletion() else null
+
+
+func _refresh_field_pill() -> void:
+	if _field_pill == null or _battle == null:
+		return
+	var rule: Dictionary = _battle.get_field_rule()
+	_field_pill.visible = not rule.is_empty()
+	if not rule.is_empty():
+		_field_pill.text = TEXT_FIELD_RULE_PILL % String(rule["name"])
+		_field_pill.tooltip_text = TEXT_FIELD_RULE_TIP % [String(rule["name"]), String(rule["description"])]
+
+
+## A banner across the arena: `title` + `body`, framed in `accent`; fades out after field_rule.hold_seconds (fx config).
+func _show_field_banner(title: String, body: String, accent: Color) -> void:
+	if is_instance_valid(_field_banner):
+		_field_banner.queue_free()
+	var banner := PanelContainer.new()
+	banner.name = "FieldBanner"
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb: StyleBoxFlat = UiStyle.panel(Color(0.06, 0.08, 0.16, 0.94), 10, 3)
+	sb.border_color = accent
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 12
+	banner.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.add_child(box)
+	var t: Label = _make_label(int(BattleFxDirector.cfg_f("field_rule", "title_font_size", 30.0)))
+	t.text = title
+	t.add_theme_color_override("font_color", accent.lightened(0.35))
+	_outline(t, OUTLINE_SMALL)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	if not body.is_empty():
+		var d: Label = _make_label(int(BattleFxDirector.cfg_f("field_rule", "body_font_size", 19.0)))
+		d.text = body
+		d.add_theme_color_override("font_color", UiStyle.CREAM)
+		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d.custom_minimum_size.x = BattleFxDirector.cfg_f("field_rule", "body_width", 560.0)
+		box.add_child(d)
+	add_child(banner)
+	banner.reset_size()
+	banner.position = Vector2((size.x - banner.size.x) * 0.5, size.y * BattleFxDirector.cfg_f("field_rule", "y_ratio", 0.2))
+	_field_banner = banner
+	var tw: Tween = banner.create_tween()
+	tw.tween_interval(BattleFxDirector.cfg_f("field_rule", "hold_seconds", 3.0))
+	tw.tween_property(banner, "modulate:a", 0.0, BattleFxDirector.cfg_f("field_rule", "fade_seconds", 0.6))
+	tw.tween_callback(banner.queue_free)
+
+
+func _on_field_rule_triggered(_rule_id: String) -> void:
+	if _defer(_refresh_field_pill):
+		return
+	_refresh_field_pill()
+	if _field_pill != null and _field_pill.visible and _fx != null:
+		_fx.pulse(_field_pill, 1.15, 0.3)
+
+
+func _on_enemy_phase_changed(enemy: Combatant, _phase_index: int, message: String) -> void:
+	if _defer(_show_phase.bind(enemy, message)):
+		return
+	_show_phase(enemy, message)
+
+
+## Boss phase change: banner with the message, red flash + burst on the boss, rule pill refreshed.
+func _show_phase(enemy: Combatant, message: String) -> void:
+	var rule: Dictionary = _battle.get_field_rule() if _battle != null else {}
+	_show_field_banner(message, TEXT_FIELD_RULE_BANNER % String(rule["name"]) if not rule.is_empty() else "", COLOR_PHASE)
+	_refresh_field_pill()
+	var spr: AnimatedPokemon = _sprite_of(enemy)
+	if spr != null and _fx != null:
+		_fx.flash(spr, COLOR_PHASE)
+		_fx.burst(_fx_layer, _center_of(spr), COLOR_PHASE, int(BattleFxDirector.cfg_f("phase", "burst_count", 22.0)),
+				BattleFxDirector.cfg_f("phase", "burst_radius", 110.0), _fx.t(BattleFxDirector.cfg_f("phase", "burst_seconds", 0.7)))
+		_ev_wait = maxf(_ev_wait, _fx.t(BattleFxDirector.cfg_f("phase", "hold_seconds", 1.0)))
 	_refresh()
 
 
@@ -923,6 +1034,16 @@ func _build_ui() -> void:
 	_outline(_exhaust_label, OUTLINE_SMALL)
 	_exhaust_label.visible = false
 	info.add_child(_exhaust_label)
+	_field_pill = _make_label(17)
+	_field_pill.name = "FieldRulePill"
+	_field_pill.mouse_filter = Control.MOUSE_FILTER_STOP  # tooltip
+	_field_pill.visible = false
+	var fsb: StyleBoxFlat = CardFace._pill(Color(0.08, 0.2, 0.18, 0.92), COLOR_FIELD_RULE)
+	fsb.content_margin_left = 8
+	fsb.content_margin_right = 8
+	_field_pill.add_theme_stylebox_override("normal", fsb)
+	_field_pill.add_theme_color_override("font_color", COLOR_FIELD_RULE.lightened(0.3))
+	info.add_child(_field_pill)
 	_deck_label = _make_label(18)
 	_outline(_deck_label, OUTLINE_SMALL)
 	info.add_child(_deck_label)
@@ -1628,9 +1749,18 @@ func _intent_color(intent: EnemyIntent, enemy: Combatant = null) -> Color:
 				return def.color.lightened(STATUS_FLOAT_LIGHTEN)
 	match intent.type:
 		EnemyIntent.TYPE_ATTACK:
-			return COLOR_INTENT_ATTACK
-		EnemyIntent.TYPE_BLOCK:
+			return COLOR_INTENT_CHARGE if intent.charged else COLOR_INTENT_ATTACK
+		EnemyIntent.TYPE_BLOCK, EnemyIntent.TYPE_BLOCK_ALLY:
 			return COLOR_INTENT_BLOCK
+		EnemyIntent.TYPE_HEAL, EnemyIntent.TYPE_HEAL_ALLY:
+			return COLOR_INTENT_HEAL
+		EnemyIntent.TYPE_CHARGE:
+			return COLOR_INTENT_CHARGE
+		EnemyIntent.TYPE_STATUS:
+			var def: StatusData = _data.get_status(intent.status_id)
+			return def.color.lightened(STATUS_FLOAT_LIGHTEN) if def != null else COLOR_INTENT_DEBUFF
+		EnemyIntent.TYPE_STRIP_BLOCK, EnemyIntent.TYPE_DRAIN_ENERGY, EnemyIntent.TYPE_ADD_JUNK:
+			return COLOR_INTENT_DEBUFF
 	return COLOR_INTENT_BUFF
 
 
@@ -1791,6 +1921,8 @@ func _rebuild_hand() -> void:
 		b.mouse_exited.connect(func() -> void: _keyword_tip.visible = false)
 		b.disabled = not _battle.can_play(i)
 		var kind_color: Color = COLOR_SKILL if card.kind == CardData.KIND_SKILL else COLOR_ATTACK
+		if card.is_junk():
+			kind_color = COLOR_JUNK  # story 030: « Débris »
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(0.18, 0.18, 0.24)
 		sb.set_border_width_all(3)
@@ -1901,6 +2033,9 @@ func _on_enemy_acted(enemy: Combatant, intent: EnemyIntent) -> void:
 	var act: Dictionary = {"kind": "enemy_act", "enemy": enemy, "intent_type": intent.type, "type_id": type_id, "snaps": []}
 	if intent.type == EnemyIntent.TYPE_BLOCK:
 		act["snaps"] = [_snap_of(enemy)]
+	elif intent.type != EnemyIntent.TYPE_ATTACK:  # story 030: heal / ally / strip_block change other fighters too
+		act["snaps"] = _snapshot()
+		act["status_id"] = intent.status_id
 	var at: int = _queue.size()
 	for i: int in _queue.size():
 		var q: Dictionary = _queue[i]
@@ -2067,9 +2202,19 @@ func _play_enemy_act(ev: Dictionary) -> void:
 	if String(ev["intent_type"]) == EnemyIntent.TYPE_ATTACK:
 		await _charge(spr, _player_sprite, String(ev["type_id"]))
 		return
-	var is_block: bool = String(ev["intent_type"]) == EnemyIntent.TYPE_BLOCK
+	var it: String = String(ev["intent_type"])
 	var dur: float = _fx.lunge(spr, Vector2.UP, BattleFxDirector.cfg_f("lunge", "hop_distance", 18.0))
-	dur = maxf(dur, _fx.fx_buff(_fx_layer, "block" if is_block else "strength", _center_of(spr)))
+	if it == EnemyIntent.TYPE_STATUS and not String(ev.get("status_id", "")).is_empty():  # story 030: the status lands on the player
+		dur = maxf(dur, _fx.fx_status(_fx_layer, String(ev["status_id"]), _center_of(_player_sprite)))
+	else:
+		var buff_kind: String = "strength"
+		if it in [EnemyIntent.TYPE_BLOCK, EnemyIntent.TYPE_BLOCK_ALLY]:
+			buff_kind = "block"
+		elif it in [EnemyIntent.TYPE_HEAL, EnemyIntent.TYPE_HEAL_ALLY]:
+			buff_kind = "heal"
+		elif it in [EnemyIntent.TYPE_DRAIN_ENERGY, EnemyIntent.TYPE_ADD_JUNK, EnemyIntent.TYPE_STRIP_BLOCK]:
+			buff_kind = "energy"
+		dur = maxf(dur, _fx.fx_buff(_fx_layer, buff_kind, _center_of(spr)))
 	dur = maxf(dur, _apply_snaps(ev))
 	await _fx.wait(dur)
 

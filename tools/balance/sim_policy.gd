@@ -22,6 +22,8 @@ extends RefCounted
 ##  - Events: first option without HP loss / card loss.
 
 const DEFAULTS: Dictionary = {
+	## Story 030: a charged (announced) enemy attack counts this many times its damage when deciding to block.
+	"charged_attack_weight": 1.25,
 	## "random" | "first": how the starter is picked among the 3 proposals.
 	"starter_pick": "random",
 	## Map: HP fraction under which a reachable Centre is preferred over everything.
@@ -178,6 +180,8 @@ func _play_turn(b: Battle, room_type: String, boosters_used: Dictionary) -> void
 		var act: Dictionary = _choose_card(b)
 		if act.is_empty():
 			return
+		if b.hand[int(act["index"])].is_junk():  # story 030: « Débris » is never played (can_play is false anyway)
+			return
 		if not b.play_card(int(act["index"]), int(act["target"])):
 			illegal_moves += 1
 			return
@@ -187,7 +191,9 @@ func _incoming(b: Battle) -> int:
 	var total: int = 0
 	for e: Combatant in b.enemies:
 		if e.is_alive() and e.intent != null and e.intent.type == EnemyIntent.TYPE_ATTACK and e.intent.skip_label.is_empty():
-			total += e.intent.value
+			# Story 030: every hit of a multi-hit attack; a charged (announced) big hit is weighted up so the policy blocks it.
+			var dmg: int = e.intent.value * e.intent.hits
+			total += ceili(float(dmg) * float(cfg.get("charged_attack_weight", 1.0))) if e.intent.charged else dmg
 	return total
 
 
