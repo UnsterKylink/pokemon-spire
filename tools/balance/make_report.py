@@ -53,6 +53,7 @@ def summarize(runs):
     s["avg_potions_bought"] = sum(r["potions_bought"] for r in runs) / n
     s["avg_items"] = sum(r["items"] for r in runs) / n
     s["avg_fights"] = sum(r["fights"] for r in runs) / n
+    s["avg_fights_won"] = (sum(r["fights"] for r in runs if r["won"]) / wins) if wins else None  # story 032
     s["avg_badges"] = sum(r["badges"] for r in runs) / n
     fights = Counter()
     deaths = Counter()
@@ -115,6 +116,8 @@ def render(s, tag, note):
         L.append(f"| {st} | {c} | {pct(c, n)} | {pct(c, reached)} |")
         reached -= c
     L.append("")
+    if s.get("deaths_by_stage_other"):
+        L.append("Autres étapes (rival, combats d'événement) : " + ", ".join(f"`{k}` ({v})" for k, v in sorted(s["deaths_by_stage_other"].items())) + "\n")
     L.append("Zones : `wild`/`elite` = salles de combat de la carte, `boss` = arène. "
              "« % de celles qui l'atteignent » = défaites à cette étape / parties encore en vie en y arrivant (étapes dans l'ordre de la partie).\n")
     L.append("### Entonnoir (badges obtenus)\n")
@@ -142,7 +145,7 @@ def render(s, tag, note):
         L.append(f"| {name} | {s['entered'][z]} | {s['avg_hp_lost_by_zone'][z]:.1f} |")
     L.append("")
     L.append("## Moyennes par partie\n")
-    L.append(f"- Combats : {s['avg_fights']:.1f}; badges : {s['avg_badges']:.2f}")
+    L.append(f"- Combats : {s['avg_fights']:.1f}" + (f" (parties gagnées : {s['avg_fights_won']:.1f})" if s.get('avg_fights_won') else "") + f"; badges : {s['avg_badges']:.2f}")
     L.append(f"- Taille du deck en fin de partie : {s['avg_deck_size']:.1f}" + (f" (parties gagnées : {s['avg_deck_size_won']:.1f})" if s['avg_deck_size_won'] else ""))
     L.append(f"- Potions utilisées : {s['avg_potions_used']:.2f}; potions achetées : {s['avg_potions_bought']:.2f}; objets tenus : {s['avg_items']:.2f}\n")
     L.append("## Taux de défaite par type de salle\n")
@@ -193,7 +196,14 @@ def main():
         f.write(md)
     print(f"games={s['games']} wins={s['wins']} win_rate={100*s['win_rate']:.1f}% CI95=[{100*s['ci95'][0]:.1f},{100*s['ci95'][1]:.1f}]")
     print("deaths:", {k: v for k, v in s["deaths_by_stage"].items() if v})
-    print("avg badges %.2f, avg deck %.1f, avg fights %.1f, potions used %.2f" % (s["avg_badges"], s["avg_deck_size"], s["avg_fights"], s["avg_potions_used"]))
+    print("avg badges %.2f, avg deck %.1f, avg fights %.1f (won runs %s), potions used %.2f" % (s["avg_badges"], s["avg_deck_size"], s["avg_fights"],
+          "%.1f" % s["avg_fights_won"] if s["avg_fights_won"] else "-", s["avg_potions_used"]))
+    n = s["games"]; dead = n - s["wins"]
+    z1 = sum(s["deaths_by_stage"][f"zone1_{r}"] for r in ("wild", "elite", "boss"))
+    allst = dict(s["deaths_by_stage"]); allst.update(s.get("deaths_by_stage_other", {})); allst.pop("victory", None)
+    worst = max(allst, key=lambda k: allst[k])
+    print("targets: >=3 badges %.1f%%, league %.1f%%, zone1 deaths %.1f%%, worst stage %s %.1f%% of deaths" % (
+        100 * s["entered"][3] / n, 100 * s["entered"][8] / n, 100 * z1 / n, worst, 100 * allst[worst] / dead if dead else 0))
     print("top killers:", s["top_killers"][:8])
     print("report:", out)
     with open(os.path.splitext(out)[0] + ".json", "w") as f:

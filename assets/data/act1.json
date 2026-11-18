@@ -49,7 +49,7 @@
 			"min_floor": 2,
 			"encounter_pool": "elite",
 			"modifiers": {
-				"hp_multiplier": 1.2,
+				"hp_multiplier": 1.1,
 				"strength_bonus": 0
 			},
 			"reward": {

@@ -256,7 +256,7 @@
 	"starter_choice": {"roster_share": 0.5},
 	"roster_evolution": {"hp_bonus_per_tier": 15, "final_bonus": 5},
 	"_team_evolution_doc": "Story 014. team_evolution : evolution des Pokemon de l'equipe (ceux qui portent des cartes du deck, hors starter) : battles_per_stage = nombre de combats GAGNES depuis l'entree du Pokemon dans le deck pour passer du stade 1 au 2 puis du 2 au 3 (valeurs croissantes, verifie apres chaque victoire) ; bonus_hp = PV max (>= 0) gagnes a chaque evolution d'equipe. Sans forme suivante dans evolutions, le Pokemon d'equipe ne change pas. Le starter suit zones.json evolution_after_badges ; sans forme suivante il gagne evolution_hp_bonus_default PV max et une de ses cartes est ameliore. evolutions accepte aussi une forme evoluee comme cle (stade 2 -> stade 3).",
-	"team_evolution": {"battles_per_stage": [4, 9], "bonus_hp": 2},
+	"team_evolution": {"battles_per_stage": [2, 5], "bonus_hp": 2},
 	"evolutions": {
 		"bulbasaur": {"id": "ivysaur", "name": "Herbizarre", "types": ["grass", "poison"], "max_hp_bonus": 15, "sprite": "res://assets/sprites/pokemon/ivysaur.png", "teaches": ["fouet_lianes", "bombe_beurk"]},
 		"salameche": {"id": "charmeleon", "name": "Reptincel", "types": ["fire"], "max_hp_bonus": 15, "sprite": "res://assets/sprites/pokemon/charmeleon.png", "teaches": ["danse_flamme", "lance_flammes"]},
