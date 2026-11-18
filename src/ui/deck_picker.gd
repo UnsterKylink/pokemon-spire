@@ -25,7 +25,7 @@ var _indices: Array[int] = []
 
 
 func _init() -> void:
-	UiStyle.style_screen(self)  # story 020: art-bible look
+	UiStyle.style_screen(self, false)  # story 020 look; story 033: overlay, no backdrop
 	name = "DeckPicker"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

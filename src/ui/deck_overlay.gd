@@ -62,7 +62,7 @@ var _data: GameData
 
 
 func _init() -> void:
-	UiStyle.style_screen(self)  # story 020: art-bible look
+	UiStyle.style_screen(self, false)  # story 020 look; story 033: overlay, no backdrop
 	name = "DeckOverlay"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	offset_top = RunHud.HEIGHT

@@ -20,6 +20,10 @@ const COLOR_TILE_BG: Color = Color(0.17, 0.18, 0.24)
 const COLOR_PRICE: Color = Color(1.0, 0.84, 0.3)
 const COLOR_TOO_EXPENSIVE: Color = Color(1.0, 0.42, 0.38)
 const COLOR_SOLD: Color = Color(0.55, 0.56, 0.62)
+## Story 033: greyed (bought / full / too expensive) articles: tile fill and content tint, readable on white.
+const COLOR_TILE_DISABLED: Color = Color("#E4E7EE")
+const DISABLED_CONTENT: Color = Color(1, 1, 1, 0.72)
+const DISABLED_CARD: Color = Color(0.8, 0.8, 0.84, 0.62)
 const COLOR_CAPTION: Color = Color(0.7, 0.72, 0.82)
 const COLOR_STATUS: Color = Color(0.55, 1.0, 0.6)
 const COLOR_POTION: Color = Color(0.55, 0.82, 1.0)
@@ -214,7 +218,7 @@ func _make_card_slot(index: int) -> Control:
 	if not e.sold and _run.money < e.price:
 		b.tooltip_text += "\n" + TEXT_NO_MONEY
 	_style_button(b, CardView.rarity_color(e.card.rarity), e.sold)
-	(b.get_node("Content") as Control).modulate = Color(1, 1, 1, 0.4) if b.disabled else Color.WHITE
+	(b.get_node("Content") as Control).modulate = DISABLED_CARD if b.disabled else Color.WHITE
 	b.pressed.connect(buy_card.bind(index))
 	col.add_child(b)
 	col.add_child(_price_label(e, can_buy))
@@ -288,7 +292,7 @@ func _make_tile(e: ShopEntry, index: int, can_buy: bool, reason: String, accent:
 	else:
 		box.add_child(d)
 		box.add_child(price)
-	margin.modulate = Color(1, 1, 1, 0.45) if b.disabled else Color.WHITE
+	margin.modulate = DISABLED_CONTENT if b.disabled else Color.WHITE  # story 033: greyed but readable
 	if e.kind == ShopEntry.KIND_ITEM:
 		b.pressed.connect(buy_item.bind(index))
 	elif e.kind == ShopEntry.KIND_BALL:
@@ -310,18 +314,20 @@ func _entry_id(e: ShopEntry) -> String:
 	return ""
 
 
+## Story 033: light tiles in the white Mart window (pale fill, accent border; hover = yellow border); bought / full /
+## too expensive = flat light grey with a grey border — greyed, but the dark text stays readable.
 func _style_button(b: Button, border: Color, sold: bool) -> void:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = COLOR_TILE_BG
+	sb.bg_color = UiStyle.PANEL_WHITE
 	sb.set_border_width_all(3)
-	sb.border_color = border
-	sb.set_corner_radius_all(8)
+	sb.border_color = border.darkened(0.15)
+	sb.set_corner_radius_all(10)
 	var hover: StyleBoxFlat = sb.duplicate()
-	hover.bg_color = COLOR_TILE_BG.lightened(0.15)
-	hover.border_color = Color(1.0, 0.85, 0.3)
+	hover.bg_color = UiStyle.SUB_FILL
+	hover.border_color = UiStyle.ACCENT_YELLOW.darkened(0.1)
 	var dis: StyleBoxFlat = sb.duplicate()
-	dis.bg_color = Color(0.12, 0.12, 0.15)
-	dis.border_color = border.darkened(0.6) if sold else border.darkened(0.4)
+	dis.bg_color = COLOR_TILE_DISABLED
+	dis.border_color = Color(0.62, 0.64, 0.7) if sold else border.lerp(Color(0.62, 0.64, 0.7), 0.6)
 	b.add_theme_stylebox_override("normal", sb)
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", hover)

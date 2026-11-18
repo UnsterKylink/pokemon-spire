@@ -7,7 +7,7 @@ extends Control
 ## Emitted when the player clicks a proposal.
 signal starter_chosen(pokemon_id: String)
 
-const SPRITE_SIZE: Vector2 = Vector2(144, 144)
+const SPRITE_SIZE: Vector2 = Vector2(180, 180)  # story 033: official artwork
 const CARD_SIZE: Vector2 = Vector2(330, 420)
 const COLOR_BG: Color = UiStyle.BG_DEEP
 
@@ -53,7 +53,11 @@ func _make_choice_widget(data: GameData, pokemon_id: String, index: int) -> Butt
 	b.name = "Choice%d" % index
 	b.custom_minimum_size = CARD_SIZE
 	b.focus_mode = Control.FOCUS_NONE
-	UiStyle.apply_button(b, UiStyle.BG_PANEL_LIGHT)  # story 020: raised panel-coloured choice
+	# Story 033: each proposal is a white « menu Pokémon » card (blue frame; hover / press = yellow frame).
+	b.add_theme_stylebox_override("normal", UiStyle.menu_panel(UiStyle.FRAME_BLUE, 0.0, 0.0))
+	b.add_theme_stylebox_override("hover", UiStyle.menu_panel(UiStyle.ACCENT_YELLOW, 0.0, 0.0))
+	b.add_theme_stylebox_override("pressed", UiStyle.menu_panel(UiStyle.ACCENT_YELLOW.darkened(0.15), 0.0, 0.0))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	b.pressed.connect(choose.bind(index))
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)

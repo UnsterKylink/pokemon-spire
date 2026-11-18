@@ -690,33 +690,29 @@ func _show_field_banner(title: String, body: String, accent: Color) -> void:
 	var banner := PanelContainer.new()
 	banner.name = "FieldBanner"
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sb: StyleBoxFlat = UiStyle.panel(Color(0.06, 0.08, 0.16, 0.94), 10, 3)
-	sb.border_color = accent
-	sb.content_margin_left = 24
-	sb.content_margin_right = 24
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 12
-	banner.add_theme_stylebox_override("panel", sb)
+	# Story 033: white « menu Pokémon » window framed in the accent colour, dark text.
+	banner.add_theme_stylebox_override("panel", UiStyle.menu_panel(accent, 18.0, 6.0))
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner.add_child(box)
 	var t: Label = _make_label(int(BattleFxDirector.cfg_f("field_rule", "title_font_size", 30.0)))
 	t.text = title
-	t.add_theme_color_override("font_color", accent.lightened(0.35))
-	_outline(t, OUTLINE_SMALL)
+	UiStyle.dark_label(t, UiStyle.ink_on_white(accent, true) if accent.get_luminance() > 0.42 else accent)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	if not body.is_empty():
 		var d: Label = _make_label(int(BattleFxDirector.cfg_f("field_rule", "body_font_size", 19.0)))
 		d.text = body
-		d.add_theme_color_override("font_color", UiStyle.CREAM)
+		UiStyle.dark_label(d, UiStyle.TEXT_SUB)
 		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		d.custom_minimum_size.x = BattleFxDirector.cfg_f("field_rule", "body_width", 560.0)
 		box.add_child(d)
 	add_child(banner)
 	banner.reset_size()
-	banner.position = Vector2((size.x - banner.size.x) * 0.5, size.y * BattleFxDirector.cfg_f("field_rule", "y_ratio", 0.2))
+	var cx: float = size.x * BattleFxDirector.cfg_f("field_rule", "x_ratio", 0.5)
+	banner.position = Vector2(clampf(cx - banner.size.x * 0.5, 8.0, maxf(8.0, size.x - banner.size.x - 8.0)),
+			size.y * BattleFxDirector.cfg_f("field_rule", "y_ratio", 0.2))
 	_field_banner = banner
 	var tw: Tween = banner.create_tween()
 	tw.tween_interval(BattleFxDirector.cfg_f("field_rule", "hold_seconds", 3.0))

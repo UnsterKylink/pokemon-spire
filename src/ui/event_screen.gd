@@ -48,6 +48,7 @@ const BACKDROP_LEGENDARY: String = "legendary"
 const BACKDROP_BLUR: int = 14
 const BACKDROP_VEIL: Color = Color(0.04, 0.06, 0.14, 0.42)
 const ART_SIDE: float = 330.0
+const ART_ITEM_INSET: float = 62.0
 const PANEL_WIDTH_ART: float = 760.0
 const OPTION_WIDTH_ART: float = 680.0
 const FRAME_LEGENDARY: Color = Color("#D9A520")
@@ -302,6 +303,7 @@ func _build_ui() -> void:
 	_scene.name = "SceneBackdrop"
 	_scene.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scene.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(_scene)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -458,6 +460,11 @@ func _apply_scene(event: Dictionary, run: RunState, data: GameData) -> void:
 		kind = "pokemon" if tex != null else ""
 	_art_kind = kind
 	_art_rect.texture = tex
+	var inset: float = ART_ITEM_INSET if kind == "item" else 0.0  # item art is drawn smaller than a Pokémon
+	_art_rect.offset_left = 26.0 + inset
+	_art_rect.offset_top = 20.0 + inset
+	_art_rect.offset_right = -26.0 - inset
+	_art_rect.offset_bottom = -32.0 - inset
 	_art_box.visible = tex != null
 	(_art_box as ArtSpot).glow = FRAME_LEGENDARY if legendary else Color.WHITE
 	_art_box.queue_redraw()
@@ -492,8 +499,11 @@ static func blurred_backdrop(backdrop_id: String) -> Texture2D:
 				img.decompress()
 			var w: int = img.get_width()
 			var h: int = img.get_height()
-			img.resize(maxi(8, w / BACKDROP_BLUR), maxi(8, h / BACKDROP_BLUR), Image.INTERPOLATE_BILINEAR)
-			img.resize(maxi(16, w / 3), maxi(16, h / 3), Image.INTERPOLATE_CUBIC)
+			# Box-filter by repeated halving (each step averages 2x2 pixels), then a smooth upscale: a soft blur.
+			var target: int = maxi(8, w / BACKDROP_BLUR)
+			while img.get_width() / 2 >= target:
+				img.resize(img.get_width() / 2, maxi(4, img.get_height() / 2), Image.INTERPOLATE_BILINEAR)
+			img.resize(maxi(16, w / 4), maxi(16, h / 4), Image.INTERPOLATE_CUBIC)
 			out = ImageTexture.create_from_image(img)
 	_blur_cache[id] = out
 	return out
@@ -529,9 +539,9 @@ class ArtSpot extends Control:
 	func _draw() -> void:
 		var c: Vector2 = size * Vector2(0.5, 0.47)
 		var r: float = minf(size.x, size.y) * 0.5
-		for i: int in 12:
-			var f: float = 1.0 - float(i) / 12.0
-			draw_circle(c, r * f, Color(glow, 0.05 + 0.02 * float(i)))
+		for i: int in 40:  # many faint discs: a smooth radial glow
+			var f: float = 1.0 - float(i) / 40.0
+			draw_circle(c, r * f, Color(glow, 0.022))
 		var foot := Vector2(size.x * 0.5, size.y - 26.0)
 		var pts := PackedVector2Array()
 		for i: int in 32:

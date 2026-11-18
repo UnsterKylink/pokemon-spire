@@ -28,7 +28,7 @@
     "success_color": [1.0, 0.95, 0.5], "failure_color": [0.85, 0.85, 0.9]
   },
   "evolution": { "flash_modulate": [4.0, 4.0, 4.0, 1.0], "flash_seconds": 0.6, "grow_from": 0.35, "grow_seconds": 0.7 },
-  "field_rule": {"_doc": "Story 030 : banniere de regle de terrain / de phase du boss (battle_screen._show_field_banner).", "title_font_size": 30, "body_font_size": 19, "body_width": 560, "y_ratio": 0.2, "hold_seconds": 3.0, "fade_seconds": 0.6},
+  "field_rule": {"_doc": "Story 030 : banniere de regle de terrain / de phase du boss (battle_screen._show_field_banner).", "title_font_size": 24, "body_font_size": 17, "body_width": 430, "x_ratio": 0.56, "y_ratio": 0.34, "hold_seconds": 1.8, "fade_seconds": 0.45, "_doc033": "Story 033 : banniere plus courte (1,8 s), plus petite, centree a x_ratio de la largeur et plus bas (y_ratio) pour laisser lisibles les textes de Talent (colonne du joueur, en haut a gauche) ; style fenetre menu Pokemon."},
   "screen_transition": {"_doc": "Story 033 : fondu entre deux ecrans (Main._set_screen) : un voile sombre qui disparait en fade_seconds (divise par la vitesse ; aucun fondu en vitesse Instantane ou sans fenetre).", "fade_seconds": 0.22, "start_alpha": 1.0, "color": [0.04, 0.05, 0.1]},
   "phase": {"_doc": "Story 030 : changement de phase d Ethernatos (flash + eclats sur le boss).", "burst_count": 22, "burst_radius": 110, "burst_seconds": 0.7, "hold_seconds": 1.0}
 }

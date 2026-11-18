@@ -67,7 +67,7 @@ func _ready() -> void:
 	UiStyle.apply_button(close_button, UiStyle.ACCENT_BLUE)
 	close_button.pressed.connect(close)
 	box.add_child(close_button)
-	UiStyle.style_screen(self)
+	UiStyle.style_screen(self, false)  # story 033: overlay, no backdrop
 
 
 ## Shows the panel with the saved values.

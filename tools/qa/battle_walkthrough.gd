@@ -30,6 +30,8 @@ extends SceneTree
 ## deleted at the end) through Main.qa_set_save_path: the real user://savegame.json is never touched.
 ## Story 032 (4-floor zone maps with the « Règle de zone » banner line, wild fight with the zone-rule banner / pill; see
 ## _pacing_shots; filter `story-032`).
+## Story 033 (cohérence visuelle: every touched screen in the « menu Pokémon » look, official artwork off-battle,
+## illustrated events, capture panel, effectiveness float, zone-rule banner; see _coherence_shots; filter `story-033`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 ## Story 032: run seed of the pacing shots (zone maps / zone rule).
@@ -125,6 +127,10 @@ func _initialize() -> void:
 
 func _shot(shot_name: String) -> void:
 	for i: int in 10:
+		await process_frame
+	for i: int in 60:  # story 033: wait for the screen-switch fade to end
+		if not _main.is_screen_fading():
+			break
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var img: Image = root.get_texture().get_image()
@@ -1997,7 +2003,206 @@ func _pill_tooltip(bs: BattleScreen) -> String:
 	return pill.tooltip_text if pill != null else "?"
 
 
+## Story 033: scratch save slot and seeds of the coherence shots.
+const COHERENCE_SAVE_PATH: String = "user://qa_story033_savegame.json"
+const COHERENCE_SEED: int = 3303
+
+
+func _coherence_line(tag: String) -> void:
+	var line: String = "033 %s: screen=%s" % [tag, _main.get_current_screen_name()]
+	var es: EventScreen = _main.get_event_screen()
+	if es != null and _main.get_current_screen_name() == "event":
+		line += " event=%s art=%s" % [es.get_event().get("id", ""), es.get_art_kind()]
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null and _main.get_current_screen_name() == "battle":
+		line += " capture_mode=%s panel=%s" % [bs.is_capture_mode(), bs.get_capture_panel().visible]
+		for i: int in bs.get_battle().enemies.size():
+			line += " e%d=%s" % [i, bs.get_enemy_capture_texts(i)]
+	print(line)
+
+
+func _coherence_clear_save() -> void:
+	for p: String in [COHERENCE_SAVE_PATH, COHERENCE_SAVE_PATH + ".bak"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+
+
+## Story 033: one shot of every screen touched by the visual coherence pass (filter `story-033`).
+func _coherence_shots() -> void:
+	_coherence_clear_save()
+	_main.qa_set_save_path(COHERENCE_SAVE_PATH)  # never the real save
+	_main.qa_quit_to_title()
+	_coherence_line("01")
+	await _shot("01-choix-starter")
+	# Badge then evolution (starter stage 1 -> 2 at badge 1).
+	_main.start_new_run(LEAGUE_SEED, "salameche")
+	_main.qa_set_autosave(false)
+	_main.qa_win_gym()
+	_main.reward_skip()
+	_drain_team_evolution()
+	_coherence_line("02")
+	await _shot("02-badge")
+	_main.badge_continue()
+	_coherence_line("03")
+	await _shot("03-evolution")
+	if _main.get_current_screen_name() == "evolution":
+		_main.evolution_continue()
+		_main.evolution_pick(0)
+		_main.evolution_continue()
+	# Rival intro (lead + team as official artwork).
+	_main.start_new_run(RIVAL_SEED, "salameche")
+	_main.qa_set_autosave(false)
+	_main.qa_set_zone(1)
+	if not _walk_to_rival():
+		print("033 ERROR: no rival room reached")
+	_coherence_line("04")
+	await _shot("04-rival-intro")
+	var bs: BattleScreen = _main.get_battle_screen()
+	if bs != null and bs.get_rival_intro() != null:
+		bs.get_rival_intro().dismiss()
+	_main.qa_win_current_fight()
+	_main.reward_skip()
+	# Events: a Pokémon illustration, an item illustration (greyed option), the rival event, a legendary.
+	_main.qa_set_money(30)
+	_main.qa_show_event("rattata_affame")
+	_coherence_line("05")
+	await _shot("05-evenement-pokemon")
+	_main.event_choose(0)
+	_main.event_continue()
+	_main.qa_show_event("marchand_ambulant")
+	_coherence_line("06")
+	await _shot("06-evenement-option-grisee")
+	_main.qa_show_event("chercheur_pokemon")
+	_main.event_choose(0)
+	_coherence_line("07")
+	await _shot("07-evenement-objet-resultat")
+	_main.event_continue()
+	_main.qa_show_event("rival_provocation")
+	_coherence_line("08")
+	await _shot("08-evenement-rival")
+	_main.qa_set_zone(2)
+	_main.qa_show_event("legendaire_lugia")
+	_coherence_line("09")
+	await _shot("09-evenement-legendaire")
+	# Mart with a bought item and greyed (full / too expensive) articles; Centre.
+	_main.qa_set_money(400)
+	_main.qa_open_room("mart")
+	_main.shop_buy_item(0)
+	_main.shop_buy_potion(0)
+	_main.qa_set_money(60)
+	_main.get_shop_screen().refresh()
+	_coherence_line("10")
+	await _shot("10-mart-achete-grise")
+	_main.shop_leave()
+	_main.qa_set_hp(_main.get_run_state().max_hp / 2)
+	_main.qa_open_room("center")
+	_coherence_line("11")
+	await _shot("11-centre")
+	_main.center_continue()
+	# Capture: the single capture panel, a success, the reward with the capture row, the team tab.
+	_main.start_new_run(CAPTURE_SEED, "salameche")
+	_main.qa_set_autosave(false)
+	for bid: String in ["poke_ball", "poke_ball", "super_ball", "hyper_ball"]:
+		_main.qa_give_ball(bid)
+	_main.start_encounter(CAPTURE_TRIO, "wild")
+	bs = _main.get_battle_screen()
+	var b: Battle = bs.get_battle()
+	var weak: Combatant = b.enemies[1]
+	weak.hp = maxi(1, weak.max_hp / 5)
+	weak.changed.emit()
+	bs.qa_apply_status(1, "sleep", 1)
+	await create_timer(FLOAT_WAIT).timeout
+	bs.toggle_capture_mode()
+	_coherence_line("12")
+	await _shot("12-combat-mode-capture")
+	for attempt: int in 4:
+		var idx: int = b.enemies.find(weak)
+		if idx < 0 or b.ball_ids().is_empty():
+			break
+		if b.energy < b.ball_energy_cost():
+			bs.qa_force_hand(["griffe", "griffe", "griffe", "griffe", "griffe"])
+		var ids: Array[String] = b.ball_ids()
+		_main.battle_use_ball(ids[ids.size() - 1], idx)
+	await create_timer(0.2).timeout
+	_coherence_line("13")
+	await _shot("13-capture-reussie")
+	bs.skip_animations()
+	_win_battle(true)
+	_coherence_line("14")
+	await _shot("14-recompense-capture")
+	_main.reward_skip()
+	_main.open_deck("team")
+	_coherence_line("15")
+	await _shot("15-deck-equipe")
+	_main.close_deck()
+	# Super effective float under the intent pill (Flammette on Aspicot).
+	_main.start_encounter("trio_vol")
+	bs = _main.get_battle_screen()
+	bs.set_fx_speed("normal")
+	b = bs.get_battle()
+	var foe: int = 0
+	for i: int in b.enemies.size():
+		if b.enemies[i].display_name == "Aspicot":
+			foe = i
+	await create_timer(0.5).timeout
+	bs.qa_force_hand(["flammette", "abri", "hypnose", "dard_venin", "flammette"])
+	bs.play_card_direct(0, foe)
+	await create_timer(0.75).timeout
+	_coherence_line("16")
+	await _shot("16-combat-super-efficace")
+	bs.skip_animations()
+	# Zone-rule banner at the start of a wild fight (talent text visible).
+	_main.start_new_run(PACING_SEED, "salameche")
+	_main.qa_set_autosave(false)
+	_main.map_choose(_main.map_reachable_ids()[0])
+	if _main.get_current_screen_name() != "battle":
+		_main.start_encounter("trio_vol", "wild")
+	await create_timer(0.3).timeout
+	_coherence_line("17")
+	await _shot("17-combat-banniere-zone")
+	# Options over the map, league, run end.
+	_main.qa_win_current_fight()
+	_main.reward_skip()
+	_main.open_options()
+	_coherence_line("18")
+	await _shot("18-options")
+	_main.get_options_panel().close()
+	_main.qa_skip_to_league()
+	_coherence_line("19")
+	await _shot("19-ligue")
+	_main.start_new_run(COHERENCE_SEED, "salameche")
+	_main.qa_set_autosave(false)
+	_main.map_choose(_main.map_reachable_ids()[0])
+	if _main.get_current_screen_name() != "battle":
+		_main.start_encounter("trio_vol")
+	_main.qa_lose_battle()
+	_main.battle_defeat_continue()
+	_coherence_line("20")
+	await _shot("20-fin-de-partie")
+	# Resume screen of a saved run.
+	_coherence_clear_save()
+	_main.qa_set_save_path(COHERENCE_SAVE_PATH)
+	_main.start_new_run(SAVE_SEED, "salameche")
+	_main.qa_win_gym()
+	_main.reward_skip()
+	_drain_team_evolution()
+	_main.badge_continue()
+	if _main.get_current_screen_name() == "evolution":
+		_main.evolution_continue()
+		_main.evolution_pick(0)
+		_main.evolution_continue()
+	_main.qa_save_now()
+	_main.qa_quit_to_title()
+	_coherence_line("21")
+	await _shot("21-reprise")
+	_coherence_clear_save()
+
+
 func _run() -> void:
+	if _filter == "story-033":
+		await _coherence_shots()
+		quit(0)
+		return
 	if _filter == "story-032":
 		await _pacing_shots()
 		quit(0)
