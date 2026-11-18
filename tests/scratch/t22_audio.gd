@@ -22,6 +22,7 @@ func _initialize() -> void:
 	_check_files(cfg)
 	_check_cries(cfg)
 	await _check_manager(cfg)
+	await _check_main()
 	print("t22_audio: %d pass, %d fail" % [passes, fails])
 	quit(1 if fails > 0 else 0)
 
@@ -133,3 +134,42 @@ func _check_manager(cfg: Dictionary) -> void:
 			if f != null:
 				f.store_string(JSON.stringify(data, "  "))
 				f.close()
+
+
+## Part 2: Main owns an AudioManager and picks the music per screen / fight; the options sliders save the volumes.
+func _check_main() -> void:
+	var saved: Dictionary = GameSettings.load_all()
+	var main: Main = (load("res://src/main.tscn") as PackedScene).instantiate() as Main
+	root.add_child(main)
+	await process_frame
+	var audio: AudioManager = main.get_audio()
+	ok(audio != null, "Main has an AudioManager")
+	if audio == null:
+		return
+	main.start_new_run(2020, "salameche")
+	ok(audio.current_track() == "carte", "map screen -> carte (got %s)" % audio.current_track())
+	main.start_encounter("trio_vol", "wild")
+	ok(audio.current_track() == "combat_sauvage", "wild fight -> combat_sauvage (got %s)" % audio.current_track())
+	main.qa_open_room("center")
+	ok(audio.current_track() == "centre", "Centre -> centre (got %s)" % audio.current_track())
+	main.qa_open_room("mart")
+	ok(audio.current_track() == "mart", "Mart -> mart (got %s)" % audio.current_track())
+	main.start_encounter("trio_vol", "boss")
+	ok(audio.current_track() == "champion", "gym fight -> champion (got %s)" % audio.current_track())
+	main.start_encounter("trio_vol", "")
+	ok(audio.current_track() == "combat_sauvage", "unknown room -> wild music (got %s)" % audio.current_track())
+	main.open_options()
+	var panel: OptionsPanel = main.get_options_panel()
+	panel.set_music_volume(0.35)
+	panel.set_sfx_volume(0.55)
+	ok(is_equal_approx(audio.get_music_volume(), 0.35) and is_equal_approx(audio.get_sfx_volume(), 0.55), "sliders drive the AudioManager")
+	ok(is_equal_approx(AudioManager.saved_volume("music"), 0.35) and is_equal_approx(AudioManager.saved_volume("sfx"), 0.55), "sliders save the volumes")
+	panel.close()
+	panel.open()
+	ok(is_equal_approx(float(panel.get_volumes()["music"]), 0.35), "panel reopens with the saved music volume")
+	main.queue_free()
+	await process_frame
+	var f := FileAccess.open(GameSettings.PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(saved, "  "))
+		f.close()

@@ -284,6 +284,9 @@ var _last_throw_chance: float = 0.0
 ## Story 021: director, effects layer (above the fighters), speed button and the recording / playback state.
 var _fx: BattleFxDirector
 var _fx_layer: Control
+## Story 022: the game's AudioManager, set by Main before setup(); null = silent. Battle sounds follow the animation
+## queue, so they are silent at speed « Instantané » and headless (no queue is played).
+var audio: AudioManager = null
 var _speed_button: Button
 var _recording: bool = false
 var _hold_fighters: bool = false
@@ -647,6 +650,8 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_refresh_active_pokemon(player)
 	_refresh()
 	_refresh_field_pill()
+	if not _battle.enemies.is_empty() and audio != null and audio.cry_plays_on("battle_enter"):
+		_cry(_battle.enemies[0])  # story 022: the (first) opponent's cry as the fight opens
 	var rule: Dictionary = _battle.get_field_rule()
 	if not rule.is_empty():  # story 030: the rule is announced when the battle starts
 		var banner_fmt: String = TEXT_ZONE_RULE_BANNER if _is_zone_rule(rule) else TEXT_FIELD_RULE_BANNER
@@ -740,6 +745,7 @@ func _show_phase(enemy: Combatant, message: String) -> void:
 	_show_field_banner(message, TEXT_FIELD_RULE_BANNER % String(rule["name"]) if not rule.is_empty() else "", COLOR_PHASE)
 	_refresh_field_pill()
 	var spr: AnimatedPokemon = _sprite_of(enemy)
+	_sfx("boss_phase_changed")
 	if spr != null and _fx != null:
 		_fx.flash(spr, COLOR_PHASE)
 		_fx.burst(_fx_layer, _center_of(spr), COLOR_PHASE, int(BattleFxDirector.cfg_f("phase", "burst_count", 22.0)),
@@ -891,6 +897,7 @@ func _build_ui() -> void:
 	add_child(_fx)
 	_fx.set_speed(BattleFxDirector.load_saved_speed())
 	_fx.finished.connect(_on_fx_finished)
+	_fx.sound = _sfx
 	_background = BattleBackdrop.new()
 	_background.name = "Backdrop"
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2055,6 +2062,8 @@ func _play_logic(index: int, target: int) -> bool:
 	_rec_card = _battle.hand[index] if index >= 0 and index < _battle.hand.size() else null
 	var ok: bool = bool(_logic(func() -> Variant: return _battle.play_card(index, target)))
 	_rec_card = null
+	if ok and audio != null:
+		audio.play_event("card_played")  # story 022: direct feedback of the player's action, at every speed
 	return ok
 
 
@@ -2064,6 +2073,21 @@ func _defer(fn: Callable) -> bool:
 		return false
 	_push({"kind": "call", "fn": fn})
 	return true
+
+
+## Story 022: plays the sound of a game event (audio.json "events") while the animation queue plays; silent at
+## « Instantané », headless, while skipping, or without an AudioManager.
+func _sfx(event: String) -> void:
+	if audio == null or _fx == null or not _fx.is_enabled() or _fx.is_skipping():
+		return
+	audio.play_event(event)
+
+
+## Story 022: plays the cry of `c` (named after its sprite), with the same rules as _sfx.
+func _cry(c: Combatant) -> void:
+	if c == null or audio == null or _fx == null or not _fx.is_enabled() or _fx.is_skipping():
+		return
+	audio.play_cry(c.sprite_path)
 
 
 func _push(ev: Dictionary) -> void:
@@ -2147,6 +2171,7 @@ func _fx_status_at(target: Combatant, status_id: String) -> void:
 	var spr: AnimatedPokemon = _sprite_of(target)
 	if spr == null:
 		return
+	_sfx("status_applied")
 	_note(_fx.fx_status(_fx_layer, status_id, _center_of(spr)))
 	var chips: Control = _player_chips if target == _battle.player else (_view_of(target).status_chips if _view_of(target) != null else null)
 	if chips != null:
@@ -2195,6 +2220,9 @@ func _show_values(c: Combatant, from_hp: int, to_hp: int, blk: int, max_hp: int)
 	if view != null and to_hp <= 0 and from_hp > 0 and not view.ko_faded:
 		view.ko_faded = true
 		dur = maxf(dur, _fx.ko_fade(view.sprite, dur))
+		_sfx("pokemon_ko")
+		if audio != null and audio.cry_plays_on("ko"):
+			_cry(c)
 	return dur
 
 
@@ -2216,6 +2244,8 @@ func _play_event(ev: Dictionary, _instant: bool) -> void:
 					BattleFxDirector.cfg_f("switch", "out_seconds", 0.2)))
 		"switch_in":
 			_do_active_changed()
+			_sfx("pokemon_switched")
+			_cry(_battle.player)
 			await _fx.wait(_fx.slide_in(_player_sprite, -BattleFxDirector.cfg_f("switch", "slide", 200.0),
 					BattleFxDirector.cfg_f("switch", "in_seconds", 0.28), BattleFxDirector.cfg_f("switch", "pop_scale", 1.15)))
 		"attack":
@@ -2229,6 +2259,8 @@ func _play_event(ev: Dictionary, _instant: bool) -> void:
 		"gain":
 			await _play_gain(ev)
 		"elan":
+			if int(ev["value"]) > _elan_shown:
+				_sfx("elan_triggered")
 			_set_elan_display(int(ev["value"]), true)
 			await _fx.wait(_fx.t(BattleFxDirector.cfg_f("elan", "seconds", 0.3)))
 		"talent":
@@ -2240,6 +2272,8 @@ func _play_event(ev: Dictionary, _instant: bool) -> void:
 			var tsp: AnimatedPokemon = _sprite_of(target)
 			await _fx.capture_throw(_fx_layer, _center_of(_player_sprite), _center_of(tsp) if tsp != null else _center_of(_player_sprite),
 					BallIcon.color_of(String(ev["ball_id"])), bool(ev["success"]), tsp)
+			if bool(ev["success"]) and audio != null and audio.cry_plays_on("capture_success"):
+				_cry(target)
 
 
 ## The attacker dashes toward the target, then the projectile of `type_id` flies; the dash back runs on its own.
@@ -2265,6 +2299,12 @@ func _play_enemy_act(ev: Dictionary) -> void:
 		await _charge(spr, _player_sprite, String(ev["type_id"]))
 		return
 	var it: String = String(ev["intent_type"])
+	if it == EnemyIntent.TYPE_ADD_JUNK:
+		_sfx("debris_damage")
+	elif it in [EnemyIntent.TYPE_BLOCK, EnemyIntent.TYPE_BLOCK_ALLY]:
+		_sfx("block_gained")
+	elif it in [EnemyIntent.TYPE_HEAL, EnemyIntent.TYPE_HEAL_ALLY]:
+		_sfx("healed")
 	var dur: float = _fx.lunge(spr, Vector2.UP, BattleFxDirector.cfg_f("lunge", "hop_distance", 18.0))
 	if it == EnemyIntent.TYPE_STATUS and not String(ev.get("status_id", "")).is_empty():  # story 030: the status lands on the player
 		dur = maxf(dur, _fx.fx_status(_fx_layer, String(ev["status_id"]), _center_of(_player_sprite)))
@@ -2303,6 +2343,12 @@ func _play_hit(ev: Dictionary) -> void:
 		if multi:  # story 027: N small impacts, each number a little aside so they read one by one
 			at += Vector2((float(hit_i % 3) - 1.0) * BattleFxDirector.cfg_f("multi_hit", "spread_x", 30.0),
 					-float(hit_i) * BattleFxDirector.cfg_f("multi_hit", "step_y", 8.0))
+		if mult <= 0.0:
+			_sfx("hit_immune")
+		elif lost <= 0:
+			_sfx("blocked_hit")
+		else:
+			_sfx("hit_super_effective" if mult > 1.0 else ("hit_not_very_effective" if mult < 1.0 else "hit_neutral"))
 		if mult > 0.0:
 			dur = maxf(dur, _fx.fx_impact(_fx_layer, String(ev["type_id"]), at, BattleFxDirector.cfg_f("impact_strength", key, 1.0) * small_k))
 			if lost > 0:
@@ -2341,11 +2387,13 @@ func _play_gain(ev: Dictionary) -> void:
 	var num_y: float = BattleFxDirector.cfg_f("number", "start_offset_y", -34.0)
 	var gsize: int = int(BattleFxDirector.cfg_f("number", "font_size_gain", 30.0))
 	if int(ev["block"]) > 0:
+		_sfx("block_gained")
 		dur = maxf(dur, _fx.fx_buff(_fx_layer, "block", at))
 		dur = maxf(dur, _fx.pulse(_player_block, BattleFxDirector.cfg_f("block_pulse", "scale", 1.3), BattleFxDirector.cfg_f("block_pulse", "seconds", 0.4)))
 		_fx.flash(_player_sprite, BattleFxDirector.cfg_color("flash", "block_modulate", Color(0.8, 1.4, 2.6)))
 		dur = maxf(dur, _fx.number(_fx_layer, "+%d" % int(ev["block"]), BattleFxDirector.cfg_color("number", "color_block", Color(0.45, 0.7, 1)), gsize, at + Vector2(0, num_y)))
 	if int(ev["heal"]) > 0:
+		_sfx("healed")
 		dur = maxf(dur, _fx.fx_buff(_fx_layer, "heal", at))
 		dur = maxf(dur, _fx.number(_fx_layer, "+%d" % int(ev["heal"]), BattleFxDirector.cfg_color("number", "color_heal", Color(0.4, 1, 0.55)), gsize, at + Vector2(0, num_y - 30.0)))
 	dur = maxf(dur, _apply_snaps(ev))
@@ -2611,6 +2659,7 @@ func _play_talent(ev: Dictionary) -> void:
 	var at: Vector2 = _center_of(_player_sprite)
 	var info: Dictionary = _talent_info_of(String(ev["pid"]))
 	var desc: String = String(info.get("description", "")).trim_prefix(TEXT_TALENT_PREFIX)
+	_sfx("talent_triggered")
 	var dur: float = _fx.number(_fx_layer, TEXT_TALENT_BANNER % String(info.get("name", "")), UiStyle.TALENT,
 			int(BattleFxDirector.cfg_f("talent", "font_size", 34.0)), at + Vector2(0, BattleFxDirector.cfg_f("talent", "offset_y", -96.0)))
 	_fx.number(_fx_layer, desc.left(1).to_upper() + desc.substr(1), UiStyle.CREAM, int(BattleFxDirector.cfg_f("talent", "desc_font_size", 17.0)),

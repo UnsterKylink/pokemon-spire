@@ -37,6 +37,9 @@ var _idx: int = 0
 var _handler: Callable = Callable()
 var _tweens: Array[Tween] = []
 var _gen: int = 0
+## Story 022: optional sound hook, called with an audio.json event id ("ball_thrown", "ball_shake", "capture_success",
+## "capture_fail") at the matching moment of an effect; empty = silent.
+var sound: Callable = Callable()
 
 
 ## A small code-drawn Poké Ball (top half in `color`).
@@ -553,6 +556,11 @@ func _ball_arc(p: float, ball: Control, from: Vector2, to: Vector2, arc: float) 
 
 ## Capture throw (await it): a ball arcs from `from` to `to`, `target` is absorbed, the ball wobbles, then sparkles
 ## (success) or a poof and the target pops back (failure). Positions are in `parent` coordinates.
+func _sound(event: String) -> void:
+	if sound.is_valid() and not _skip:
+		sound.call(event)
+
+
 func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, success: bool, target: Control) -> void:
 	if not _active():
 		return
@@ -565,6 +573,7 @@ func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, su
 	ball.position = from - ball.size * 0.5
 	var arc: float = cfg_f("capture", "arc_height", 150.0)
 	var ts: float = t(cfg_f("capture", "throw_seconds", 0.55))
+	_sound("ball_thrown")
 	var tw: Tween = new_tween(ball)
 	tw.tween_method(_ball_arc.bind(ball, from, to, arc), 0.0, 1.0, ts)
 	await wait(ts)
@@ -587,6 +596,7 @@ func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, su
 		ball.rotation = 0.0
 		var wt: Tween = new_tween(ball)
 		for i: int in count:
+			wt.tween_callback(_sound.bind("ball_shake"))
 			wt.tween_property(ball, "rotation", deg, wob * 0.25)
 			wt.tween_property(ball, "rotation", -deg, wob * 0.5)
 			wt.tween_property(ball, "rotation", 0.0, wob * 0.25)
@@ -598,6 +608,7 @@ func capture_throw(parent: Control, from: Vector2, to: Vector2, color: Color, su
 	var burst_s: float = cfg_f("capture", "burst_seconds", 0.55)
 	var n: int = int(cfg_f("capture", "sparkle_count", 14.0))
 	var radius: float = cfg_f("capture", "sparkle_radius", 70.0)
+	_sound("capture_success" if success else "capture_fail")
 	if success:
 		burst(parent, centre, cfg_color("capture", "success_color", Color(1, 0.95, 0.5)), n, radius, burst_s)
 		pulse(ball, 1.5, 0.4)

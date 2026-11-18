@@ -105,6 +105,10 @@ static var _sheen_materials: Dictionary = {}
 ## types.json colour cache (type id -> Color), filled on first use. Pure display cache.
 static var _type_colors: Dictionary = {}
 static var _types_loaded: bool = false
+## Story 022: button sound callbacks (install_button_sounds) and the tree they are hooked to.
+static var _button_press: Callable = Callable()
+static var _button_hover: Callable = Callable()
+static var _button_tree: SceneTree = null
 
 
 ## Display colour of a Pokémon type: from `chart` when given, else from types.json "types.<id>.color".
@@ -483,27 +487,36 @@ static func style_screen(root: Control, backdrop: bool = true) -> void:
 
 
 ## Story 022: plays `on_press` when any button of the tree is pressed and `on_hover` when the mouse enters an enabled
-## one (both take no argument). Installed once by Main with AudioManager callbacks; buttons added later are hooked as
-## they enter the tree. Idempotent per button (meta "ui_sound").
+## one (both take no argument). Installed by Main with AudioManager callbacks; a later call replaces the callbacks (a
+## new Main), the tree is hooked once. Buttons added later are hooked as they enter the tree (meta "ui_sound").
 static func install_button_sounds(tree: SceneTree, on_press: Callable, on_hover: Callable) -> void:
-	var hook: Callable = func(n: Node) -> void: _hook_button_sound(n, on_press, on_hover)
-	tree.node_added.connect(hook)
+	_button_press = on_press
+	_button_hover = on_hover
+	if _button_tree == tree:
+		return
+	_button_tree = tree
+	tree.node_added.connect(UiStyle._hook_button_sound)
 	var stack: Array[Node] = [tree.root]
 	while not stack.is_empty():
 		var n: Node = stack.pop_back()
-		hook.call(n)
+		_hook_button_sound(n)
 		stack.append_array(n.get_children())
 
 
-static func _hook_button_sound(n: Node, on_press: Callable, on_hover: Callable) -> void:
+static func _hook_button_sound(n: Node) -> void:
 	if not (n is BaseButton) or n.has_meta("ui_sound"):
 		return
 	var b: BaseButton = n
 	b.set_meta("ui_sound", true)
-	b.pressed.connect(func() -> void: on_press.call())
-	b.mouse_entered.connect(func() -> void:
-		if not b.disabled:
-			on_hover.call())
+	b.pressed.connect(UiStyle._on_button_sound.bind(true, b))
+	b.mouse_entered.connect(UiStyle._on_button_sound.bind(false, b))
+
+
+static func _on_button_sound(press: bool, b: BaseButton) -> void:
+	if press and _button_press.is_valid():
+		_button_press.call()
+	elif not press and not b.disabled and _button_hover.is_valid():
+		_button_hover.call()
 
 
 ## Story 033: the shared backdrop added by style_screen under `root` (null when none).

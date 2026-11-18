@@ -145,6 +145,8 @@ var _fade_tween: Tween
 var _deck_panel: DeckOverlay
 ## The options panel (opened from the run bar).
 var _options_panel: OptionsPanel
+## Story 022: music / sound effects / cries (assets/data/audio.json); muted when headless.
+var _audio: AudioManager
 var _offers: Array[RewardOffer] = []
 
 
@@ -154,6 +156,10 @@ func _ready() -> void:
 		push_error("Main: could not load game data")
 		return
 	_encounter_order = _data.get_encounter_order()
+	_audio = AudioManager.new()
+	_audio.name = "Audio"
+	add_child(_audio)
+	UiStyle.install_button_sounds(get_tree(), _audio.play_event.bind("button_pressed"), _audio.play_event.bind("button_hovered"))
 	_hud = RunHud.new()
 	_hud.visible = false
 	_hud.ball_book = _data.get_ball_book()
@@ -164,6 +170,7 @@ func _ready() -> void:
 	_deck_panel = DeckOverlay.new()
 	add_child(_deck_panel)
 	_options_panel = OptionsPanel.new()
+	_options_panel.audio = _audio
 	add_child(_options_panel)
 	_options_panel.changed.connect(_on_options_changed)
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
@@ -1296,6 +1303,8 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	battle.state_changed.connect(_refresh_hud)
 	battle.item_triggered.connect(_on_item_triggered)
 	_battle_screen = BATTLE_SCENE.instantiate() as BattleScreen
+	_battle_screen.audio = _audio
+	battle.enemy_phase_changed.connect(_on_boss_phase_changed)
 	_battle_screen.battle_won.connect(_on_battle_won)
 	_battle_screen.defeat_acknowledged.connect(_show_defeat)
 	battle.battle_lost.connect(_on_battle_lost)
@@ -1407,6 +1416,8 @@ func _show_badge() -> void:
 	_badge_screen.finished.connect(badge_continue)
 	_set_screen(_badge_screen, SCREEN_BADGE)
 	_badge_screen.setup(_data, _run, _last_badge)
+	if _audio != null:
+		_audio.play_event("badge_won")
 
 
 ## After the badge (and the evolution): the next zone's map, or the league (story 013: Conseil 4 -> Maître -> final boss)
@@ -1463,6 +1474,10 @@ func _show_evolution(badge_number: int) -> void:
 	_evolution_screen.finished.connect(_next_zone_or_victory)
 	_set_screen(_evolution_screen, SCREEN_EVOLUTION)
 	_evolution_screen.setup(_data, _run, _evolution_summary, _evolution_offers)
+	if _audio != null:
+		_audio.play_event("evolution")
+		if _audio.cry_plays_on("evolution"):
+			_audio.play_cry(_run.sprite_path)
 
 
 ## Story 014: team Pokémon due to evolve (RunState.evolve_team, after a won battle's reward): the compact "Évolutions"
@@ -1477,6 +1492,8 @@ func _show_team_evolution(then: Callable) -> bool:
 	_evolution_screen.finished.connect(then)
 	_set_screen(_evolution_screen, SCREEN_EVOLUTION)
 	_evolution_screen.setup_team(_data, _run, rows)
+	if _audio != null:
+		_audio.play_event("evolution")
 	return true
 
 
@@ -1596,6 +1613,8 @@ func _show_center() -> void:
 
 func _on_center_heal() -> void:
 	var healed: int = _run.rest_heal()
+	if _audio != null:
+		_audio.play_event("healed")
 	_refresh_hud()
 	_center_screen.show_result("Tu te reposes : +%d PV (PV %d/%d)." % [healed, _run.hp, _run.max_hp])
 
@@ -1638,6 +1657,8 @@ func _on_shop_buy(kind: String, index: int) -> void:
 			label = _shop.balls[index].get_name()
 			ok = _shop.buy_ball(index)
 	_refresh_hud()
+	if _audio != null:
+		_audio.play_event("item_bought" if ok else "action_refused")
 	_mart_screen.refresh("Acheté : %s." % label if ok else "Achat impossible.")
 
 
@@ -1674,6 +1695,45 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 	move_child(_hud, get_child_count() - 1)
 	_refresh_hud()
 	_play_screen_fade()
+	_play_screen_music(screen_name)
+
+
+## Story 022: the music of a new screen (audio.json "screens"; a battle picks its own context; badge / evolution keep
+## the current music).
+func _play_screen_music(screen_name: String) -> void:
+	if _audio == null:
+		return
+	var context: String = _battle_music_context() if screen_name == SCREEN_BATTLE else _audio.screen_context(screen_name)
+	if not context.is_empty():
+		_audio.play_music(context)
+
+
+## Story 022: music context of the current fight: the room type (wild, elite, rival, rival_final, boss = gym, legendary),
+## or for a league fight the member / Maître / final boss; an unknown room (QA / debug fights) plays the wild music.
+func _battle_music_context() -> String:
+	var context: String = _fight_room_type
+	if _fight_room_type == ROOM_LEAGUE and _run != null:
+		match String(_run.current_league_fight().get("kind", "member")):
+			"champion":
+				context = "league_champion"
+			"final_boss":
+				context = "final_boss"
+			_:
+				context = "league_member"
+	if _audio.music_track_for(context).is_empty():
+		context = "wild"
+	return context
+
+
+## Story 022: the final boss's phase change switches to its phase-2 music (other bosses keep theirs).
+func _on_boss_phase_changed(_enemy: Combatant, _phase_index: int, _message: String) -> void:
+	if _audio != null and _battle_music_context() == "final_boss":
+		_audio.play_music("final_boss_phase2")
+
+
+## Story 022: the game's AudioManager (QA / tests).
+func get_audio() -> AudioManager:
+	return _audio
 
 
 ## Story 033: short fade-in of the new screen (a dark veil fading out); none at speed « Instantané » or headless.

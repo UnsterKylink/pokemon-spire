@@ -32,6 +32,8 @@ extends SceneTree
 ## _pacing_shots; filter `story-032`).
 ## Story 033 (cohérence visuelle: every touched screen in the « menu Pokémon » look, official artwork off-battle,
 ## illustrated events, capture panel, effectiveness float, zone-rule banner; see _coherence_shots; filter `story-033`).
+## Story 022 (musique et sons: the Options panel with the Musique / Effets sliders, before / after a change; prints the
+## music track Main picks per screen; see _audio_shots; filter `story-022`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 ## Story 032: run seed of the pacing shots (zone maps / zone rule).
@@ -2198,7 +2200,41 @@ func _coherence_shots() -> void:
 	_coherence_clear_save()
 
 
+## Story 022 (filter `story-022`): Options panel with the volume sliders (saved values, then 30 % / 90 %), restored after;
+## prints the track Main plays on the map, in a wild fight, at the Centre and the Mart.
+func _audio_shots() -> void:
+	var saved: Dictionary = GameSettings.load_all()
+	_main.start_new_run(STYLE_SEED, "salameche")
+	await create_timer(0.5).timeout
+	var audio: AudioManager = _main.get_audio()
+	print("audio map -> %s" % audio.current_track())
+	_main.open_options()
+	await _shot("01-options-volumes")
+	var panel: OptionsPanel = _main.get_options_panel()
+	panel.set_music_volume(0.3)
+	panel.set_sfx_volume(0.9)
+	await _shot("02-options-volumes-regles")
+	print("audio volumes after the sliders: music=%.2f sfx=%.2f saved=%s" % [audio.get_music_volume(), audio.get_sfx_volume(),
+			[GameSettings.get_float(GameSettings.KEY_MUSIC_VOLUME, -1.0), GameSettings.get_float(GameSettings.KEY_SFX_VOLUME, -1.0)]])
+	panel.close()
+	_main.start_encounter("trio_vol", "wild")
+	await create_timer(0.3).timeout
+	print("audio wild fight -> %s" % audio.current_track())
+	for room: String in ["center", "mart"]:
+		_main.qa_open_room(room)
+		await create_timer(0.3).timeout
+		print("audio %s -> %s" % [room, audio.current_track()])
+	var f: FileAccess = FileAccess.open(GameSettings.PATH, FileAccess.WRITE)  # the player's settings as they were
+	if f != null:
+		f.store_string(JSON.stringify(saved, "  "))
+		f.close()
+
+
 func _run() -> void:
+	if _filter == "story-022":
+		await _audio_shots()
+		quit(0)
+		return
 	if _filter == "story-033":
 		await _coherence_shots()
 		quit(0)
