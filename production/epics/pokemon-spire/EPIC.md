@@ -38,6 +38,7 @@
 | 030 | Ennemis variés et boss à mécanique | Logic | Complete | N/A |
 | 031 | Rééquilibrage complet après la refonte du combat | Config/Data | Complete | N/A |
 | 032 | Rythme de la partie et zones différentes | Integration | In Progress | N/A |
+| 033 | Cohérence visuelle (étape C) | Visual/Feel | In Progress | N/A |
 | 022 | Musique et effets sonores | Visual/Feel | Ready | N/A |
 | 023 | Menu principal, pause, options et tutoriel | UI | Ready | N/A |
 | 024 | Version .exe Windows et optimisation | Integration | Ready | N/A |
