@@ -38,6 +38,12 @@ var aftermath_turns: int = 0
 var capturable: bool = true
 ## Story 018: a legendary Pokémon (pokemon.json `legendary: true`): capturable, but CaptureRules.legendary_multiplier applies.
 var legendary: bool = false
+## Story 030: the big attack announced by a "charge" action, released as the next intent (null = none).
+var pending_charge: EnemyIntent = null
+## Story 030 (boss phases, league.json final_boss.phases): parsed phases in hp_below order (see parse_phase) and the
+## current phase (0 = base form, i = phases[i - 1] reached). Managed by Battle.
+var phases: Array[Dictionary] = []
+var phase_index: int = 0
 
 
 ## Creates a combatant from a JSON definition. Returns null if invalid.
@@ -80,6 +86,45 @@ static func from_dict(combatant_id: String, d: Dictionary, current_hp: int = -1)
 				return null
 			c.actions.append(action)
 	return c
+
+
+## Story 030: parses one boss phase {hp_below (0 < x < 1, HP ratio at or below which it starts), pattern, actions
+## (enemy actions), message (French, shown on the switch), heal_percent (optional, 0..100 of max HP), clear_statuses
+## (optional bool), field_rule (optional rule id; resolved by GameData into `field_rule_def`)}. {} after push_error if invalid.
+static func parse_phase(label: String, d: Variant) -> Dictionary:
+	if not (d is Dictionary):
+		push_error("Combatant: %s must be an object" % label)
+		return {}
+	var p: Dictionary = d
+	var hb: Variant = p.get("hp_below", null)
+	if not (hb is float or hb is int) or float(hb) <= 0.0 or float(hb) >= 1.0:
+		push_error("Combatant: %s needs 'hp_below' strictly between 0 and 1" % label)
+		return {}
+	var pat: Variant = p.get("pattern", null)
+	if pat != PATTERN_SEQUENCE and pat != PATTERN_WEIGHTED:
+		push_error("Combatant: %s needs 'pattern' sequence|weighted" % label)
+		return {}
+	var raw_actions: Variant = p.get("actions", null)
+	if not (raw_actions is Array) or (raw_actions as Array).is_empty():
+		push_error("Combatant: %s needs a non-empty 'actions' array" % label)
+		return {}
+	var acts: Array[EnemyIntent] = []
+	for raw: Variant in (raw_actions as Array):
+		var a: EnemyIntent = EnemyIntent.from_dict(raw) if raw is Dictionary else null
+		if a == null:
+			push_error("Combatant: %s has an invalid action" % label)
+			return {}
+		acts.append(a)
+	var hp_v: Variant = p.get("heal_percent", 0)
+	if not (hp_v is float or hp_v is int) or float(hp_v) < 0.0 or float(hp_v) > 100.0:
+		push_error("Combatant: %s 'heal_percent' must be 0..100" % label)
+		return {}
+	if not (p.get("message", null) is String) or not (p.get("clear_statuses", false) is bool):
+		push_error("Combatant: %s needs a string 'message' (and a boolean 'clear_statuses')" % label)
+		return {}
+	return {"hp_below": float(hb), "pattern": String(pat), "actions": acts, "message": String(p["message"]),
+			"heal_percent": float(hp_v), "clear_statuses": bool(p.get("clear_statuses", false)),
+			"field_rule": String(p.get("field_rule", "")), "field_rule_def": {}}
 
 
 ## Changes the displayed identity (name, sprite, types) WITHOUT touching HP, block or strength.

@@ -5,6 +5,9 @@ extends RefCounted
 
 const KIND_ATTACK: String = "attack"
 const KIND_SKILL: String = "skill"
+## Story 030: an unplayable junk card (« Débris », cards.json junk_cards) added to the draw pile by enemies / field rules;
+## it clogs the hand and exhausts at the end of the turn. Never in decks, rewards or shops.
+const KIND_JUNK: String = "junk"
 const RARITY_STARTER: String = "starter"
 const RARITY_COMMON: String = "common"
 const RARITY_UNCOMMON: String = "uncommon"
@@ -67,8 +70,11 @@ static func from_dict(card_id: String, d: Dictionary) -> CardData:
 			push_error("CardData: card '%s' is missing field '%s'" % [card_id, key])
 			return null
 	var kind_value: String = String(d["kind"])
-	if kind_value != KIND_ATTACK and kind_value != KIND_SKILL:
+	if kind_value != KIND_ATTACK and kind_value != KIND_SKILL and kind_value != KIND_JUNK:
 		push_error("CardData: card '%s' has unknown kind '%s'" % [card_id, kind_value])
+		return null
+	if kind_value == KIND_JUNK and (int(d["damage"]) != 0 or int(d["block"]) != 0):
+		push_error("CardData: junk card '%s' must have damage 0 and block 0" % card_id)
 		return null
 	if kind_value == KIND_SKILL and int(d["damage"]) > 0:
 		push_error("CardData: skill card '%s' must not deal damage" % card_id)
@@ -181,6 +187,16 @@ func effect_status_ids() -> Array[String]:
 	out.append_array(EffectSpec.status_ids(on_draw))
 	out.append_array(EffectSpec.status_ids(end_of_turn_in_hand))
 	return out
+
+
+## Story 030: true for an unplayable junk card (Battle.can_play is always false for it).
+func is_junk() -> bool:
+	return kind == KIND_JUNK
+
+
+## Story 030: an independent copy (each junk card added to a battle is its own object).
+func duplicate_card() -> CardData:
+	return _copy()
 
 
 ## A copy of this card carried by another Pokémon (stolen cards, story 009).

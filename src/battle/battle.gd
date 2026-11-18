@@ -4,7 +4,8 @@ extends RefCounted
 ## Implements: design/game-brief.md MVP features 1-2, story-001-combat-de-base,
 ## story-002-intentions-et-multi-ennemis, story-003-types, story-016-statuts (incl. the anti-lock rules),
 ## story-019-equilibrage (an enemy attack uses its action's data type, see _attack_type_of),
-## story-027-profondeur-du-combat (card effect grammar EffectSpec, talents, Élan, Faiblesse / Vulnérable, exhaust / retain).
+## story-027-profondeur-du-combat (card effect grammar EffectSpec, talents, Élan, Faiblesse / Vulnérable, exhaust / retain),
+## story-030-ennemis-et-boss (new enemy actions, field rules FieldRules, boss phases Combatant.phases).
 
 enum State { PLAYER_TURN, WON, LOST }
 
@@ -60,6 +61,21 @@ signal card_exhausted(card: CardData)
 ## Cards were drawn outside the normal start-of-turn draw (card / talent / potion effect); `count` really drawn.
 signal cards_drawn(count: int)
 
+## Story 030. An effect of the field rule fired (battle start / turn start / a burned card...). `rule_id` = the rule's id.
+signal field_rule_triggered(rule_id: String)
+## A boss reached a new phase (enemy.phase_index == phase_index, its actions changed); `message` is the French announcement.
+signal enemy_phase_changed(enemy: Combatant, phase_index: int, message: String)
+## The player will start its next turn with `amount` less energy (drain_energy action; floor already applied at turn start).
+signal energy_drained(enemy: Combatant, amount: int)
+## `count` junk cards were shuffled into the draw pile (add_junk action: `enemy`; field rule: null).
+signal junk_added(enemy: Combatant, count: int)
+## `amount` block was removed from the player by a strip_block action.
+signal block_stripped(enemy: Combatant, amount: int)
+## A heal / heal_ally / enemy_heal_per_turn restored `amount` HP to `target` (an enemy).
+signal enemy_healed(target: Combatant, amount: int)
+## A card of the hand burned (field rule burn_costliest_card): it is already in exhaust_pile.
+signal card_burned(card: CardData)
+
 var player: Combatant
 ## Id of the Pokémon currently on the field (shared HP/block; story 009). Read-only for the UI.
 var active_pokemon_id: String = ""
@@ -104,6 +120,20 @@ var captured: Array[Combatant] = []
 var captured_ids: Array[String] = []
 var _capture_rules: CaptureRules = null
 var _ball_book: Dictionary = {}  # ball id -> BallData
+
+## Story 030: the active field rule ({} = none; see set_field_rule / get_field_rule), the player turn number (1 = first),
+## the energy the player will lose at the start of its next turn (drain_energy), the junk card added by add_junk.
+var field_rule: Dictionary = {}
+var turn_number: int = 0
+var pending_energy_drain: int = 0
+var junk_card: CardData = null
+## Lowest energy a drain_energy action can leave the player at (field_rules.json enemy_mechanics.min_energy_after_drain).
+var min_energy_after_drain: int = DEFAULT_MIN_ENERGY_AFTER_DRAIN
+const DEFAULT_MIN_ENERGY_AFTER_DRAIN: int = 1
+## HP a field rule's hp loss always leaves to the player, and the fewest cards a draw_down rule leaves.
+const FIELD_HP_FLOOR: int = 1
+const MIN_DRAW: int = 1
+var _in_enemy_phase: bool = false
 
 var _rng: RandomNumberGenerator
 var _type_chart: TypeChart
@@ -160,24 +190,201 @@ func _init(player_combatant: Combatant, enemy_list: Array[Combatant], deck: Arra
 func start() -> void:
 	if enemies.is_empty():
 		return
+	_apply_rule_battle_start()
+	_apply_rule_before_intents(1)
 	for e: Combatant in enemies:
 		_roll_intent(e)
 	_fire_items(ItemData.TRIGGER_BATTLE_START)
 	_start_player_turn(true)
 
 
+# --- Story 030: enemy mechanics, field rules, boss phases ------------------------------------------------
+
+## Junk card added by add_junk / junk_each_turn (null: those effects do nothing) and the drain floor. Call before start().
+func configure_enemy_mechanics(junk: CardData, min_energy_drain_floor: int) -> void:
+	junk_card = junk
+	min_energy_after_drain = maxi(0, min_energy_drain_floor)
+
+
+## Sets the field rule {id, name, description, effects} (see FieldRules); {} = none. Invalid effects are reported and
+## ignored (the battle never crashes). Call before start(); a boss phase may replace it later.
+func set_field_rule(rule: Dictionary) -> void:
+	field_rule = {}
+	if rule.is_empty():
+		return
+	var effects: Array = []
+	for fx: Variant in (rule.get("effects", []) as Array):
+		var err: String = FieldRules.check_effect(fx)
+		if err.is_empty():
+			effects.append(fx)
+		else:
+			push_error("Battle: field rule '%s': %s (ignored)" % [String(rule.get("id", "")), err])
+	field_rule = rule.duplicate()
+	field_rule["effects"] = effects
+
+
+## The active field rule for the UI: {id, name, description} ({} if none).
+func get_field_rule() -> Dictionary:
+	return FieldRules.summary(field_rule)
+
+
+## Effects of the active rule of that type (empty if none).
+func _rule_effects(effect_type: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for fx: Variant in (field_rule.get("effects", []) as Array):
+		if String((fx as Dictionary).get("type", "")) == effect_type:
+			out.append(fx)
+	return out
+
+
+## Sum of `value` of the rule's effects of that type that fire on player turn `turn` (`every`).
+func _rule_total(effect_type: String, turn: int = 0) -> int:
+	var total: int = 0
+	for fx: Dictionary in _rule_effects(effect_type):
+		if turn <= 0 or turn % int(fx.get("every", 1)) == 0:
+			total += int(fx.get("value", 0))
+	return total
+
+
+func _rule_fired() -> void:
+	field_rule_triggered.emit(String(field_rule.get("id", "")))
+
+
+func _apply_rule_battle_start() -> void:
+	var fired: bool = false
+	var start_block: int = _rule_total(FieldRules.ENEMY_START_BLOCK)
+	if start_block > 0:
+		for e: Combatant in enemies:
+			e.add_block(start_block)
+		fired = true
+	for fx: Dictionary in _rule_effects(FieldRules.PLAYER_STATUS_START):
+		apply_status(player, String(fx["status"]), int(fx["value"]))
+		fired = true
+	if fired:
+		_rule_fired()
+
+
+## Enemy strength of the rule for the turn about to start (before its intents are rolled, so they include it).
+func _apply_rule_before_intents(turn: int) -> void:
+	var gain: int = _rule_total(FieldRules.ENEMY_STRENGTH_PER_TURN, turn)
+	if gain <= 0:
+		return
+	for e: Combatant in enemies:
+		if e.is_alive():
+			e.strength += gain
+			e.changed.emit()
+	_rule_fired()
+
+
+## Start-of-turn rule effects BEFORE the draw. False if the player was K.O. (cannot happen with the HP floor).
+func _apply_rule_turn_start(turn: int) -> void:
+	var fired: bool = false
+	var loss: int = _rule_total(FieldRules.PLAYER_HP_LOSS_PER_TURN, turn)
+	if loss > 0:
+		player.lose_hp(mini(loss, player.hp - FIELD_HP_FLOOR))
+		fired = true
+	for fx: Dictionary in _rule_effects(FieldRules.PLAYER_STATUS_EACH_TURN):
+		if turn % int(fx.get("every", 1)) == 0:
+			apply_status(player, String(fx["status"]), int(fx["value"]))
+			fired = true
+	var blk: int = _rule_total(FieldRules.ENEMY_BLOCK_PER_TURN, turn)
+	var heal_v: int = _rule_total(FieldRules.ENEMY_HEAL_PER_TURN, turn)
+	for e: Combatant in enemies:
+		if not e.is_alive():
+			continue
+		if blk > 0:
+			e.add_block(blk)
+			fired = true
+		if heal_v > 0:
+			var got: int = e.heal(heal_v)
+			fired = true
+			if got > 0:
+				enemy_healed.emit(e, got)
+	var junk: int = _rule_total(FieldRules.JUNK_EACH_TURN, turn)
+	if junk > 0 and _add_junk(junk) > 0:
+		junk_added.emit(null, junk)
+		fired = true
+	if fired:
+		_rule_fired()
+
+
+## After the draw: burn_costliest_card.
+func _apply_rule_after_draw(turn: int) -> void:
+	for fx: Dictionary in _rule_effects(FieldRules.BURN_COSTLIEST_CARD):
+		if turn % int(fx.get("every", 1)) != 0:
+			continue
+		var best: int = -1
+		for i: int in hand.size():
+			if not hand[i].is_junk() and (best < 0 or hand[i].cost > hand[best].cost):
+				best = i
+		if best >= 0:
+			var card: CardData = hand[best]
+			hand.remove_at(best)
+			exhaust_pile.append(card)
+			card_burned.emit(card)
+			_rule_fired()
+
+
+## Shuffles `count` copies of the junk card into the draw pile at RNG positions. Returns how many were added.
+func _add_junk(count: int) -> int:
+	if junk_card == null or count <= 0:
+		return 0
+	for i: int in count:
+		draw_pile.insert(_rng.randi_range(0, draw_pile.size()), junk_card.duplicate_card())
+	return count
+
+
+## The living enemy with the lowest HP ratio (leftmost on ties); null if none.
+func _weakest_enemy() -> Combatant:
+	var best: Combatant = null
+	for e: Combatant in enemies:
+		if e.is_alive() and (best == null or float(e.hp) / float(e.max_hp) < float(best.hp) / float(best.max_hp)):
+			best = e
+	return best
+
+
+## Switches every living boss whose HP ratio reached a phase threshold to that phase (several at once if crossed).
+func _check_phases() -> void:
+	for e: Combatant in enemies:
+		while e.is_alive() and e.phase_index < e.phases.size() \
+				and float(e.hp) <= float(e.max_hp) * float(e.phases[e.phase_index]["hp_below"]):
+			var ph: Dictionary = e.phases[e.phase_index]
+			e.phase_index += 1
+			e.actions.assign(ph["actions"])
+			e.pattern = String(ph["pattern"])
+			e.sequence_index = 0
+			e.pending_charge = null
+			if bool(ph["clear_statuses"]):
+				cure_status(e, "all")
+			var heal_amount: int = floori(float(e.max_hp) * float(ph["heal_percent"]) / PERCENT)
+			if heal_amount > 0:
+				var got: int = e.heal(heal_amount)
+				if got > 0:
+					enemy_healed.emit(e, got)
+			var rule: Dictionary = ph.get("field_rule_def", {})
+			if not rule.is_empty():
+				set_field_rule(rule)
+			if not _in_enemy_phase and state == State.PLAYER_TURN:
+				_roll_intent(e)  # the new form shows its first action right away
+			enemy_phase_changed.emit(e, e.phase_index, String(ph["message"]))
+			if not rule.is_empty():
+				_rule_fired()
+
+
 ## True if the card at hand index can be played now (state, index, energy).
 func can_play(index: int) -> bool:
-	if state != State.PLAYER_TURN or index < 0 or index >= hand.size():
-		return false
+	if state != State.PLAYER_TURN or index < 0 or index >= hand.size() or hand[index].is_junk():
+		return false  # story 030: junk cards are never playable
 	return card_cost(hand[index]) <= energy
 
 
 ## Energy `card` costs NOW: 0 for the first card of a type this turn when a held item says so (first_type_card_free).
+## Story 030: + the field rule's first_card_cost_up on the first card of the turn.
 func card_cost(card: CardData) -> int:
+	var up: int = _rule_total(FieldRules.FIRST_CARD_COST_UP) if _cards_played_this_turn == 0 else 0
 	if card.cost > 0 and not _free_type_used.has(card.type_id) and ItemEffects.free_card_item(items, card.type_id) != null:
-		return 0
-	return card.cost
+		return up
+	return card.cost + up
 
 
 ## Pays `card` (energy) and consumes the free-card power of its type when it was used.
@@ -318,6 +525,7 @@ func play_card(index: int, target_index: int = -1) -> bool:
 		card_exhausted.emit(card)
 		_fire_items(ItemData.TRIGGER_ON_EXHAUST)
 	_check_kills()
+	_check_phases()
 	card_played.emit(card)
 	if first_living_enemy() < 0:
 		_win()
@@ -459,6 +667,7 @@ func _neutral_multiplier() -> float:
 ## (`elan_value` stacks, attack cards), items, minus the burn penalty. `announce` emits item_triggered.
 func _flat_bonus(card: CardData, elan_value: int, announce: bool) -> int:
 	var bonus: int = turn_damage_bonus + player.strength - _attack_penalty(player)  # burn: weaker attacks
+	bonus += _type_rule_bonus(card.type_id)  # story 030: field rule type_damage_up
 	if card.kind == CardData.KIND_ATTACK:
 		bonus += next_attack_bonus
 		if _talent_book != null:
@@ -472,6 +681,15 @@ func _flat_bonus(card: CardData, elan_value: int, announce: bool) -> int:
 
 ## Final damage (before block) of an attack worth `raw` from `attacker` on `target`: Faiblesse of the attacker and
 ## Vulnérable of the target scale the value (rounded down), then the type multiplier applies.
+## Story 030: flat damage the field rule (type_damage_up) adds to every attack of `type_id`.
+func _type_rule_bonus(type_id: String) -> int:
+	var total: int = 0
+	for fx: Dictionary in _rule_effects(FieldRules.TYPE_DAMAGE_UP):
+		if String(fx["of_type"]) == type_id:
+			total += int(fx["value"])
+	return total
+
+
 func _scaled_damage(raw: int, attacker: Combatant, target: Combatant, type_id: String) -> int:
 	var scale: float = _status_multiplier(attacker, true) * _status_multiplier(target, false)
 	return _type_chart.final_damage(floori(float(maxi(0, raw)) * scale), type_id, target.type_ids)
@@ -587,7 +805,9 @@ func end_turn() -> bool:
 		_apply_effect(c.end_of_turn_in_hand, -1)
 	var kept: Array[CardData] = []
 	for c: CardData in hand:
-		if c.retain:
+		if c.is_junk():
+			exhaust_pile.append(c)  # story 030: junk cards exhaust at the end of the turn
+		elif c.retain:
 			kept.append(c)
 		else:
 			discard_pile.append(c)
@@ -599,6 +819,7 @@ func end_turn() -> bool:
 	if not player.is_alive():
 		_lose()
 		return true
+	_in_enemy_phase = true
 	for e: Combatant in enemies:
 		if not e.is_alive():
 			continue
@@ -614,6 +835,8 @@ func end_turn() -> bool:
 		if not player.is_alive():
 			break
 		_tick_statuses(e)  # enemy statuses tick right after the enemy's own turn
+	_check_phases()
+	_in_enemy_phase = false
 	if not player.is_alive():
 		_lose()
 		return true
@@ -626,6 +849,7 @@ func end_turn() -> bool:
 	if aftermath_before > 0 and player.aftermath_turns > 0:
 		player.aftermath_turns -= 1
 		player.changed.emit()
+	_apply_rule_before_intents(turn_number + 1)
 	for e: Combatant in enemies:
 		_roll_intent(e)
 	_start_player_turn()
@@ -755,7 +979,8 @@ func refresh_intents() -> void:
 	for e: Combatant in enemies:
 		if e.is_alive() and e.intent != null:
 			if e.intent.type == EnemyIntent.TYPE_ATTACK:
-				e.intent.value = _scaled_damage(e.intent.base_value - _attack_penalty(e), e, player, _attack_type_of(e, e.intent))
+				var at: String = _attack_type_of(e, e.intent)
+				e.intent.value = _scaled_damage(e.intent.base_value - _attack_penalty(e) + _type_rule_bonus(at), e, player, at)
 			e.intent.skip_label = _skip_label(e)
 
 
@@ -776,20 +1001,56 @@ func _execute_intent(enemy: Combatant) -> void:
 	var intent: EnemyIntent = enemy.intent
 	enemy.reset_block()  # block from the previous round expires when the enemy acts
 	var hit: bool = false
+	var mult: float = _type_chart.damage_multiplier(_attack_type_of(enemy, intent), player.type_ids)
 	match intent.type:
 		EnemyIntent.TYPE_ATTACK:
-			# intent.value is already the FINAL damage vs the player (strength + type applied).
-			player.take_damage(intent.value)
+			# intent.value is already the FINAL damage of ONE hit vs the player (strength + type applied); story 030: hits.
 			hit = true
-			if intent.value > 0:
-				_on_damaged(player, _attack_type_of(enemy, intent))
+			if intent.charged:
+				enemy.pending_charge = null
+			for h: int in intent.hits:
+				if not player.is_alive():
+					break
+				player.take_damage(intent.value)
+				if intent.value > 0:
+					_on_damaged(player, _attack_type_of(enemy, intent))
+				hit_resolved.emit(player, intent.value, mult)
 		EnemyIntent.TYPE_BLOCK:
 			enemy.add_block(intent.value)
 		EnemyIntent.TYPE_BUFF:
 			enemy.strength += intent.value
+		EnemyIntent.TYPE_STATUS:
+			apply_status(player, intent.status_id, intent.status_value)
+		EnemyIntent.TYPE_HEAL, EnemyIntent.TYPE_HEAL_ALLY:
+			var healed: Combatant = enemy if intent.type == EnemyIntent.TYPE_HEAL else _weakest_enemy()
+			var got: int = healed.heal(intent.value) if healed != null else 0
+			if got > 0:
+				enemy_healed.emit(healed, got)
+		EnemyIntent.TYPE_BLOCK_ALLY:
+			var guarded: Combatant = _weakest_enemy()
+			if guarded != null:
+				guarded.add_block(intent.value)
+		EnemyIntent.TYPE_CHARGE:
+			var big := EnemyIntent.new()
+			big.type = EnemyIntent.TYPE_ATTACK
+			big.value = intent.value
+			big.attack_type = intent.attack_type
+			big.charged = true
+			enemy.pending_charge = big
+		EnemyIntent.TYPE_STRIP_BLOCK:
+			var removed: int = mini(player.block, intent.value)
+			if removed > 0:
+				player.block -= removed
+				player.changed.emit()
+			block_stripped.emit(enemy, removed)
+		EnemyIntent.TYPE_DRAIN_ENERGY:
+			pending_energy_drain += intent.value
+			energy_drained.emit(enemy, intent.value)
+		EnemyIntent.TYPE_ADD_JUNK:
+			var added: int = _add_junk(intent.value)
+			if added > 0:
+				junk_added.emit(enemy, added)
 	if hit:
-		var mult: float = _type_chart.damage_multiplier(_attack_type_of(enemy, intent), player.type_ids)
-		hit_resolved.emit(player, intent.value, mult)
 		# Status of the attack: applied unless the hit is fully immune (type multiplier 0), even if block absorbed it.
 		if not intent.status_id.is_empty() and mult > 0.0 and player.is_alive():
 			apply_status(player, intent.status_id, intent.status_value)
@@ -803,7 +1064,9 @@ func _roll_intent(enemy: Combatant) -> void:
 		enemy.intent = null
 		return
 	var chosen: EnemyIntent
-	if enemy.pattern == Combatant.PATTERN_WEIGHTED:
+	if enemy.pending_charge != null:
+		chosen = enemy.pending_charge  # story 030: the charged attack comes first (kept if the enemy lost its turn)
+	elif enemy.pattern == Combatant.PATTERN_WEIGHTED:
 		var total: float = 0.0
 		for a: EnemyIntent in enemy.actions:
 			total += a.weight
@@ -820,11 +1083,14 @@ func _roll_intent(enemy: Combatant) -> void:
 	var bonus: int = enemy.strength if chosen.type == EnemyIntent.TYPE_ATTACK else 0
 	var rolled: EnemyIntent = chosen.with_bonus(bonus)
 	rolled.base_value = rolled.value
+	if rolled.type == EnemyIntent.TYPE_STATUS:
+		rolled.status_label = _status_book.name_of(rolled.status_id)
 	if rolled.type == EnemyIntent.TYPE_ATTACK:
 		# Strength is added BEFORE the type multiplier (burn subtracts its penalty there too); the displayed value is the final one.
 		rolled.attack_type = _attack_type_of(enemy, rolled)
 		rolled.attack_type_label = _type_chart.get_type_name(rolled.attack_type) if enemy.type_ids.size() > 1 else ""
-		rolled.value = _scaled_damage(rolled.value - _attack_penalty(enemy), enemy, player, rolled.attack_type)
+		rolled.value = _scaled_damage(rolled.value - _attack_penalty(enemy) + _type_rule_bonus(rolled.attack_type), enemy, player,
+				rolled.attack_type)
 		rolled.status_label = _status_book.name_of(rolled.status_id)
 	rolled.skip_label = _skip_label(enemy)
 	enemy.intent = rolled
@@ -888,6 +1154,7 @@ func _start_player_turn(first: bool = false) -> void:
 			player.add_block(kept)
 			item_triggered.emit(ItemEffects.first_with(items, "block_keep"))
 	_free_type_used.clear()
+	turn_number += 1
 	energy = max_energy
 	energy_lost = 0
 	_end_turn_strength()
@@ -901,8 +1168,15 @@ func _start_player_turn(first: bool = false) -> void:
 		energy = maxi(0, energy - _status_book.get_def(lost_turn).energy_loss_for(max_energy))
 		energy_lost = before - energy
 		turn_skipped.emit(player, lost_turn)
+	if pending_energy_drain > 0:  # story 030: drain_energy, never below the floor (nor below what sleep already left)
+		var before_drain: int = energy
+		energy = maxi(mini(energy, min_energy_after_drain), energy - pending_energy_drain)
+		energy_lost += before_drain - energy
+		pending_energy_drain = 0
+	_apply_rule_turn_start(turn_number)
 	_fire_items(ItemData.TRIGGER_TURN_START)
-	_draw_cards(hand_size)
+	_draw_cards(maxi(MIN_DRAW, hand_size - _rule_total(FieldRules.PLAYER_DRAW_DOWN, turn_number)))
+	_apply_rule_after_draw(turn_number)
 	if first:
 		_apply_first_turn_items()
 		_trigger_talent(active_pokemon_id)  # story 027: the starter "enters" when the battle begins

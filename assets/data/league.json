@@ -1,23 +1,168 @@
 {
-	"_doc": "Conseil 4 + Maitre + boss final (story 013). Apres le dernier badge, la partie enchaine member_count combats du Conseil 4, puis le Maitre (champion), puis le boss final (final_boss), sans retour a la carte. member_type_pool: types possibles des membres (ids de types.json) ; a chaque partie member_count types DIFFERENTS y sont tires (graine de Main), en excluant les types des arenes de la partie ; s'il reste moins de member_count types apres exclusion, les types d'arene du pool sont reutilises en repli. members_by_type: type -> {name (nom FR du membre), title (FR), encounter (equipe = id d'encounters de pokemon.json ; chaque Pokemon doit porter ce type)}. member_modifiers: un {hp_multiplier > 0, strength_bonus entier >= 0} par position (1er..dernier membre), jamais en baisse d'un membre au suivant et plus fort que les gym_modifiers de la derniere zone (zones.json : au moins egal sur les deux champs, strictement plus fort sur au moins un). champion: {name, title, type, encounter (chaque Pokemon porte 'type'), modifiers} : au moins egaux a ceux du dernier membre et strictement plus forts sur au moins un champ. final_boss: {name, title, encounter (UN seul Pokemon, marque boss: true dans pokemon.json), modifiers} : ses PV effectifs (max_hp x hp_multiplier) doivent depasser le total des PV effectifs de l'equipe du Maitre, et sa plus forte attaque (valeur + strength_bonus) la plus forte attaque du Maitre. heal_percent_between_fights: % des PV max rendus apres chaque combat gagne du Conseil (0..100). reward_rarity_weights: poids de rarete de la recompense (1 carte parmi offer_count) apres chaque combat du Conseil / du Maitre. Pas de butin (argent/objet) ni de boutique pendant le Conseil. Battre le boss final = ecran de victoire finale ; toute defaite = ecran de defaite.",
-	"member_count": 4,
-	"member_type_pool": ["ghost", "ice", "fighting", "psychic", "dark", "steel"],
-	"members_by_type": {
-		"ghost": {"name": "Agatha", "title": "Conseil 4", "encounter": "league_ghost"},
-		"ice": {"name": "Olga", "title": "Conseil 4", "encounter": "league_ice"},
-		"fighting": {"name": "Aldo", "title": "Conseil 4", "encounter": "league_fighting"},
-		"psychic": {"name": "Clément", "title": "Conseil 4", "encounter": "league_psychic"},
-		"dark": {"name": "Marion", "title": "Conseil 4", "encounter": "league_dark"},
-		"steel": {"name": "Thyméo", "title": "Conseil 4", "encounter": "league_steel"}
-	},
-	"member_modifiers": [
-		{"hp_multiplier": 1.4, "strength_bonus": 3},
-		{"hp_multiplier": 1.45, "strength_bonus": 3},
-		{"hp_multiplier": 1.5, "strength_bonus": 3},
-		{"hp_multiplier": 1.6, "strength_bonus": 3}
-	],
-	"champion": {"name": "Peter", "title": "Maître de la Ligue", "type": "dragon", "encounter": "league_champion", "modifiers": {"hp_multiplier": 1.65, "strength_bonus": 3}},
-	"final_boss": {"name": "Éthernatos", "title": "Boss final", "encounter": "final_eternatus", "modifiers": {"hp_multiplier": 1.0, "strength_bonus": 4}},
-	"heal_percent_between_fights": 40,
-	"reward_rarity_weights": {"common": 30, "uncommon": 45, "rare": 25}
+  "_doc": "Conseil 4 + Maitre + boss final (story 013). Apres le dernier badge, la partie enchaine member_count combats du Conseil 4, puis le Maitre (champion), puis le boss final (final_boss), sans retour a la carte. member_type_pool: types possibles des membres (ids de types.json) ; a chaque partie member_count types DIFFERENTS y sont tires (graine de Main), en excluant les types des arenes de la partie ; s'il reste moins de member_count types apres exclusion, les types d'arene du pool sont reutilises en repli. members_by_type: type -> {name (nom FR du membre), title (FR), encounter (equipe = id d'encounters de pokemon.json ; chaque Pokemon doit porter ce type)}. member_modifiers: un {hp_multiplier > 0, strength_bonus entier >= 0} par position (1er..dernier membre), jamais en baisse d'un membre au suivant et plus fort que les gym_modifiers de la derniere zone (zones.json : au moins egal sur les deux champs, strictement plus fort sur au moins un). champion: {name, title, type, encounter (chaque Pokemon porte 'type'), modifiers} : au moins egaux a ceux du dernier membre et strictement plus forts sur au moins un champ. final_boss: {name, title, encounter (UN seul Pokemon, marque boss: true dans pokemon.json), modifiers} : ses PV effectifs (max_hp x hp_multiplier) doivent depasser le total des PV effectifs de l'equipe du Maitre, et sa plus forte attaque (valeur + strength_bonus) la plus forte attaque du Maitre. heal_percent_between_fights: % des PV max rendus apres chaque combat gagne du Conseil (0..100). reward_rarity_weights: poids de rarete de la recompense (1 carte parmi offer_count) apres chaque combat du Conseil / du Maitre. Pas de butin (argent/objet) ni de boutique pendant le Conseil. Battre le boss final = ecran de victoire finale ; toute defaite = ecran de defaite. Story 030 : field_rule (optionnel) = id de field_rules.json pour chaque membre (members_by_type), le Maitre (champion) et le boss final. final_boss.phases (optionnel) : [{hp_below (0..1 exclus, ordre decroissant), message (FR), pattern, actions (actions ennemies), heal_percent? (0..100), clear_statuses?, field_rule? (remplace la regle)}] : quand les PV du boss passent a hp_below x PV max ou moins, il change d actions (Battle.enemy_phase_changed).",
+  "member_count": 4,
+  "member_type_pool": [
+    "ghost",
+    "ice",
+    "fighting",
+    "psychic",
+    "dark",
+    "steel"
+  ],
+  "members_by_type": {
+    "ghost": {
+      "name": "Agatha",
+      "title": "Conseil 4",
+      "encounter": "league_ghost",
+      "field_rule": "league_ghost"
+    },
+    "ice": {
+      "name": "Olga",
+      "title": "Conseil 4",
+      "encounter": "league_ice",
+      "field_rule": "league_ice"
+    },
+    "fighting": {
+      "name": "Aldo",
+      "title": "Conseil 4",
+      "encounter": "league_fighting",
+      "field_rule": "league_fighting"
+    },
+    "psychic": {
+      "name": "Clément",
+      "title": "Conseil 4",
+      "encounter": "league_psychic",
+      "field_rule": "league_psychic"
+    },
+    "dark": {
+      "name": "Marion",
+      "title": "Conseil 4",
+      "encounter": "league_dark",
+      "field_rule": "league_dark"
+    },
+    "steel": {
+      "name": "Thyméo",
+      "title": "Conseil 4",
+      "encounter": "league_steel",
+      "field_rule": "league_steel"
+    }
+  },
+  "member_modifiers": [
+    {
+      "hp_multiplier": 1.4,
+      "strength_bonus": 3
+    },
+    {
+      "hp_multiplier": 1.45,
+      "strength_bonus": 3
+    },
+    {
+      "hp_multiplier": 1.5,
+      "strength_bonus": 3
+    },
+    {
+      "hp_multiplier": 1.6,
+      "strength_bonus": 3
+    }
+  ],
+  "champion": {
+    "name": "Peter",
+    "title": "Maître de la Ligue",
+    "type": "dragon",
+    "encounter": "league_champion",
+    "modifiers": {
+      "hp_multiplier": 1.65,
+      "strength_bonus": 3
+    },
+    "field_rule": "league_champion"
+  },
+  "final_boss": {
+    "name": "Éthernatos",
+    "title": "Boss final",
+    "encounter": "final_eternatus",
+    "modifiers": {
+      "hp_multiplier": 1.0,
+      "strength_bonus": 4
+    },
+    "field_rule": "eternatus_dynamax",
+    "phases": [
+      {
+        "hp_below": 0.5,
+        "message": "Éthernatos se transforme : Infinitamax !",
+        "clear_statuses": true,
+        "heal_percent": 0,
+        "field_rule": "eternatus_infinitamax",
+        "pattern": "sequence",
+        "actions": [
+          {
+            "type": "attack",
+            "value": 14,
+            "hits": 2
+          },
+          {
+            "type": "status",
+            "status": {
+              "id": "vulnerable",
+              "value": 2
+            }
+          },
+          {
+            "type": "charge",
+            "value": 40,
+            "attack_type": "dragon"
+          },
+          {
+            "type": "attack",
+            "value": 20,
+            "status": {
+              "id": "poison",
+              "value": 3
+            }
+          },
+          {
+            "type": "strip_block",
+            "value": 15
+          },
+          {
+            "type": "buff",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "hp_below": 0.2,
+        "message": "Éthernatos puise dans l'Infini : Lumière Infinie !",
+        "clear_statuses": false,
+        "heal_percent": 0,
+        "pattern": "sequence",
+        "actions": [
+          {
+            "type": "attack",
+            "value": 10,
+            "hits": 3,
+            "attack_type": "dragon"
+          },
+          {
+            "type": "drain_energy",
+            "value": 1
+          },
+          {
+            "type": "attack",
+            "value": 26,
+            "attack_type": "poison"
+          },
+          {
+            "type": "add_junk",
+            "value": 2
+          }
+        ]
+      }
+    ]
+  },
+  "heal_percent_between_fights": 40,
+  "reward_rarity_weights": {
+    "common": 30,
+    "uncommon": 45,
+    "rare": 25
+  }
 }
