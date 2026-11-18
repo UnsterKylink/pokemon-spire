@@ -63,7 +63,7 @@ func _initialize() -> void:
 	gd = GameData.new()
 	ok(gd.load_all(), "real data loads")
 	tb = gd.get_talent_book()
-	ok(tb != null and tb.trigger == TalentBook.TRIGGER_ONCE_PER_BATTLE and tb.elan_cap == 5 and tb.elan_damage_per_stack == 1 and tb.elan_gain_per_attack == 1, "talents.json rules")
+	ok(tb != null and tb.trigger == TalentBook.TRIGGER_ONCE_PER_BATTLE and tb.elan_cap == 3 and tb.elan_damage_per_stack == 1 and tb.elan_gain_per_attack == 1, "talents.json rules")
 	_data()
 	_starter_and_elan()
 	_switch()
@@ -120,18 +120,18 @@ func _starter_and_elan() -> void:
 	b.elan_changed.connect(func(v: int) -> void: elans.append(v))
 	b.start()
 	ok(fired == [["salameche", "brasier"]], "the starter's talent fires at battle start: %s" % str(fired))
-	ok(b.get_next_attack_bonus() == 2 and b.get_elan() == 0 and b.get_elan_cap() == 5, "Brasier waits for the next attack")
-	ok(int(b.preview_card_damage(0, 0)["amount"]) == DMG + 2, "preview shows the talent bonus")
+	ok(b.get_next_attack_bonus() == 1 and b.get_elan() == 0 and b.get_elan_cap() == 3, "Brasier waits for the next attack")
+	ok(int(b.preview_card_damage(0, 0)["amount"]) == DMG + 1, "preview shows the talent bonus")
 	var lost: Array = []
 	for i: int in 5:
 		lost.append(play(b, b.hand[0].id))
-	ok(lost == [DMG + 2, DMG + 1, DMG + 2, DMG + 3, DMG + 4], "Brasier once, then +1 per Élan: %s" % str(lost))
-	ok(b.get_elan() == 5 and elans == [1, 2, 3, 4, 5] and b.get_next_attack_bonus() == 0, "Élan built by the active Pokémon: %s" % str(elans))
-	ok(b.get_elan_damage_bonus() == 5, "Élan damage bonus getter")
+	ok(lost == [DMG + 1, DMG + 1, DMG + 2, DMG + 3, DMG + 3], "Brasier once, then +1 per Élan: %s" % str(lost))
+	ok(b.get_elan() == 3 and elans == [1, 2, 3] and b.get_next_attack_bonus() == 0, "Élan built by the active Pokémon: %s" % str(elans))
+	ok(b.get_elan_damage_bonus() == 3, "Élan damage bonus getter")
 	b.end_turn()
-	ok(b.get_elan() == 5 and fired.size() == 1, "Élan is kept between turns; the talent does not re-fire by staying")
-	ok(play(b, b.hand[0].id) == DMG + 5 and play(b, b.hand[0].id) == DMG + 5, "capped at 5")
-	ok(b.get_elan() == 5 and elans.size() == 5, "no change signal at the cap")
+	ok(b.get_elan() == 3 and fired.size() == 1, "Élan is kept between turns; the talent does not re-fire by staying")
+	ok(play(b, b.hand[0].id) == DMG + 3 and play(b, b.hand[0].id) == DMG + 3, "capped at 3")
+	ok(b.get_elan() == 3 and elans.size() == 3, "no change signal at the cap")
 	# No talent book: nothing fires, no Élan (old behaviour).
 	b = mk(cards, "salameche", null)
 	b.start()
@@ -146,7 +146,7 @@ func _switch() -> void:
 	b.talent_triggered.connect(func(pid: String, tid: String) -> void: fired.append(tid))
 	b.elan_changed.connect(func(v: int) -> void: elans.append(v))
 	b.start()
-	ok(play(b, "s1") == DMG + 2 and play(b, "s2") == DMG + 1 and b.get_elan() == 2, "build 2 Élan on the starter")
+	ok(play(b, "s1") == DMG + 1 and play(b, "s2") == DMG + 1 and b.get_elan() == 2, "build 2 Élan on the starter")
 	ok(b.would_trigger_talent(b.hand[0]) == (b.hand[0].pokemon_id == "squirtle"), "would_trigger_talent only for a newcomer")
 	ok(play(b, "q1") == DMG and b.active_pokemon_id == "squirtle", "switching card: no Élan bonus")
 	ok(b.get_elan() == 0 and elans == [1, 2, 0] and fired == ["brasier", "torrent"] and b.player.block == 3, "switch: Élan 0, Torrent gives 3 block")
@@ -238,7 +238,7 @@ func _other_talents() -> void:
 	var run := RunState.create_with_starter(gd, "salameche")
 	var rb: Battle = run.create_battle(gd.create_enemies("solo"), gd.get_type_chart(), rng(5))
 	rb.start()
-	ok(rb.get_elan_cap() == 5 and rb.get_talent_id("salameche") == "brasier" and rb.get_next_attack_bonus() == 2, "RunState.create_battle wires talents + Élan")
+	ok(rb.get_elan_cap() == 3 and rb.get_talent_id("salameche") == "brasier" and rb.get_next_attack_bonus() == 1, "RunState.create_battle wires talents + Élan")
 
 
 ## Save compatibility: story 027 adds no run-state field (all new state lives inside a Battle, never saved mid-battle), so the

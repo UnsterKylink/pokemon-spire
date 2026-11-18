@@ -4,7 +4,7 @@
 	"elan": {"gain_per_attack": 1, "cap": 3, "damage_per_stack": 1},
 	"talents": {
 		"ramassage": {"name": "Ramassage", "description": "En entrant : gagne 2 points de protection.", "effect": {"block": 2}},
-		"brasier": {"name": "Brasier", "description": "En entrant : la prochaine attaque inflige 2 dégâts de plus.", "effect": {"next_attack_bonus": 2}},
+		"brasier": {"name": "Brasier", "description": "En entrant : la prochaine attaque inflige 1 dégât de plus.", "effect": {"next_attack_bonus": 1}},
 		"torrent": {"name": "Torrent", "description": "En entrant : gagne 3 points de protection.", "effect": {"block": 3}},
 		"engrais": {"name": "Engrais", "description": "En entrant : rend 2 PV.", "effect": {"heal": 2}},
 		"statik": {"name": "Statik", "description": "En entrant : applique Vulnérable 1 à un ennemi au hasard.", "effect": {"apply": [{"status": "vulnerable", "value": 1, "to": "random_enemy"}]}},
@@ -14,7 +14,7 @@
 		"voile_sable": {"name": "Voile Sable", "description": "En entrant : gagne 3 points de protection.", "effect": {"block": 3}},
 		"regard_vif": {"name": "Regard Vif", "description": "En entrant : pioche 1 carte.", "effect": {"draw": 1}},
 		"prediction": {"name": "Prédiction", "description": "En entrant : pioche 1 carte.", "effect": {"draw": 1}},
-		"essaim": {"name": "Essaim", "description": "En entrant : la prochaine attaque inflige 2 dégâts de plus.", "effect": {"next_attack_bonus": 2}},
+		"essaim": {"name": "Essaim", "description": "En entrant : la prochaine attaque inflige 4 dégâts de plus.", "effect": {"next_attack_bonus": 4}},
 		"fermete": {"name": "Fermeté", "description": "En entrant : gagne 4 points de protection.", "effect": {"block": 4}},
 		"corps_maudit": {"name": "Corps Maudit", "description": "En entrant : applique Vulnérable 1 à un ennemi au hasard.", "effect": {"apply": [{"status": "vulnerable", "value": 1, "to": "random_enemy"}]}},
 		"multiecaille": {"name": "Multiécaille", "description": "En entrant : gagne 4 points de protection.", "effect": {"block": 4}},

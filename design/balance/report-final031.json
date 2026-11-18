@@ -1,0 +1,1332 @@
+{
+ "games": 2000,
+ "wins": 701,
+ "win_rate": 0.3505,
+ "ci95": [
+  0.32989370389212597,
+  0.37167951427042734
+ ],
+ "deaths_by_stage": {
+  "zone1_wild": 7,
+  "zone1_elite": 8,
+  "zone1_boss": 63,
+  "zone2_wild": 7,
+  "zone2_elite": 15,
+  "zone2_boss": 87,
+  "zone3_wild": 18,
+  "zone3_elite": 34,
+  "zone3_boss": 73,
+  "zone4_wild": 5,
+  "zone4_elite": 30,
+  "zone4_boss": 147,
+  "zone5_wild": 9,
+  "zone5_elite": 18,
+  "zone5_boss": 47,
+  "zone6_wild": 13,
+  "zone6_elite": 10,
+  "zone6_boss": 66,
+  "zone7_wild": 7,
+  "zone7_elite": 6,
+  "zone7_boss": 17,
+  "zone8_wild": 5,
+  "zone8_elite": 2,
+  "zone8_boss": 9,
+  "league_member_1": 59,
+  "league_member_2": 33,
+  "league_member_3": 30,
+  "league_member_4": 27,
+  "league_champion": 57,
+  "league_eternatus": 229,
+  "victory": 701
+ },
+ "deaths_by_stage_other": {
+  "zone2_rival": 40,
+  "zone6_rival": 32,
+  "zone5_event_legendary": 11,
+  "zone4_rival": 16,
+  "zone3_event_legendary": 16,
+  "zone4_event_legendary": 17,
+  "rival_final": 25,
+  "zone7_event_legendary": 2,
+  "zone2_event_elite": 1,
+  "zone6_event_legendary": 1
+ },
+ "badges_hist": {
+  "0": 78,
+  "1": 150,
+  "2": 141,
+  "3": 215,
+  "4": 85,
+  "5": 122,
+  "6": 32,
+  "7": 16,
+  "8": 1161
+ },
+ "entered": [
+  2000,
+  1922,
+  1772,
+  1631,
+  1416,
+  1331,
+  1209,
+  1177,
+  1161
+ ],
+ "avg_hp_lost_by_zone": [
+  37.717,
+  80.42872008324662,
+  76.47799097065463,
+  107.63948497854078,
+  82.125,
+  111.3343350864012,
+  71.2200165425972,
+  145.02378929481733,
+  218.35658914728683
+ ],
+ "avg_deck_size": 32.5085,
+ "avg_deck_size_won": 38.93865905848787,
+ "avg_potions_used": 3.7515,
+ "avg_potions_bought": 0.7715,
+ "avg_items": 10.708,
+ "avg_fights": 29.414,
+ "avg_badges": 5.8095,
+ "room_fights": {
+  "boss": 12128,
+  "elite": 2480,
+  "rival": 4871,
+  "wild": 31746,
+  "league": 6188,
+  "rival_final": 1161,
+  "legendary_seen": 561,
+  "legendary": 254,
+  "legendary_won": 207
+ },
+ "room_deaths": {
+  "boss": 509,
+  "league": 435,
+  "rival": 88,
+  "elite": 124,
+  "legendary": 47,
+  "wild": 71,
+  "rival_final": 25
+ },
+ "starter_types": {
+  "grass": [
+   256,
+   73
+  ],
+  "normal": [
+   313,
+   85
+  ],
+  "steel": [
+   36,
+   16
+  ],
+  "ice": [
+   40,
+   12
+  ],
+  "water": [
+   303,
+   125
+  ],
+  "dark": [
+   75,
+   25
+  ],
+  "bug": [
+   224,
+   55
+  ],
+  "ghost": [
+   62,
+   26
+  ],
+  "dragon": [
+   43,
+   18
+  ],
+  "electric": [
+   101,
+   46
+  ],
+  "fighting": [
+   40,
+   14
+  ],
+  "poison": [
+   86,
+   36
+  ],
+  "ground": [
+   57,
+   24
+  ],
+  "rock": [
+   71,
+   21
+  ],
+  "fire": [
+   178,
+   85
+  ],
+  "psychic": [
+   58,
+   15
+  ],
+  "flying": [
+   16,
+   4
+  ],
+  "fairy": [
+   41,
+   21
+  ]
+ },
+ "starters": {
+  "treecko": [
+   12,
+   5
+  ],
+  "wooloo": [
+   11,
+   2
+  ],
+  "honedge": [
+   5,
+   2
+  ],
+  "chikorita": [
+   13,
+   4
+  ],
+  "chespin": [
+   13,
+   2
+  ],
+  "spheal": [
+   7,
+   2
+  ],
+  "psyduck": [
+   3,
+   1
+  ],
+  "poochyena": [
+   21,
+   8
+  ],
+  "scatterbug": [
+   14,
+   4
+  ],
+  "capsakid": [
+   5,
+   2
+  ],
+  "litwick": [
+   11,
+   6
+  ],
+  "hoothoot": [
+   16,
+   4
+  ],
+  "froakie": [
+   17,
+   7
+  ],
+  "taillow": [
+   11,
+   4
+  ],
+  "snivy": [
+   17,
+   4
+  ],
+  "grookey": [
+   18,
+   7
+  ],
+  "rellor": [
+   5,
+   0
+  ],
+  "finneon": [
+   5,
+   1
+  ],
+  "dratini": [
+   9,
+   3
+  ],
+  "fletchling": [
+   12,
+   1
+  ],
+  "luvdisc": [
+   7,
+   3
+  ],
+  "bidoof": [
+   12,
+   5
+  ],
+  "nickit": [
+   5,
+   1
+  ],
+  "karrablast": [
+   6,
+   0
+  ],
+  "blitzle": [
+   16,
+   8
+  ],
+  "pidgey": [
+   14,
+   6
+  ],
+  "mankey": [
+   10,
+   4
+  ],
+  "weedle": [
+   14,
+   7
+  ],
+  "swinub": [
+   6,
+   2
+  ],
+  "gulpin": [
+   5,
+   1
+  ],
+  "timburr": [
+   4,
+   2
+  ],
+  "skorupi": [
+   6,
+   5
+  ],
+  "diglett": [
+   8,
+   6
+  ],
+  "roggenrola": [
+   19,
+   6
+  ],
+  "combee": [
+   6,
+   0
+  ],
+  "marill": [
+   2,
+   0
+  ],
+  "baltoy": [
+   5,
+   3
+  ],
+  "venonat": [
+   5,
+   1
+  ],
+  "torchic": [
+   26,
+   16
+  ],
+  "sobble": [
+   16,
+   6
+  ],
+  "caterpie": [
+   9,
+   2
+  ],
+  "poltchageist": [
+   3,
+   2
+  ],
+  "swablu": [
+   5,
+   1
+  ],
+  "litten": [
+   17,
+   11
+  ],
+  "totodile": [
+   18,
+   7
+  ],
+  "seedot": [
+   13,
+   2
+  ],
+  "minccino": [
+   2,
+   0
+  ],
+  "dewpider": [
+   7,
+   1
+  ],
+  "pawmi": [
+   15,
+   9
+  ],
+  "shuppet": [
+   8,
+   3
+  ],
+  "tarountula": [
+   7,
+   1
+  ],
+  "aron": [
+   5,
+   2
+  ],
+  "piplup": [
+   17,
+   10
+  ],
+  "krabby": [
+   3,
+   1
+  ],
+  "smeargle": [
+   6,
+   1
+  ],
+  "nidoran-f": [
+   4,
+   0
+  ],
+  "sprigatito": [
+   15,
+   4
+  ],
+  "turtwig": [
+   20,
+   8
+  ],
+  "doduo": [
+   7,
+   0
+  ],
+  "quaxly": [
+   14,
+   6
+  ],
+  "sunkern": [
+   1,
+   0
+  ],
+  "yungoos": [
+   16,
+   5
+  ],
+  "oddish": [
+   19,
+   5
+  ],
+  "salandit": [
+   10,
+   3
+  ],
+  "exeggcute": [
+   8,
+   2
+  ],
+  "bunnelby": [
+   11,
+   4
+  ],
+  "dreepy": [
+   5,
+   1
+  ],
+  "scorbunny": [
+   16,
+   9
+  ],
+  "pikipek": [
+   17,
+   4
+  ],
+  "varoom": [
+   6,
+   3
+  ],
+  "smoliv": [
+   8,
+   2
+  ],
+  "spoink": [
+   7,
+   1
+  ],
+  "glameow": [
+   5,
+   0
+  ],
+  "lechonk": [
+   16,
+   4
+  ],
+  "sentret": [
+   10,
+   3
+  ],
+  "wattrel": [
+   6,
+   2
+  ],
+  "bergmite": [
+   7,
+   1
+  ],
+  "spearow": [
+   5,
+   2
+  ],
+  "chewtle": [
+   7,
+   2
+  ],
+  "wingull": [
+   7,
+   6
+  ],
+  "ledyba": [
+   25,
+   3
+  ],
+  "snom": [
+   4,
+   2
+  ],
+  "numel": [
+   4,
+   0
+  ],
+  "cyndaquil": [
+   15,
+   7
+  ],
+  "tynamo": [
+   5,
+   3
+  ],
+  "helioptile": [
+   5,
+   3
+  ],
+  "horsea": [
+   8,
+   2
+  ],
+  "fuecoco": [
+   18,
+   12
+  ],
+  "surskit": [
+   7,
+   0
+  ],
+  "purrloin": [
+   16,
+   4
+  ],
+  "rookidee": [
+   13,
+   3
+  ],
+  "machop": [
+   7,
+   1
+  ],
+  "pineco": [
+   10,
+   4
+  ],
+  "flabebe": [
+   9,
+   3
+  ],
+  "shelmet": [
+   5,
+   1
+  ],
+  "shinx": [
+   11,
+   5
+  ],
+  "blipbug": [
+   5,
+   1
+  ],
+  "fomantis": [
+   10,
+   3
+  ],
+  "tinkatink": [
+   9,
+   6
+  ],
+  "lillipup": [
+   17,
+   1
+  ],
+  "slakoth": [
+   6,
+   2
+  ],
+  "ralts": [
+   9,
+   2
+  ],
+  "snorunt": [
+   4,
+   1
+  ],
+  "oshawott": [
+   13,
+   6
+  ],
+  "rowlet": [
+   17,
+   5
+  ],
+  "rattata": [
+   12,
+   3
+  ],
+  "natu": [
+   7,
+   1
+  ],
+  "jigglypuff": [
+   5,
+   3
+  ],
+  "abra": [
+   5,
+   3
+  ],
+  "grubbin": [
+   11,
+   3
+  ],
+  "sewaddle": [
+   12,
+   2
+  ],
+  "zubat": [
+   19,
+   11
+  ],
+  "salameche": [
+   9,
+   5
+  ],
+  "darumaka": [
+   5,
+   2
+  ],
+  "patrat": [
+   15,
+   5
+  ],
+  "greavard": [
+   9,
+   3
+  ],
+  "wimpod": [
+   6,
+   3
+  ],
+  "hatenna": [
+   8,
+   2
+  ],
+  "dwebble": [
+   7,
+   3
+  ],
+  "snubbull": [
+   6,
+   2
+  ],
+  "paras": [
+   4,
+   0
+  ],
+  "meditite": [
+   9,
+   4
+  ],
+  "inkay": [
+   7,
+   2
+  ],
+  "larvitar": [
+   4,
+   0
+  ],
+  "pansage": [
+   2,
+   1
+  ],
+  "squirtle": [
+   15,
+   5
+  ],
+  "chimchar": [
+   17,
+   3
+  ],
+  "sizzlipede": [
+   8,
+   4
+  ],
+  "fidough": [
+   5,
+   4
+  ],
+  "skwovet": [
+   14,
+   3
+  ],
+  "vanillite": [
+   5,
+   1
+  ],
+  "popplio": [
+   13,
+   6
+  ],
+  "pidove": [
+   14,
+   5
+  ],
+  "kricketot": [
+   16,
+   4
+  ],
+  "charcadet": [
+   3,
+   1
+  ],
+  "drilbur": [
+   6,
+   2
+  ],
+  "silicobra": [
+   9,
+   4
+  ],
+  "gastly": [
+   6,
+   3
+  ],
+  "munna": [
+   3,
+   2
+  ],
+  "carvanha": [
+   8,
+   4
+  ],
+  "joltik": [
+   8,
+   3
+  ],
+  "pansear": [
+   4,
+   1
+  ],
+  "clobbopus": [
+   6,
+   2
+  ],
+  "geodude": [
+   13,
+   5
+  ],
+  "foongus": [
+   6,
+   0
+  ],
+  "wishiwashi-solo": [
+   5,
+   3
+  ],
+  "goomy": [
+   9,
+   3
+  ],
+  "voltorb": [
+   4,
+   2
+  ],
+  "lotad": [
+   7,
+   1
+  ],
+  "vulpix": [
+   8,
+   2
+  ],
+  "impidimp": [
+   4,
+   2
+  ],
+  "yamper": [
+   4,
+   3
+  ],
+  "zigzagoon": [
+   11,
+   5
+  ],
+  "milcery": [
+   6,
+   1
+  ],
+  "pikachu": [
+   19,
+   6
+  ],
+  "stunky": [
+   5,
+   3
+  ],
+  "finizen": [
+   7,
+   3
+  ],
+  "ekans": [
+   3,
+   1
+  ],
+  "electrike": [
+   3,
+   1
+  ],
+  "beldum": [
+   5,
+   2
+  ],
+  "grimer": [
+   8,
+   4
+  ],
+  "corphish": [
+   5,
+   2
+  ],
+  "wurmple": [
+   14,
+   5
+  ],
+  "deino": [
+   4,
+   1
+  ],
+  "tympole": [
+   5,
+   1
+  ],
+  "gothita": [
+   5,
+   2
+  ],
+  "rockruff": [
+   18,
+   6
+  ],
+  "sinistea": [
+   2,
+   0
+  ],
+  "nincada": [
+   4,
+   2
+  ],
+  "ducklett": [
+   5,
+   2
+  ],
+  "poliwag": [
+   12,
+   6
+  ],
+  "mudkip": [
+   11,
+   4
+  ],
+  "delibird": [
+   4,
+   1
+  ],
+  "chinchou": [
+   5,
+   2
+  ],
+  "cutiefly": [
+   5,
+   2
+  ],
+  "shellos": [
+   2,
+   1
+  ],
+  "nidoran-m": [
+   7,
+   1
+  ],
+  "cubchoo": [
+   3,
+   2
+  ],
+  "whismur": [
+   8,
+   1
+  ],
+  "frigibax": [
+   3,
+   2
+  ],
+  "hoppip": [
+   2,
+   1
+  ],
+  "yamask": [
+   3,
+   1
+  ],
+  "clefairy": [
+   6,
+   5
+  ],
+  "meowth": [
+   4,
+   1
+  ],
+  "binacle": [
+   7,
+   1
+  ],
+  "tepig": [
+   9,
+   3
+  ],
+  "trapinch": [
+   9,
+   0
+  ],
+  "wooper": [
+   6,
+   4
+  ],
+  "jangmo-o": [
+   6,
+   3
+  ],
+  "mareep": [
+   4,
+   2
+  ],
+  "phantump": [
+   7,
+   5
+  ],
+  "ferroseed": [
+   5,
+   2
+  ],
+  "burmy": [
+   10,
+   0
+  ],
+  "sandygast": [
+   6,
+   2
+  ],
+  "clauncher": [
+   5,
+   2
+  ],
+  "nacli": [
+   5,
+   2
+  ],
+  "bronzor": [
+   5,
+   2
+  ],
+  "remoraid": [
+   8,
+   4
+  ],
+  "fennekin": [
+   15,
+   7
+  ],
+  "barboach": [
+   5,
+   2
+  ],
+  "bulbasaur": [
+   10,
+   5
+  ],
+  "noibat": [
+   3,
+   1
+  ],
+  "sandile": [
+   3,
+   1
+  ],
+  "croagunk": [
+   4,
+   2
+  ],
+  "panpour": [
+   3,
+   0
+  ],
+  "houndour": [
+   9,
+   2
+  ],
+  "bramblin": [
+   3,
+   1
+  ],
+  "gossifleur": [
+   3,
+   1
+  ],
+  "venipede": [
+   5,
+   2
+  ],
+  "zorua": [
+   9,
+   5
+  ],
+  "shroodle": [
+   4,
+   1
+  ],
+  "magnemite": [
+   5,
+   2
+  ],
+  "bounsweet": [
+   6,
+   0
+  ],
+  "feebas": [
+   6,
+   2
+  ],
+  "skitty": [
+   4,
+   2
+  ],
+  "hippopotas": [
+   1,
+   0
+  ],
+  "cufant": [
+   5,
+   2
+  ],
+  "morelull": [
+   3,
+   0
+  ],
+  "starly": [
+   9,
+   1
+  ],
+  "duskull": [
+   6,
+   2
+  ],
+  "teddiursa": [
+   7,
+   3
+  ],
+  "makuhita": [
+   4,
+   1
+  ],
+  "rolycoly": [
+   5,
+   1
+  ],
+  "seel": [
+   4,
+   1
+  ],
+  "ditto": [
+   4,
+   1
+  ],
+  "mareanie": [
+   4,
+   2
+  ],
+  "bagon": [
+   4,
+   2
+  ],
+  "tadbulb": [
+   4,
+   0
+  ],
+  "shroomish": [
+   7,
+   2
+  ],
+  "slugma": [
+   4,
+   2
+  ],
+  "trubbish": [
+   5,
+   1
+  ],
+  "goldeen": [
+   7,
+   2
+  ],
+  "golett": [
+   2,
+   1
+  ],
+  "cottonee": [
+   3,
+   1
+  ],
+  "arrokuda": [
+   3,
+   2
+  ],
+  "sandshrew": [
+   6,
+   2
+  ],
+  "klink": [
+   5,
+   3
+  ],
+  "magikarp": [
+   3,
+   2
+  ],
+  "flittle": [
+   9,
+   2
+  ],
+  "wiglett": [
+   5,
+   3
+  ],
+  "tandemaus": [
+   5,
+   2
+  ],
+  "gible": [
+   6,
+   4
+  ],
+  "gimmighoul": [
+   4,
+   1
+  ],
+  "skrelp": [
+   2,
+   1
+  ],
+  "shellder": [
+   1,
+   1
+  ],
+  "applin": [
+   6,
+   0
+  ],
+  "eevee": [
+   2,
+   1
+  ],
+  "nymble": [
+   2,
+   2
+  ],
+  "petilil": [
+   3,
+   1
+  ],
+  "cubone": [
+   4,
+   1
+  ],
+  "spinarak": [
+   2,
+   0
+  ],
+  "phanpy": [
+   4,
+   4
+  ],
+  "cherubi": [
+   3,
+   0
+  ],
+  "buizel": [
+   3,
+   1
+  ],
+  "solosis": [
+   1,
+   0
+  ],
+  "woobat": [
+   1,
+   0
+  ],
+  "bellsprout": [
+   2,
+   1
+  ],
+  "drowzee": [
+   3,
+   0
+  ],
+  "axew": [
+   1,
+   0
+  ]
+ },
+ "top_killers": [
+  [
+   "eternatus",
+   229
+  ],
+  [
+   "dragonite",
+   57
+  ],
+  [
+   "machamp",
+   44
+  ],
+  [
+   "houndoom",
+   33
+  ],
+  [
+   "centiskorch",
+   31
+  ],
+  [
+   "alakazam",
+   30
+  ],
+  [
+   "rayquaza",
+   27
+  ],
+  [
+   "aegislash",
+   26
+  ],
+  [
+   "darmanitan-standard",
+   25
+  ],
+  [
+   "hitmonchan",
+   24
+  ],
+  [
+   "gholdengo",
+   21
+  ],
+  [
+   "armarouge",
+   19
+  ],
+  [
+   "simisear",
+   19
+  ],
+  [
+   "golurk",
+   18
+  ],
+  [
+   "ninetales",
+   18
+  ]
+ ],
+ "top_death_encounters": [
+  [
+   "final_eternatus",
+   229
+  ],
+  [
+   "league_champion",
+   57
+  ],
+  [
+   "league_fighting",
+   39
+  ],
+  [
+   "league_psychic",
+   30
+  ],
+  [
+   "league_dark",
+   30
+  ],
+  [
+   "legendary_rayquaza",
+   27
+  ],
+  [
+   "league_steel",
+   26
+  ],
+  [
+   "league_ice",
+   13
+  ],
+  [
+   "legendary_lugia",
+   11
+  ],
+  [
+   "league_ghost",
+   11
+  ]
+ ],
+ "stalled": 5,
+ "illegal_moves": 0
+}

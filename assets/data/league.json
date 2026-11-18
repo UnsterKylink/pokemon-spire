@@ -12,12 +12,12 @@
 	},
 	"member_modifiers": [
 		{"hp_multiplier": 1.45, "strength_bonus": 5},
-		{"hp_multiplier": 1.5, "strength_bonus": 5},
 		{"hp_multiplier": 1.55, "strength_bonus": 5},
-		{"hp_multiplier": 1.65, "strength_bonus": 5}
+		{"hp_multiplier": 1.6, "strength_bonus": 5},
+		{"hp_multiplier": 1.7, "strength_bonus": 5}
 	],
-	"champion": {"name": "Peter", "title": "Maître de la Ligue", "type": "dragon", "encounter": "league_champion", "modifiers": {"hp_multiplier": 1.7, "strength_bonus": 5}, "field_rule": "league_champion"},
-	"final_boss": {"name": "Éthernatos", "title": "Boss final", "encounter": "final_eternatus", "modifiers": {"hp_multiplier": 1.0, "strength_bonus": 6}, "field_rule": "eternatus_dynamax", "phases": [
+	"champion": {"name": "Peter", "title": "Maître de la Ligue", "type": "dragon", "encounter": "league_champion", "modifiers": {"hp_multiplier": 1.75, "strength_bonus": 5}, "field_rule": "league_champion"},
+	"final_boss": {"name": "Éthernatos", "title": "Boss final", "encounter": "final_eternatus", "modifiers": {"hp_multiplier": 1.05, "strength_bonus": 6}, "field_rule": "eternatus_dynamax", "phases": [
 		{"hp_below": 0.5, "message": "Éthernatos se transforme : Infinitamax !", "clear_statuses": true, "heal_percent": 0, "field_rule": "eternatus_infinitamax", "pattern": "sequence", "actions": [
 			{"type": "attack", "value": 14, "hits": 2},
 			{"type": "status", "status": {"id": "vulnerable", "value": 2}},
@@ -33,6 +33,6 @@
 			{"type": "add_junk", "value": 2}
 		]}
 	]},
-	"heal_percent_between_fights": 30,
+	"heal_percent_between_fights": 20,
 	"reward_rarity_weights": {"common": 30, "uncommon": 45, "rare": 25}
 }
