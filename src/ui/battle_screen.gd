@@ -71,9 +71,9 @@ const COLOR_JUNK: Color = Color(0.5, 0.48, 0.44)
 ## Story 030: field rule pill / banners.
 const COLOR_FIELD_RULE: Color = Color(0.55, 0.85, 0.75)
 const COLOR_PHASE: Color = Color(0.95, 0.3, 0.55)
-const TEXT_FIELD_RULE_PILL: String = "Terrain : %s"
+const TEXT_FIELD_RULE_PILL: String = "%s"
 const TEXT_FIELD_RULE_BANNER: String = "Règle de terrain : %s"
-const TEXT_FIELD_RULE_TIP: String = "%s\n%s"
+const TEXT_FIELD_RULE_TIP: String = "Règle de terrain : %s\n%s"
 const COLOR_KO: Color = Color(0.6, 0.6, 0.6)
 const MODULATE_KO: Color = Color(0.45, 0.45, 0.45, 0.55)
 const MODULATE_TARGETABLE: Color = Color(1.0, 0.9, 0.6)
@@ -653,6 +653,8 @@ func _refresh_field_pill() -> void:
 		return
 	var rule: Dictionary = _battle.get_field_rule()
 	_field_pill.visible = not rule.is_empty()
+	# The pill takes the place of the "Combat : n ennemis" caption so the info row never pushes « Fin de tour » off-screen.
+	_encounter_label.visible = rule.is_empty()
 	if not rule.is_empty():
 		_field_pill.text = TEXT_FIELD_RULE_PILL % String(rule["name"])
 		_field_pill.tooltip_text = TEXT_FIELD_RULE_TIP % [String(rule["name"]), String(rule["description"])]
@@ -1000,6 +1002,16 @@ func _build_ui() -> void:
 	_encounter_label.add_theme_color_override("font_color", UiStyle.TEXT_MUTED)
 	_outline(_encounter_label, OUTLINE_SMALL)
 	info.add_child(_encounter_label)
+	_field_pill = _make_label(16)
+	_field_pill.name = "FieldRulePill"
+	_field_pill.mouse_filter = Control.MOUSE_FILTER_STOP  # tooltip
+	_field_pill.visible = false
+	var fsb: StyleBoxFlat = CardFace._pill(Color(0.08, 0.2, 0.18, 0.92), COLOR_FIELD_RULE)
+	fsb.content_margin_left = 8
+	fsb.content_margin_right = 8
+	_field_pill.add_theme_stylebox_override("normal", fsb)
+	_field_pill.add_theme_color_override("font_color", COLOR_FIELD_RULE.lightened(0.3))
+	info.add_child(_field_pill)
 	# Story 020: energy = round gem (art bible §5) with "n/m" on it, captioned "Énergie" (colour never alone).
 	var energy_box := HBoxContainer.new()
 	energy_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1034,16 +1046,6 @@ func _build_ui() -> void:
 	_outline(_exhaust_label, OUTLINE_SMALL)
 	_exhaust_label.visible = false
 	info.add_child(_exhaust_label)
-	_field_pill = _make_label(17)
-	_field_pill.name = "FieldRulePill"
-	_field_pill.mouse_filter = Control.MOUSE_FILTER_STOP  # tooltip
-	_field_pill.visible = false
-	var fsb: StyleBoxFlat = CardFace._pill(Color(0.08, 0.2, 0.18, 0.92), COLOR_FIELD_RULE)
-	fsb.content_margin_left = 8
-	fsb.content_margin_right = 8
-	_field_pill.add_theme_stylebox_override("normal", fsb)
-	_field_pill.add_theme_color_override("font_color", COLOR_FIELD_RULE.lightened(0.3))
-	info.add_child(_field_pill)
 	_deck_label = _make_label(18)
 	_outline(_deck_label, OUTLINE_SMALL)
 	info.add_child(_deck_label)

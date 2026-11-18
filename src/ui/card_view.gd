@@ -15,6 +15,8 @@ const ARTWORK_DIR: String = "artwork"
 ## Story 009: size (px) of the carrying Pokémon's sprite on a card, and the label of skill cards.
 const CARD_POKEMON_SPRITE_SIZE: float = 44.0
 const TEXT_TEAM: String = "Équipe"
+## Story 030: caption of unplayable junk cards (Débris).
+const TEXT_JUNK: String = "Injouable"
 const COLOR_TEAM: Color = Color(0.6, 0.75, 0.95)
 const COLOR_POKEMON_NAME: Color = Color(1.0, 0.92, 0.7)
 
@@ -107,6 +109,8 @@ static func fill_card_content(b: Button, card: CardData, chart: TypeChart, pokem
 	var color: Color = UiStyle.type_color(card.type_id, chart) if known_type else UiStyle.SKILL
 	var type_text: String = chart.get_type_name(card.type_id) if known_type else ""
 	var carrier: String = EffectArt.label_of(EffectArt.effect_kind(card)) if card.pokemon_id.is_empty() else TEXT_TEAM
+	if card.kind == CardData.KIND_JUNK:
+		carrier = TEXT_JUNK
 	var tex: Texture2D = null
 	var pixel: bool = false
 	if not card.pokemon_id.is_empty():

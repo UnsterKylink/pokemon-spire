@@ -46,3 +46,9 @@ entry (`name`, `types`, `max_hp`, `sprite`, `teaches`, `pattern`, `actions`) plu
 `new_cards.json` lists the cards added so every one of the 18 types has >= 3 non-starter attack cards (a common cost 1,
 an uncommon, usually a rare). Their `pokemon` carrier is an existing `pokemon.json` Pokémon (cosmetic); there is no
 Fairy Pokémon in `pokemon.json`, so fairy cards were re-pointed to `clefairy` (a roster fairy) during integration.
+
+## Story 030 : variété des actions ennemies
+
+`generate_roster.py` régénère les actions de base ; il faut ensuite relancer
+`python3 tools/roster/add_enemy_variety.py` (modèles par type dans `enemy_templates.json`, tirage fixe :
+le relancer ne change rien) puis `python3 tools/roster/validate_roster.py`.

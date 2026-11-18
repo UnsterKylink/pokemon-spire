@@ -1883,10 +1883,72 @@ func _items029_shots() -> void:
 	await _shot("05-recompense-objet")
 
 
+## Story 030 (filter `story-030`): intents of the new enemy actions (+ a « Débris » in hand), a gym battle with its field
+## rule banner, the field rule pill, Éthernatos's phase 2 banner and its new intents.
+func _enemies_shots() -> void:
+	var data: GameData = GameData.new()
+	data.load_all()
+	_main.start_new_run(2030, "salameche")
+	_main.start_encounter("trio_vol")
+	await create_timer(0.5).timeout
+	var bs: BattleScreen = _main.get_battle_screen()
+	bs.set_fx_speed("instant")
+	var b: Battle = bs.get_battle()
+	var sets: Array = [
+		[{"type": "charge", "value": 24}, {"type": "status", "status": {"id": "burn", "value": 3}}, {"type": "add_junk", "value": 2}],
+		[{"type": "attack", "value": 5, "hits": 3}, {"type": "strip_block", "value": 8}, {"type": "drain_energy", "value": 1}],
+		[{"type": "heal_ally", "value": 10}, {"type": "block_ally", "value": 9}, {"type": "status", "status": {"id": "vulnerable", "value": 2}}],
+	]
+	for k: int in sets.size():
+		for i: int in mini(b.enemies.size(), (sets[k] as Array).size()):
+			var it: EnemyIntent = EnemyIntent.from_dict((sets[k] as Array)[i])
+			it.status_label = data.get_status_book().name_of(it.status_id)
+			b.enemies[i].intent = it
+		if k == 1:
+			b.hand.append(data.get_junk_card())
+		b.state_changed.emit()
+		print("030 intents %d: %s" % [k + 1, _intent_summary(b)])
+		await _shot("0%d-intentions-nouvelles" % (k + 1))
+	# Gym battle: banner at the start, then the pill once it faded.
+	_main.qa_start_gym()
+	await create_timer(0.3).timeout
+	bs = _main.get_battle_screen()
+	print("030 gym rule=%s pill=\"%s\" banner=%s" % [bs.get_battle().get_field_rule(), bs.get_field_rule_pill_text(), bs.get_field_banner() != null])
+	await _shot("04-arene-banniere-regle")
+	await create_timer(4.2).timeout
+	print("030 after banner: pill=\"%s\" banner=%s" % [bs.get_field_rule_pill_text(), bs.get_field_banner() != null])
+	await _shot("05-pastille-regle")
+	# Éthernatos: phase 2 at <= 50 %.
+	_main.qa_set_league_stage(5)
+	_main.league_continue()
+	await create_timer(0.5).timeout
+	bs = _main.get_battle_screen()
+	bs.set_fx_speed("instant")
+	b = bs.get_battle()
+	await create_timer(4.0).timeout
+	print("030 boss start: rule=%s intent=%s pill=\"%s\"" % [b.get_field_rule(), _intent_summary(b), bs.get_field_rule_pill_text()])
+	await _shot("06-ethernatos-regle")
+	var boss: Combatant = b.enemies[0]
+	boss.hp = boss.max_hp / 2 + 1
+	b.energy = b.max_energy
+	bs.qa_force_hand(["flammette", "griffe", "abri"] as Array[String])
+	bs.play_card_direct(0, 0)
+	await create_timer(0.3).timeout
+	print("030 phase: index=%d hp=%d/%d rule=%s intent=%s banner=%s" % [boss.phase_index, boss.hp, boss.max_hp, b.get_field_rule(),
+			_intent_summary(b), bs.get_field_banner() != null])
+	await _shot("07-ethernatos-phase2-banniere")
+	await create_timer(4.0).timeout
+	await _shot("08-ethernatos-phase2-intention")
+
+
 func _run() -> void:
 	if _filter == "options":
 		await _options_shots()
 		quit()
+		return
+	if _filter == "story-030":
+		await _enemies_shots()
+		quit(0)
 		return
 	if _filter == "story-029":
 		await _items029_shots()
