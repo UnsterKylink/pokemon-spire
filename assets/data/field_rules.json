@@ -3,7 +3,7 @@
 	"enemy_mechanics": {"junk_card": "debris", "min_energy_after_drain": 1},
 	"rules": {
 		"gym_normal": {"name": "Entraînement intensif", "description": "Tous les 3 tours, les ennemis gagnent +1 Force.", "effects": [{"type": "enemy_strength_per_turn", "value": 1, "every": 3}]},
-		"gym_fire": {"name": "Zénith", "description": "Tous les 2 tours, la carte la plus chère de ta main brûle (retirée du combat).", "effects": [{"type": "burn_costliest_card", "every": 2}]},
+		"gym_fire": {"name": "Zénith", "description": "Les attaques de type Feu infligent +2 dégâts (les tiennes aussi) ; tous les 3 tours, tu es Brûlé (1 tour).", "effects": [{"type": "type_damage_up", "of_type": "fire", "value": 2}, {"type": "player_status_each_turn", "status": "burn", "value": 1, "every": 3}]},
 		"gym_water": {"name": "Pluie", "description": "Les ennemis gagnent 3 Protection au début de chaque tour.", "effects": [{"type": "enemy_block_per_turn", "value": 3}]},
 		"gym_electric": {"name": "Champ électrifié", "description": "La 1re carte jouée chaque tour coûte +1 énergie.", "effects": [{"type": "first_card_cost_up", "value": 1}]},
 		"gym_grass": {"name": "Champ herbu", "description": "Les ennemis récupèrent 3 PV au début de chaque tour.", "effects": [{"type": "enemy_heal_per_turn", "value": 3}]},
