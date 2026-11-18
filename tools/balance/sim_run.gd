@@ -212,7 +212,8 @@ func _fight(encounter_id: String, enemies: Array[Combatant], room_type: String, 
 
 ## Card reward (RewardGenerator -> take or skip), then the team evolution check (Main._after_reward).
 func _reward(weights: Dictionary, defeated_ids: Array[String]) -> void:
-	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
+	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights, -1,
+			RewardGenerator.zone_type_of(_run))  # story 032 (Main._on_battle_won)
 	var cards: Array[CardData] = []
 	for o: RewardOffer in offers:
 		cards.append(o.card)

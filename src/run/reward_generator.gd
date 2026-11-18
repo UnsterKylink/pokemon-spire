@@ -9,8 +9,11 @@ extends RefCounted
 ## The stolen card (if any) is at a random position. Seedable through the injected rng.
 ## `rarity_weights_override` (non-empty) replaces the rarity weights of rewards.json (elite rooms, story 005).
 ## `count_override` >= 0 replaces offer_count (the Poké Mart reuses this to stock cards, story 006).
+## Story 032: `zone_type` (the zone's gym type, "" = none) + `bias` (0..1; < 0 = rewards.json zone_type_bias.reward_cards):
+## each pool slot is, with probability `bias`, drawn only among the cards of that type (if any is left).
 static func generate(data: GameData, player_id: String, defeated_enemy_ids: Array[String],
-		rng: RandomNumberGenerator, rarity_weights_override: Dictionary = {}, count_override: int = -1) -> Array[RewardOffer]:
+		rng: RandomNumberGenerator, rarity_weights_override: Dictionary = {}, count_override: int = -1,
+		zone_type: String = "", bias: float = -1.0) -> Array[RewardOffer]:
 	var offers: Array[RewardOffer] = []
 	var used: Dictionary = {}  # card id -> true
 	var count: int = data.get_offer_count() if count_override < 0 else count_override
@@ -29,11 +32,18 @@ static func generate(data: GameData, player_id: String, defeated_enemy_ids: Arra
 	# 2. Remaining slots from the pool: weighted rarity, then uniform inside the rarity.
 	var pool: Array[CardData] = data.get_reward_pool(player_id)
 	var weights: Dictionary = data.get_rarity_weights() if rarity_weights_override.is_empty() else rarity_weights_override
+	var type_bias: float = (data.get_zone_type_bias("reward_cards") if bias < 0.0 else bias) if not zone_type.is_empty() else 0.0
 	while offers.size() < count:
+		var themed: bool = false
+		if type_bias > 0.0 and rng.randf() < type_bias:
+			for card: CardData in pool:
+				if not used.has(card.id) and card.type_id == zone_type and weights.has(card.rarity):
+					themed = true
+					break
 		var buckets: Dictionary = {}  # rarity -> Array[CardData]
 		var rest: Array[CardData] = []
 		for card: CardData in pool:
-			if used.has(card.id):
+			if used.has(card.id) or (themed and card.type_id != zone_type):
 				continue
 			rest.append(card)
 			if weights.has(card.rarity):
@@ -74,3 +84,10 @@ static func generate(data: GameData, player_id: String, defeated_enemy_ids: Arra
 		offers[i] = offers[j]
 		offers[j] = tmp
 	return offers
+
+
+## Story 032: the gym type whose cards a zone fight's reward favours: the current zone's type, "" in the league.
+static func zone_type_of(run: RunState) -> String:
+	if run == null or run.is_in_league():
+		return ""
+	return String(run.current_zone().get("type_id", ""))

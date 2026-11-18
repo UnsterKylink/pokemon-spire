@@ -45,6 +45,8 @@ const ROSTER_MAX_TIER: int = 3
 const ZONE_TYPED_ROOMS: Array[String] = ["wild", "elite"]
 ## The room type that holds the zone's gym fight.
 const ROOM_GYM: String = "boss"
+## Story 032: keys of rewards.json zone_type_bias.
+const ZONE_TYPE_BIAS_KEYS: Array[String] = ["reward_cards", "shop_cards", "items"]
 const EFFECT_TYPES: Array[String] = ["heal", "lose_hp", "gain_max_hp", "add_card", "add_random_card", "remove_card", "add_ball", "nothing",
 		"apply_status_next_fight", "cure_all", "gain_money", "lose_money", "gamble_money", "upgrade_random_card", "add_card_of_type",
 		"remove_card_choice", "add_item_random", "add_pokemon", "evolve_team_member", "start_fight"]
@@ -63,6 +65,7 @@ var _enemies: Dictionary = {}  # String -> Dictionary (raw definition)
 var _encounters: Dictionary = {}  # String -> Array (enemy ids)
 var _encounter_order: Array[String] = []
 var _offer_count: int = 0
+var _zone_type_bias: Dictionary = {}  # story 032: rewards.json zone_type_bias (key -> 0..1)
 var _rarity_weights: Dictionary = {}  # String -> float
 var _reward_pools: Dictionary = {}    # String (player id) -> Array[CardData]
 var _act: Dictionary = {}      # validated act1.json
@@ -121,6 +124,7 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	_encounters.clear()
 	_encounter_order.clear()
 	_offer_count = 0
+	_zone_type_bias.clear()
 	_rarity_weights.clear()
 	_reward_pools.clear()
 	_act = {}
@@ -243,6 +247,13 @@ func get_gym_field_rule(type_id: String) -> Dictionary:
 	return get_field_rule(String(g.get("field_rule", "")))
 
 
+## Story 032: the light zone rule of the zone whose gym is `type_id` (zones.json gym_types[type].zone_rule; {} if none).
+## Applied to every wild / elite fight of that zone (SpecialFights.apply_fight_mechanics).
+func get_zone_field_rule(type_id: String) -> Dictionary:
+	var g: Dictionary = (_zones_cfg.get("gym_types", {}) as Dictionary).get(type_id, {})
+	return get_field_rule(String(g.get("zone_rule", "")))
+
+
 ## The field rule of a league fight (RunState.current_league_fight / draw_league entry): member -> members_by_type[type],
 ## champion -> champion, final_boss -> final_boss (league.json field_rule; {} if none).
 func get_league_field_rule(fight: Dictionary) -> Dictionary:
@@ -312,6 +323,7 @@ func _load_field_rules(root: Dictionary) -> bool:
 	var refs: Array[Array] = []
 	for t: String in (_zones_cfg.get("gym_types", {}) as Dictionary).keys():
 		refs.append(["zones gym_types.%s" % t, ((_zones_cfg["gym_types"] as Dictionary)[t] as Dictionary).get("field_rule", null)])
+		refs.append(["zones gym_types.%s.zone_rule" % t, ((_zones_cfg["gym_types"] as Dictionary)[t] as Dictionary).get("zone_rule", null)])
 	for t: String in (_league_cfg.get("members_by_type", {}) as Dictionary).keys():
 		refs.append(["league members_by_type.%s" % t, ((_league_cfg["members_by_type"] as Dictionary)[t] as Dictionary).get("field_rule", null)])
 	for k: String in ["champion", "final_boss"]:
@@ -415,6 +427,13 @@ func get_player_definition(player_id: String) -> Dictionary:
 ## Number of cards offered after a victory (rewards.json).
 func get_offer_count() -> int:
 	return _offer_count
+
+
+## Story 032: chance (0..1) that one offered slot is drawn among the zone's gym type (rewards.json zone_type_bias):
+## `key` = "reward_cards" (card rewards), "shop_cards" (Poké Mart cards) or "items" (held items: loot and Mart).
+## 0 when absent.
+func get_zone_type_bias(key: String) -> float:
+	return float(_zone_type_bias.get(key, 0.0))
 
 
 ## Rarity id -> weight (> 0) used to draw reward cards.
@@ -2554,6 +2573,18 @@ func _load_rewards(root: Dictionary) -> bool:
 		push_error("GameData: rewards file needs a positive integer 'offer_count'")
 		return false
 	_offer_count = int(root["offer_count"])
+	var bias_v: Variant = root.get("zone_type_bias", {})
+	if not (bias_v is Dictionary):
+		push_error("GameData: rewards 'zone_type_bias' must be an object")
+		ok = false
+	else:
+		for k: String in (bias_v as Dictionary).keys():
+			var b: Variant = (bias_v as Dictionary)[k]
+			if k not in ZONE_TYPE_BIAS_KEYS or not _is_number(b) or float(b) < 0.0 or float(b) > 1.0:
+				push_error("GameData: rewards zone_type_bias.%s must be a number 0..1 (keys: %s)" % [k, ZONE_TYPE_BIAS_KEYS])
+				ok = false
+			else:
+				_zone_type_bias[k] = float(b)
 	var weights_v: Variant = root.get("rarity_weights", null)
 	if not (weights_v is Dictionary) or (weights_v as Dictionary).is_empty():
 		push_error("GameData: rewards file needs a non-empty 'rarity_weights' object")
@@ -2948,6 +2979,22 @@ func _load_act(root: Dictionary) -> bool:
 		if forced_by_floor.has(f + 1) and forced_by_floor[f] == forced_by_floor[f + 1] and forced_by_floor[f] in (nc_v as Array):
 			push_error("GameData: forced floors %d and %d break no_consecutive" % [f, f + 1])
 			ok = false
+	# Story 032: optional guaranteed_rooms (floor -> [room types]) on existing floors, known types, not boss.
+	var gr_v: Variant = place.get("guaranteed_rooms", {})
+	if not (gr_v is Dictionary):
+		push_error("GameData: placement.guaranteed_rooms must be an object")
+		ok = false
+	else:
+		for key: String in (gr_v as Dictionary).keys():
+			var list_v: Variant = (gr_v as Dictionary)[key]
+			if not key.is_valid_int() or int(key) < 1 or int(key) >= floors or not (list_v is Array):
+				push_error("GameData: placement.guaranteed_rooms['%s'] must be a floor 1..%d with a list of room types" % [key, floors - 1])
+				ok = false
+				continue
+			for t: Variant in (list_v as Array):
+				if not (t is String) or t not in ROOM_TYPES or t == "boss":
+					push_error("GameData: placement.guaranteed_rooms['%s'] has an invalid room type '%s'" % [key, str(t)])
+					ok = false
 	# Every free floor needs at least one placeable type (wild-like weight > 0 and floor range).
 	for f: int in range(1, floors + 1):
 		if forced_by_floor.has(f):

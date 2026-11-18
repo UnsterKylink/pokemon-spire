@@ -138,6 +138,48 @@ static func _assign_room_types(graph: MapGraph, config: Dictionary, rng: RandomN
 						candidates.append(tid)
 						weights.append(float(def["weight"]))
 			n.room_type = _weighted_pick(candidates, weights, rng)
+	_apply_guaranteed(graph, placement, rng)
+
+
+## Story 032: placement.guaranteed_rooms (optional, floor -> [room types]). For each listed type missing on a non-forced
+## floor with at least 2 rooms, one room of that floor whose neighbours allow it (no_consecutive) is switched to it (rng).
+static func _apply_guaranteed(graph: MapGraph, placement: Dictionary, rng: RandomNumberGenerator) -> void:
+	var guaranteed: Dictionary = placement.get("guaranteed_rooms", {})
+	var forced: Dictionary = placement["forced_floors"]
+	var no_consecutive: Array = placement["no_consecutive"]
+	var floor_keys: Array = guaranteed.keys()
+	floor_keys.sort()
+	for key: Variant in floor_keys:
+		var f: int = int(key)
+		if forced.has(str(f)):
+			continue
+		var nodes: Array[MapNode] = graph.get_floor_nodes(f)
+		if nodes.size() < 2:
+			continue
+		for tid_v: Variant in (guaranteed[key] as Array):
+			var tid: String = String(tid_v)
+			var present: bool = false
+			for n: MapNode in nodes:
+				present = present or n.room_type == tid
+			if present:
+				continue
+			var options: Array[MapNode] = []
+			for n: MapNode in nodes:
+				if no_consecutive.has(tid) and _neighbour_has(graph, n, tid):
+					continue
+				options.append(n)
+			if not options.is_empty():
+				options[rng.randi_range(0, options.size() - 1)].room_type = tid
+
+
+static func _neighbour_has(graph: MapGraph, n: MapNode, tid: String) -> bool:
+	for pid: String in graph.parent_ids(n.id):
+		if graph.get_node(pid).room_type == tid:
+			return true
+	for cid: String in n.next:
+		if graph.get_node(cid).room_type == tid:
+			return true
+	return false
 
 
 static func _weighted_pick(candidates: Array[String], weights: Array[float], rng: RandomNumberGenerator) -> String:

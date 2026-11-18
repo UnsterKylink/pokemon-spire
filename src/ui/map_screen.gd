@@ -29,6 +29,10 @@ const TEXT_FLOOR: String = "Étage %d/%d"
 const TEXT_BANNER: String = "Zone %d — Arène %s"
 const TEXT_BANNER_SUB_FIRST: String = "Le Champion %s t'attend au sommet de la carte."
 const TEXT_BANNER_SUB_NEXT: String = "Le Champion %s t'attend au sommet. Ton deck, tes PV, tes objets et ton argent te suivent."
+## Story 032: the zone's light rule (zones.json gym_types[type].zone_rule) on the banner and in the header info line.
+const TEXT_ZONE_RULE: String = "Règle de zone : %s — %s"
+const TEXT_ZONE_RULE_INFO: String = "   |   Règle de zone : %s"
+const COLOR_ZONE_RULE: Color = Color("#7A2E12")
 ## Legend order of the room types.
 const LEGEND_ORDER: Array[String] = ["wild", "elite", "rival", "event", "center", "mart", "boss"]
 ## Story 018: tooltip line of the rival rooms.
@@ -54,6 +58,7 @@ var _info: Label
 var _banner: PanelContainer
 var _banner_title: Label
 var _banner_sub: Label
+var _banner_rule: Label
 var _legend: HBoxContainer
 var _backdrop: MapBackdrop
 var _header: PanelContainer
@@ -90,6 +95,9 @@ func setup(data: GameData, run: RunState) -> void:
 		_title.text = TEXT_ZONE_TITLE % [int(zone["number"]), run.zones.size(), String(zone["type_name"]), String(zone["leader"])]
 	_floor.text = TEXT_START if floor_now == 0 else TEXT_FLOOR % [floor_now, progress.graph.floors]
 	_info.text = "PV %d/%d   |   Deck : %d cartes   |   Graine : %d" % [run.hp, run.max_hp, run.deck.size(), progress.graph.seed]
+	var zone_rule: Dictionary = data.get_zone_field_rule(String(zone.get("type_id", ""))) if not zone.is_empty() else {}
+	if not zone_rule.is_empty():
+		_info.text += TEXT_ZONE_RULE_INFO % String(zone_rule["name"])
 	var names: Dictionary = {}
 	var has_rival: bool = false
 	for n: MapNode in progress.graph.nodes.values():
@@ -115,6 +123,8 @@ func setup(data: GameData, run: RunState) -> void:
 		_banner_title.text = TEXT_BANNER % [int(zone["number"]), String(zone["type_name"])]
 		_banner_title.add_theme_color_override("font_color", zone_color.darkened(0.55))
 		_banner_sub.text = (TEXT_BANNER_SUB_FIRST if int(zone["index"]) == 0 else TEXT_BANNER_SUB_NEXT) % String(zone["leader"])
+		_banner_rule.visible = not zone_rule.is_empty()
+		_banner_rule.text = TEXT_ZONE_RULE % [String(zone_rule.get("name", "")), String(zone_rule.get("description", ""))]
 	var rival_tip: String = ""
 	if not run.rival_name.is_empty():
 		rival_tip = TEXT_RIVAL_TIP % [run.rival_name, String(data.get_pokemon_info(run.rival_current_form(data)).get("name", ""))]
@@ -140,7 +150,12 @@ func get_banner_text() -> String:
 	return _banner_title.text if _banner.visible else ""
 
 
-## Header info line (HP, deck size, seed).
+## Story 032: the zone-rule line of the zone banner ("Règle de zone : Pluie fine — ..."), "" when hidden.
+func get_banner_rule_text() -> String:
+	return _banner_rule.text if _banner.visible and _banner_rule.visible else ""
+
+
+## Header info line (HP, deck size, seed; story 032: + the zone rule's name).
 func get_info_text() -> String:
 	return _info.text
 
@@ -249,6 +264,11 @@ func _build_ui() -> void:
 	_banner_sub.name = "BannerSub"
 	_dark_label(_banner_sub, TEXT_SUB)
 	banner_box.add_child(_banner_sub)
+	_banner_rule = CardView.make_label(16)
+	_banner_rule.name = "BannerRule"
+	_dark_label(_banner_rule, COLOR_ZONE_RULE)
+	_banner_rule.visible = false
+	banner_box.add_child(_banner_rule)
 	# Story 020b: the Town Map window (legend panel + sea with the scrollable region), centred over the backdrop.
 	_sheet_box = PanelContainer.new()
 	_sheet_box.name = "Sheet"

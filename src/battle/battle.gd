@@ -379,9 +379,9 @@ func can_play(index: int) -> bool:
 
 
 ## Energy `card` costs NOW: 0 for the first card of a type this turn when a held item says so (first_type_card_free).
-## Story 030: + the field rule's first_card_cost_up on the first card of the turn.
+## Story 030: + the field rule's first_card_cost_up on the first card of the turn (story 032: on the turns its `every` allows).
 func card_cost(card: CardData) -> int:
-	var up: int = _rule_total(FieldRules.FIRST_CARD_COST_UP) if _cards_played_this_turn == 0 else 0
+	var up: int = _rule_total(FieldRules.FIRST_CARD_COST_UP, turn_number) if _cards_played_this_turn == 0 else 0
 	if card.cost > 0 and not _free_type_used.has(card.type_id) and ItemEffects.free_card_item(items, card.type_id) != null:
 		return up
 	return card.cost + up

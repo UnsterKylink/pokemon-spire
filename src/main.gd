@@ -1345,7 +1345,8 @@ func _on_battle_won(defeated_ids: Array[String]) -> void:
 	else:
 		_last_loot = _run.apply_loot(LootGenerator.generate(_data, _run, _fight_room_type, _loot_rng))
 		weights = _data.get_room_rarity_weights(_fight_room_type) if not _fight_room_type.is_empty() else {}
-	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights)
+	var offers: Array[RewardOffer] = RewardGenerator.generate(_data, _run.player_id, defeated_ids, _reward_rng, weights, -1,
+			RewardGenerator.zone_type_of(_run))  # story 032: the zone's type is favoured
 	_show_reward_screen(offers, _last_loot if not _fight_room_type.is_empty() and _fight_room_type != ROOM_LEAGUE else {})
 
 

@@ -45,6 +45,8 @@ static func check_rule(rule_id: String, d: Variant, status_ids: Array[String] = 
 	var r: Dictionary = d
 	if not (r.get("name", null) is String) or not (r.get("description", null) is String) or String(r["name"]).is_empty():
 		return "field rule '%s' needs a 'name' and a 'description' (strings)" % rule_id
+	if r.has("scope") and String(r["scope"]) not in ["", SCOPE_ZONE]:
+		return "field rule '%s': 'scope' must be \"zone\" or absent" % rule_id
 	var fx_v: Variant = r.get("effects", null)
 	if not (fx_v is Array) or (fx_v as Array).is_empty():
 		return "field rule '%s' needs a non-empty 'effects' array" % rule_id
@@ -78,11 +80,17 @@ static func check_effect(fx_v: Variant, status_ids: Array[String] = [], type_ids
 	return ""
 
 
-## Public summary of a rule for the UI: {id, name, description} ({} for no rule).
+## Story 032: rule `scope` of the light zone rules (UI: « Zone : <nom> » / « Règle de zone ») ; "" = gym / league / boss
+## rule (« Règle de terrain »).
+const SCOPE_ZONE: String = "zone"
+
+
+## Public summary of a rule for the UI: {id, name, description, scope} ({} for no rule).
 static func summary(rule: Dictionary) -> Dictionary:
 	if rule.is_empty():
 		return {}
-	return {"id": String(rule.get("id", "")), "name": String(rule.get("name", "")), "description": String(rule.get("description", ""))}
+	return {"id": String(rule.get("id", "")), "name": String(rule.get("name", "")), "description": String(rule.get("description", "")),
+			"scope": String(rule.get("scope", ""))}
 
 
 static func _pos_int(v: Variant) -> bool:

@@ -49,6 +49,16 @@ var effects: Array[Dictionary] = []
 var weight: float = 1.0
 
 
+## Story 032: the card types this item is tied to (the `card_type` of its effects; empty for a generic item).
+func card_types() -> Array[String]:
+	var out: Array[String] = []
+	for e: Dictionary in effects:
+		var t: String = String(e.get("card_type", ""))
+		if not t.is_empty() and not out.has(t):
+			out.append(t)
+	return out
+
+
 ## Builds an ItemData from a JSON dictionary; null (after push_error) if invalid.
 static func from_dict(item_id: String, d: Dictionary) -> ItemData:
 	for key: String in ["name", "description", "rarity", "trigger", "effects"]:

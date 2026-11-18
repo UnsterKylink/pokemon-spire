@@ -21,7 +21,9 @@ static func generate(data: GameData, run: RunState, rng: RandomNumberGenerator) 
 	inv._min_deck_size = int(data.get_removal_config().get("min_deck_size", 1))
 	var cfg: Dictionary = data.get_shop_config()
 	var no_ids: Array[String] = []
-	for offer: RewardOffer in RewardGenerator.generate(data, run.player_id, no_ids, rng, {}, int(cfg["card_count"])):
+	# Story 032: cards of the zone's gym type are more frequent (rewards.json zone_type_bias.shop_cards).
+	for offer: RewardOffer in RewardGenerator.generate(data, run.player_id, no_ids, rng, {}, int(cfg["card_count"]),
+			String(run.current_zone().get("type_id", "")), data.get_zone_type_bias("shop_cards")):
 		var e := ShopEntry.new()
 		e.kind = ShopEntry.KIND_CARD
 		e.card = offer.card

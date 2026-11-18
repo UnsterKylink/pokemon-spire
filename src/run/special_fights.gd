@@ -13,6 +13,8 @@ extends RefCounted
 
 ## Room type of the league fights (Main.ROOM_LEAGUE / the simulator's "league").
 const LEAGUE_ROOM: String = "league"
+## Story 032: rooms whose fights get the zone rule (zones.json gym_types[type].zone_rule).
+const ZONE_RULE_ROOMS: Array[String] = ["wild", "elite"]
 
 
 ## The rival fight of the CURRENT zone's 'rival' room (rival.json kind "room" for this zone number, not won yet), drawn with
@@ -122,13 +124,16 @@ static func apply_legendary_win(data: GameData, run: RunState, legendary_id: Str
 
 
 ## Story 030: the field rule and boss phases of a fight, applied to `battle` BEFORE Battle.start(). `room_type`: the room of
-## the fight (GameData.ROOM_GYM = the zone's gym, "league" = `league_fight`); other rooms get nothing. Shared by Main and
+## the fight (GameData.ROOM_GYM = the zone's gym, "league" = `league_fight`; story 032: "wild" / "elite" = the zone's light
+## zone rule, map rooms and event fights alike); other rooms (rival, legendary, QA "") get nothing. Shared by Main and
 ## the simulator. Returns the applied rule ({} if none).
 static func apply_fight_mechanics(data: GameData, battle: Battle, room_type: String, zone: Dictionary,
 		league_fight: Dictionary) -> Dictionary:
 	var rule: Dictionary = {}
 	if room_type == GameData.ROOM_GYM:
 		rule = data.get_gym_field_rule(String(zone.get("type_id", "")))
+	elif room_type in ZONE_RULE_ROOMS:
+		rule = data.get_zone_field_rule(String(zone.get("type_id", "")))  # story 032: the zone's light rule
 	elif room_type == LEAGUE_ROOM and not league_fight.is_empty():
 		rule = data.get_league_field_rule(league_fight)
 		if String(league_fight.get("kind", "")) == "final_boss" and not battle.enemies.is_empty():

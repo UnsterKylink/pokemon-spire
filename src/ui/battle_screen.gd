@@ -74,6 +74,10 @@ const COLOR_PHASE: Color = Color(0.95, 0.3, 0.55)
 const TEXT_FIELD_RULE_PILL: String = "%s"
 const TEXT_FIELD_RULE_BANNER: String = "Règle de terrain : %s"
 const TEXT_FIELD_RULE_TIP: String = "Règle de terrain : %s\n%s"
+## Story 032: the zone's light rule (FieldRules.SCOPE_ZONE) on wild / elite fights.
+const TEXT_ZONE_RULE_PILL: String = "Zone : %s"
+const TEXT_ZONE_RULE_BANNER: String = "Règle de zone : %s"
+const TEXT_ZONE_RULE_TIP: String = "Règle de zone : %s\n%s"
 const COLOR_KO: Color = Color(0.6, 0.6, 0.6)
 const MODULATE_KO: Color = Color(0.45, 0.45, 0.45, 0.55)
 const MODULATE_TARGETABLE: Color = Color(1.0, 0.9, 0.6)
@@ -633,7 +637,8 @@ func setup(battle: Battle, data: GameData, run: RunState, encounter_id: String) 
 	_refresh_field_pill()
 	var rule: Dictionary = _battle.get_field_rule()
 	if not rule.is_empty():  # story 030: the rule is announced when the battle starts
-		_show_field_banner(TEXT_FIELD_RULE_BANNER % String(rule["name"]), String(rule["description"]), COLOR_FIELD_RULE)
+		var banner_fmt: String = TEXT_ZONE_RULE_BANNER if _is_zone_rule(rule) else TEXT_FIELD_RULE_BANNER
+		_show_field_banner(banner_fmt % String(rule["name"]), String(rule["description"]), COLOR_FIELD_RULE)
 
 
 # --- Story 030: field rule pill / banner, boss phase banner --------------------------------------------------
@@ -656,8 +661,14 @@ func _refresh_field_pill() -> void:
 	# The pill takes the place of the "Combat : n ennemis" caption so the info row never pushes « Fin de tour » off-screen.
 	_encounter_label.visible = rule.is_empty()
 	if not rule.is_empty():
-		_field_pill.text = TEXT_FIELD_RULE_PILL % String(rule["name"])
-		_field_pill.tooltip_text = TEXT_FIELD_RULE_TIP % [String(rule["name"]), String(rule["description"])]
+		var zone_rule: bool = _is_zone_rule(rule)
+		_field_pill.text = (TEXT_ZONE_RULE_PILL if zone_rule else TEXT_FIELD_RULE_PILL) % String(rule["name"])
+		_field_pill.tooltip_text = (TEXT_ZONE_RULE_TIP if zone_rule else TEXT_FIELD_RULE_TIP) % [String(rule["name"]), String(rule["description"])]
+
+
+## Story 032: true for a zone's light rule (shown « Zone : … » / « Règle de zone : … »).
+func _is_zone_rule(rule: Dictionary) -> bool:
+	return String(rule.get("scope", "")) == FieldRules.SCOPE_ZONE
 
 
 ## A banner across the arena: `title` + `body`, framed in `accent`; fades out after field_rule.hold_seconds (fx config).

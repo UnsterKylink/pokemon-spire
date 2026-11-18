@@ -1,6 +1,7 @@
 {
-	"_doc": "offer_count: nombre de cartes proposees apres une victoire. rarity_weights: poids de tirage par rarete (> 0). player_pool: id du joueur -> reserve de cartes (ids de cards.json) dans laquelle on tire les cartes de recompense (sans doublon). Une carte volee a un Pokemon battu (champ 'teaches' dans pokemon.json) est ajoutee en plus, puis le reste est tire selon les poids.",
+	"_doc": "offer_count: nombre de cartes proposees apres une victoire. rarity_weights: poids de tirage par rarete (> 0). player_pool: id du joueur -> reserve de cartes (ids de cards.json) dans laquelle on tire les cartes de recompense (sans doublon). Une carte volee a un Pokemon battu (champ 'teaches' dans pokemon.json) est ajoutee en plus, puis le reste est tire selon les poids. Story 032 : zone_type_bias (optionnel, 0..1) = probabilite que chaque carte proposee (hors carte volee) / carte du Poke Mart / objet tenu (butin et Poke Mart) soit tiree parmi celles du TYPE DE L ARENE de la zone (cartes : type_id ; objets : card_type d un de leurs effets), s il y en a ; cles reward_cards, shop_cards, items.",
 	"offer_count": 3,
+	"zone_type_bias": {"reward_cards": 0.3, "shop_cards": 0.3, "items": 0.4},
 	"rarity_weights": {
 		"common": 60,
 		"uncommon": 30,

@@ -56,28 +56,40 @@ static func pick_balls(data: GameData, zone_number: int, count: int, weights: Di
 
 
 ## `count` DISTINCT held items the run does not own, drawn by rarity weight (fewer if not enough remain).
+## Story 032: with probability rewards.json zone_type_bias.items, a pick is made only among the items tied to the current
+## zone's gym type (ItemData.card_types; if any is left).
 static func pick_items(data: GameData, run: RunState, count: int, rng: RandomNumberGenerator) -> Array[ItemData]:
 	var pool: Array[ItemData] = []
 	for id: String in data.get_item_ids():
 		if not run.has_item(id):
 			pool.append(data.get_item(id))
 	var weights: Dictionary = data.get_item_rarity_weights()
+	var zone_type: String = String(run.current_zone().get("type_id", ""))
+	var bias: float = data.get_zone_type_bias("items") if not zone_type.is_empty() else 0.0
 	var result: Array[ItemData] = []
 	while result.size() < count and not pool.is_empty():
+		var candidates: Array[int] = []  # indexes into pool
+		if bias > 0.0 and rng.randf() < bias:
+			for i: int in pool.size():
+				if pool[i].card_types().has(zone_type) and float(weights.get(pool[i].rarity, 0.0)) > 0.0:
+					candidates.append(i)
+		if candidates.is_empty():
+			for i: int in pool.size():
+				candidates.append(i)
 		var total: float = 0.0
-		for it: ItemData in pool:
-			total += float(weights.get(it.rarity, 0.0)) * it.weight
-		var index: int = pool.size() - 1
+		for i: int in candidates:
+			total += float(weights.get(pool[i].rarity, 0.0)) * pool[i].weight
+		var index: int = candidates[candidates.size() - 1]
 		if total > 0.0:
 			var roll: float = rng.randf() * total
-			for i: int in pool.size():
+			for i: int in candidates:
 				var w: float = float(weights.get(pool[i].rarity, 0.0)) * pool[i].weight  # story 029: per-item weight
 				if w > 0.0 and roll < w:
 					index = i
 					break
 				roll -= w
 		else:
-			index = rng.randi_range(0, pool.size() - 1)
+			index = candidates[rng.randi_range(0, candidates.size() - 1)]
 		result.append(pool[index])
 		pool.remove_at(index)
 	return result
