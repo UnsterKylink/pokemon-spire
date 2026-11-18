@@ -1,3 +1,12 @@
+> **Story 031 — résumé.** Cible joueur vs résultat (2000 parties, graine 1) : victoires complètes **35.0 %** (cible ≈ 35 %) ;
+> ≥ 3 badges **81.5 %** (≥ 75 %) ; Conseil 4 atteint **58.0 %** (≥ 50 %) ; défaites en zone 1 **3.9 %** (≤ 5 %) ;
+> étape la plus meurtrière Éthernatos **17.6 %** des défaites (≤ ~20 %) ; types de starter **24.6–51.2 %** (avant 33–95 %).
+> Robustesse (300 parties, graine 7, `report-rob031.md`) : 39.3 % (IC 34.0–45.0), zone 1 5.0 %.
+> Leviers : ennemis des zones 2–8 (+1 à +2 Force, +5 à +10 % PV), Conseil / Maître +2 Force, Éthernatos ×1.05 +6,
+> soin entre combats de Ligue 40 → 20 %, plafond d'Élan 5 → 3, Talents Essaim +4 / Brasier +1, cartes de départ Insecte 7 / 11,
+> règle de l'arène Feu adoucie en données (plus de carte retirée : attaques Feu +2 et Brûlure 1 tous les 3 tours).
+> Politique du joueur auto inchangée. Détail : `changes.md` (section Story 031).
+
 # Rapport d'équilibrage — final031
 
 Parties simulées : **2000** (commit e5f0a34, données modifiées non commitées). 

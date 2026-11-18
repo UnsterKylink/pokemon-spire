@@ -161,26 +161,26 @@ func _elan() -> void:
 	for i: int in 10:
 		deck.append(card("a%d" % i, "salameche", "fire"))
 	var b := mk(deck, ["eclat_magique"], [enemy(900)], true)
-	ok(b.get_elan_cap() == 7, "eclat_magique: cap 5 -> 7")
+	ok(b.get_elan_cap() == 5, "eclat_magique: cap 3 -> 5")
 	for n: int in 2:
 		for c: CardData in b.hand.duplicate():
 			b.play_card(idx(b, c.id), 0)
 		b.end_turn()
-	ok(b.get_elan() == 7, "elan reaches 7 (%d)" % b.get_elan())
+	ok(b.get_elan() == 5, "elan reaches 5 (%d)" % b.get_elan())
 	var b0 := mk(deck, [], [enemy(900)], true)
 	for n: int in 2:
 		for c: CardData in b0.hand.duplicate():
 			b0.play_card(idx(b0, c.id), 0)
 		b0.end_turn()
-	ok(b0.get_elan() == 5 and b0.get_elan_cap() == 5, "no item: capped at 5")
+	ok(b0.get_elan() == 3 and b0.get_elan_cap() == 3, "no item: capped at 3")
 	# elan_keep_percent
 	var mixed: Array = [card("s1", "salameche", "fire"), card("s2", "salameche", "fire"), card("s3", "salameche", "fire"), card("s4", "salameche", "fire"), card("c1", "carapuce", "water")]
 	var b2 := mk(mixed, ["scope_lens"], [enemy(900)], true)
 	for id: String in ["s1", "s2", "s3", "s4"]:
 		play(b2, id)
-	ok(b2.get_elan() == 4, "elan 4 before switching")
+	ok(b2.get_elan() == 3, "elan 3 (cap) before switching")
 	play(b2, "c1")
-	ok(b2.get_elan() == 2, "scope_lens: half of the Élan kept on switch (%d)" % b2.get_elan())
+	ok(b2.get_elan() == 1, "scope_lens: half of the Élan kept on switch, rounded down (%d)" % b2.get_elan())
 	var b3 := mk(mixed, [], [enemy(900)], true)
 	for id: String in ["s1", "s2", "s3", "s4", "c1"]:
 		play(b3, id)

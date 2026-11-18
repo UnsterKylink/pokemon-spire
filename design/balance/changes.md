@@ -127,3 +127,51 @@ Valeurs modifiées (toutes nouvelles en story 018 ; « avant » = première vers
 | events.json | pierre_evolution A / B | évolution ; 80 ₽ | évolution − 5 PV ; 50 ₽ | idem |
 | events.json | oeuf_mystere B | 60 ₽ | 40 ₽ | idem |
 | events.json | vieux_dresseur A | amélioration | amélioration − 30 ₽ | idem |
+
+## Story 031 — rééquilibrage complet après la refonte du combat (stories 027–030)
+
+Référence : `report-post030.md` = 79.0 % (300 parties). Cible joueur : ≈ 35 % de victoires complètes, ≥ 75 % des parties ≥ 3 badges, ≥ 50 % atteignent le Conseil 4, zone 1 ≤ 5 %, aucune étape > ~20 % des défaites, chaque type de starter entre ~20 % et ~50 %. Politique du joueur auto **inchangée** (`sim_policy.gd` DEFAULTS non modifiés).
+
+| Itér. | Parties | Victoires | ≥ 3 badges | Conseil atteint | Constat → changement suivant |
+|---|---:|---:|---:|---:|---|
+| it031-00 | 300 | 79.0 % | 90.0 % | 83.0 % | état post030 reproduit → leviers larges : ennemis des zones 2–8 (+Force, +PV), Ligue +2 Force, soin Ligue 40 → 30, Élan plafond 5 → 3, règle Feu adoucie |
+| it031-01 | 600 | 46.0 % | 80.7 % | 58.7 % | progression dans la cible ; 78 % des parties qui atteignent la Ligue la gagnent → Ligue plus dure : soin 30 → 20, Éthernatos PV ×1.15 |
+| it031-02 | 600 | 32.8 % | 80.7 % | 58.7 % | Éthernatos = 21 % des défaites (trop concentré) → Éthernatos ×1.05, PV des membres 2–4 / Maître +0.05 ; starter Insecte 15 % → cartes de départ Insecte 7 / 11 |
+| it031-03 | 1000 | 34.5 % | 81.9 % | 57.9 % | → confirmation 2000 parties |
+| final031 v1 | 2000 | 33.6 % | 81.0 % | 56.6 % | Insecte encore 17.9 % → Talent Essaim +2 → +4 |
+| final031 v2 | 2000 | 36.4 % | 82.0 % | 58.2 % | Feu 53.9 % → Talent Brasier +2 → +1 |
+| **final031** | **2000** | **35.0 %** (IC 33.0–37.2) | **81.5 %** | **58.0 %** | zone 1 3.9 % ; étape la plus meurtrière Éthernatos 17.6 % des défaites ; types 24.6–51.2 % → `report-final031.md` |
+| rob031 (graine 7) | 300 | 39.3 % (IC 34.0–45.0) | 81.3 % | 57.0 % | zone 1 5.0 % ; étape max zone2_boss 12.1 % des défaites — cohérent avec final031 à l'IC près |
+
+Valeurs modifiées :
+
+| Fichier | Clé | Avant | Après | Pourquoi | Itér. |
+|---|---|---|---|---|---|
+| zones.json | tiers[2].gym_modifiers (zone 2, ×PV / +Force) | ×1.0 +0 | ×1.0 +1 | les cartes / Talents / objets des stories 027–029 ont rendu le joueur bien plus fort (79 %) ; difficulté remise à partir de la zone 2 (zone 1 inchangée : déjà 4 % de défaites) | 01 |
+| zones.json | tiers[3].gym_modifiers | ×1.0 +0 | ×1.05 +1 | idem | 01 |
+| zones.json | tiers[4].gym_modifiers | ×1.05 +0 | ×1.15 +2 | idem | 01 |
+| zones.json | tiers[5].gym_modifiers | ×1.1 +1 | ×1.2 +3 | idem | 01 |
+| zones.json | tiers[6].gym_modifiers | ×1.15 +2 | ×1.25 +3 | idem | 01 |
+| zones.json | tiers[7].gym_modifiers | ×1.2 +2 | ×1.3 +4 | idem | 01 |
+| zones.json | tiers[8].gym_modifiers | ×1.25 +3 | ×1.35 +4 | idem | 01 |
+| zones.json | tiers[2].modifiers (sauvages / élites zone 2) | ×0.95 +0 | ×0.95 +1 | idem (combats de carte) | 01 |
+| zones.json | tiers[3].modifiers | ×1.0 +0 | ×1.05 +1 | idem | 01 |
+| zones.json | tiers[4].modifiers | ×1.0 +0 | ×1.1 +1 | idem | 01 |
+| zones.json | tiers[5].modifiers | ×1.05 +0 | ×1.15 +2 | idem | 01 |
+| zones.json | tiers[6].modifiers | ×1.1 +0 | ×1.2 +2 | idem | 01 |
+| zones.json | tiers[7].modifiers | ×1.15 +1 | ×1.25 +3 | idem | 01 |
+| zones.json | tiers[8].modifiers | ×1.2 +1 | ×1.3 +3 | idem | 01 |
+| league.json | member_modifiers 1 / 2 / 3 / 4 | ×1.4 / 1.45 / 1.5 / 1.6, +3 | ×1.45 / 1.55 / 1.6 / 1.7, +5 | la Ligue doit rester au-dessus de la zone 8 (×1.35 +4, règle de validation) et répartir les défaites sur les 4 membres (it02 : 1.5 / 1.55 / 1.65 → it03 : +0.05) | 01, 03 |
+| league.json | champion.modifiers | ×1.65 +3 | ×1.75 +5 | ≥ dernier membre (validation) ; Maître ~3 % des parties | 01, 03 |
+| league.json | final_boss.modifiers (Éthernatos) | ×1.0 +4 | ×1.05 +6 | 97 % de victoire à Éthernatos → 75 % (« difficile mais battable ») ; ×1.15 essayé en it02 : 21 % des défaites sur lui seul | 01–03 |
+| league.json | heal_percent_between_fights | 40 | 20 (30 en it01) | les PV à l'entrée de chaque combat décident de la Ligue ; 30 laissait 78 % de victoires parmi ceux qui atteignent le Conseil | 01, 02 |
+| talents.json | elan.cap | 5 | 3 | +5 dégâts par coup (multi-coups, Machination) = principal multiplicateur de la story 027 ; le plafond réduit aussi les cartes fortes signalées sans les toucher | 01 |
+| talents.json | essaim.effect.next_attack_bonus (+ description) | 2 | 4 | starter Insecte 17.9 % (le type le plus résisté) | final v2 |
+| talents.json | brasier.effect.next_attack_bonus (+ description) | 2 | 1 | starter Feu 53.9 % | final v3 |
+| cards.json | coup_insecte.damage (+ description) | 6 | 7 | starter Insecte 15 % (it02) ; aligné sur Plante (7 / 11) | 03 |
+| cards.json | megacorne.damage (+ description) | 9 | 11 | idem | 03 |
+| field_rules.json | rules.gym_fire (Zénith) | `burn_costliest_card` every 2 (la carte la plus chère retirée pour tout le combat) | `type_damage_up` Feu +2 (les deux camps) + `player_status_each_turn` Brûlure 1 tous les 3 tours ; description FR mise à jour | adoucissement demandé, fait en données (aucun code touché) : plus aucune carte retirée ; thème Zénith (Feu renforcé) ; un starter Feu est immunisé à la Brûlure | 01 |
+
+Vérifiés, inchangés : Blizzard, Laser Glace, Fracass'Tête, Luminocanon, Machination (leur excès venait surtout de l'Élan à 5 ; aucune n'apparaît comme facteur après le plafond 3), objets (`items.json`, prix / butin de `shop.json` ; Éclat Magique passe mécaniquement de plafond 7 à 5), soins du Centre et des badges (`badge_heal_percent` 50), rareté des récompenses, argent, PV / énergie / deck du joueur, rival, légendaires, événements. Le vocabulaire `burn_costliest_card` reste disponible (testé par t30) mais n'est plus utilisé.
+
+Attentes de tests mises à jour (valeurs de données seulement) : `tests/scratch/t27_talent_elan.gd` (plafond Élan 5 → 3, Brasier +2 → +1 : 11 assertions), `tests/scratch/t29_items.gd` (Éclat Magique 5 → 7 devient 3 → 5, plafond sans objet 3, Élan avant changement 3, Scope Lens garde floor(3 × 50 %) = 1 : 5 assertions).
