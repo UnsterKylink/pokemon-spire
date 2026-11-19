@@ -1,12 +1,12 @@
 # Story 026: Niveaux de difficulté (façon Ascension)
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Feature
 > **Type**: Logic
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-11-19
 
 ## Context
 
@@ -32,6 +32,7 @@
 - [ ] Chaque niveau ajoute un modificateur cumulatif défini en données (ex. ennemis plus forts, moins de soin, prix plus élevés).
 - [ ] Le niveau se choisit au lancement d'une nouvelle partie ; le niveau débloqué est conservé d'une partie à l'autre.
 - [ ] Le niveau joué est affiché pendant la partie et sur l'écran de victoire / défaite.
+- [ ] **Choix du joueur (2026-11-19)** : **10 niveaux** ; récompense = **prestige + cosmétique** (niveau affiché sur le titre, les statistiques et le Pokédex ; cadre / badge visuel débloqué), aucun bonus de puissance ; déblocage **global** (une victoire au niveau N débloque N+1 quel que soit le starter). Niveau 0 = jeu actuel inchangé (≈ 35 % de victoires au simulateur) ; chaque niveau vérifié au simulateur (le taux baisse de façon régulière, le niveau 10 reste gagnable).
 
 ---
 
