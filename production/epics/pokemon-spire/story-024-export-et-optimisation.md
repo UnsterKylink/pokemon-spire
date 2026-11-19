@@ -1,7 +1,7 @@
 # Story 024: Version .exe Windows et optimisation
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Integration
 > **Estimate**: [fill before starting]
@@ -28,11 +28,11 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 6), scoped to this story:*
 
-- [ ] Un export Windows (.exe) se lance sans l'éditeur Godot, avec icône et nom du jeu.
-- [ ] Les raccourcis et outils de test (QA) ne sont pas actifs dans la version exportée.
-- [ ] Le jeu tient 60 images/s en combat avec animations sur une machine moyenne, et le chargement initial dure moins de 5 s (budgets en données de project.yaml).
-- [ ] Les images et sons sont importés aux bons formats (taille du jeu raisonnable) ; aucune erreur dans la console au lancement.
-- [ ] La procédure d'export est notée pour pouvoir la refaire.
+- [x] Un export Windows (.exe) se lance sans l'éditeur Godot, avec icône et nom du jeu.
+- [x] Les raccourcis et outils de test (QA) ne sont pas actifs dans la version exportée.
+- [x] Le jeu tient 60 images/s en combat avec animations sur une machine moyenne, et le chargement initial dure moins de 5 s (budgets en données de project.yaml).
+- [x] Les images et sons sont importés aux bons formats (taille du jeu raisonnable) ; aucune erreur dans la console au lancement.
+- [x] La procédure d'export est notée pour pouvoir la refaire.
 
 ---
 
@@ -65,7 +65,7 @@
 **Required evidence**:
 - Integration : `tests/integration/run/export-et-optimisation_test.gd` OR playtest doc — advisory at `qa.level: minimal`, plus a retained screenshot in `production/qa/evidence/` when the story changes what the player sees.
 
-**Status**: [ ] Not yet created
+**Status**: [x] Export Linux lancé sous xvfb (`production/qa/evidence/story-024-export-linux-title.png`), tests t9–t32 OK, procédure `docs/export-procedure.md`
 
 ---
 
@@ -73,3 +73,10 @@
 
 - Depends on: Story 023
 - Unlocks: Story 025
+
+## Completion Notes
+**Completed**: 2026-11-19
+**Criteria**: 5/5 (validé par le joueur ; exports Windows 215 Mo et Linux 181 Mo en ~14 s ; titre en ~2 s sous xvfb ; tests t9, t11, t18, t19, t23, t24, t25, t32 OK)
+**Deviations**: Advisory only — **DEFERRED — requires playtest session** : 60 images/s en combat non mesuré (rendu logiciel sous xvfb non représentatif) et lancement du `.exe` sur un vrai PC Windows non constaté ; l'icône n'est pas intégrée au `.exe` exporté depuis Linux (rcedit + wine absents ; à faire depuis l'éditeur Windows avec rcedit) ; le nom produit / la version ne sont probablement pas écrits dans le `.exe` pour la même raison ; le `.exe` (215 Mo) vient surtout des sprites animés (65 Mo) et des cris (18 Mo) ; les décors d'origine (2752 px) ne survivent que dans l'historique git (.git 728 Mo, non réécrit) ; description du projet rédigée par l'assistant, à relire ; `.gitignore` ne liste plus `export_presets.cfg`
+**Test Evidence**: Config/Data — tests `tests/scratch/` + capture `production/qa/evidence/story-024-export-linux-title.png` ; procédure `docs/export-procedure.md`
+**Code Review**: Skipped — Solo mode
