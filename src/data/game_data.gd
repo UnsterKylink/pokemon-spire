@@ -2235,6 +2235,30 @@ func get_pokemon_ids() -> Array[String]:
 	return ids
 
 
+## Story 025 (Pokédex): ids of every evolved form (pokemon.json evolutions + roster evolutions), load order.
+func get_evolved_form_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for k: String in _evolved_forms.keys():
+		ids.append(k)
+	return ids
+
+
+## Story 025 (Pokédex): card ids taught by ANY Pokémon id (enemies / roster `teaches`, evolved forms `teaches`, then the
+## cards.json cards carried by that id, e.g. a player starter); [] when none.
+func get_pokemon_teach_ids(pokemon_id: String) -> Array[String]:
+	var out: Array[String] = []
+	var def_v: Variant = _enemies.get(pokemon_id, _evolved_forms.get(pokemon_id, null))
+	if def_v is Dictionary:
+		for cid: Variant in ((def_v as Dictionary).get("teaches", []) as Array):
+			if cid is String and _cards.has(cid) and not out.has(cid):
+				out.append(String(cid))
+	if out.is_empty():
+		for cid: Variant in _cards.keys():
+			if (_cards[cid] as CardData).pokemon_id == pokemon_id:
+				out.append(String(cid))
+	return out
+
+
 ## Id of the Pokémon on the field at the start of each battle (pokemon.json "starter_pokemon").
 func get_starter_pokemon_id() -> String:
 	return _starter_pokemon

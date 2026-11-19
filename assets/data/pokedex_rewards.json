@@ -1,0 +1,17 @@
+{
+ "_doc": "Story 025 (Pokédex) : paliers de récompenses permanents, débloqués par le nombre d'ESPÈCES différentes capturées (toutes parties confondues, user://pokedex.json). Chaque palier débloqué s'applique au DÉBUT de chaque NOUVELLE partie (création du RunState, jamais à une partie en cours ni reprise) ; ils se cumulent. Le simulateur d'équilibrage ne les applique jamais (les cibles d'équilibrage restent valides) : garder les effets légers. milestones : liste de {id (unique), caught (seuil >= 1, croissant), name (FR, court), description (FR, affichée dans le Pokédex et la bannière), effects: [effet]}. Effets : add_ball {ball: id de balls.json, count >= 1} (Balls au départ, dans la limite de max_carried) ; gain_money {value >= 1} (Pokédollars en plus au départ) ; gain_max_hp {value >= 1} (PV max ET PV en plus au départ) ; extra_starter_choices {count >= 1} (Pokémon de départ proposés en plus des 3 habituels ; plafonné par starter_choices_max) ; upgrade_starter_card {count >= 1} (améliore « + » la ou les cartes de départ améliorables les plus chères, sans hasard). banner_seconds : durée d'affichage de la bannière « Palier du Pokédex débloqué ».",
+ "starter_choices_max": 5,
+ "banner_seconds": 4.0,
+ "milestones": [
+  {"id": "dex_10", "caught": 10, "name": "Apprenti collectionneur", "description": "+1 Poké Ball au début de chaque partie.",
+   "effects": [{"type": "add_ball", "ball": "poke_ball", "count": 1}]},
+  {"id": "dex_25", "caught": 25, "name": "Dresseur curieux", "description": "4 Pokémon de départ proposés au lieu de 3.",
+   "effects": [{"type": "extra_starter_choices", "count": 1}]},
+  {"id": "dex_50", "caught": 50, "name": "Chercheur de terrain", "description": "+25 ₽ au début de chaque partie.",
+   "effects": [{"type": "gain_money", "value": 25}]},
+  {"id": "dex_100", "caught": 100, "name": "Assistant du Professeur", "description": "+5 PV max au début de chaque partie.",
+   "effects": [{"type": "gain_max_hp", "value": 5}]},
+  {"id": "dex_150", "caught": 150, "name": "Maître du Pokédex", "description": "Une carte de départ améliorée au début de chaque partie.",
+   "effects": [{"type": "upgrade_starter_card", "count": 1}]}
+ ]
+}
