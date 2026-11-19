@@ -121,7 +121,7 @@ func _check_main() -> void:
 	await process_frame
 	var t: TitleScreen = m.get_title_screen()
 	ok(m.get_current_screen_name() == "title" and t != null and not t.has_continue(), "title without save: no Continuer")
-	ok(t != null and t.get_button_texts() == PackedStringArray(["Nouvelle partie", "Tutoriel", "Options", "Quitter"]), "title buttons: %s" % [t.get_button_texts() if t != null else []])
+	ok(t != null and t.get_button_texts() == PackedStringArray(["Nouvelle partie", "Tutoriel", "Pokédex", "Options", "Quitter"]), "title buttons: %s" % [t.get_button_texts() if t != null else []])
 	ok(t != null and t.get_stats_lines()[0] == "Parties jouées : 0", "stats lines: %s" % [t.get_stats_lines() if t != null else []])
 	var first_pokemon: String = t.get_pokemon_sprite() if t != null else ""
 	ok(not first_pokemon.is_empty(), "a title Pokémon is shown (%s)" % first_pokemon)

@@ -9,6 +9,12 @@ extends RefCounted
 ## Story 013 (story-013-conseil-4-ethernatos): after the last badge, the league (4 members, Maître, final boss), see set_league.
 ## Story 018 (story-018-rival-et-evenements): the rival (name, starter drawn at the start, encounters won), legendary events
 ## seen, statuses queued for the next fight, event fights / card removals queued by EventResolver.
+## Story 025 (Pokédex): emits pokemon_captured / form_reached so Main can record them (nobody listens in the simulator).
+
+## Story 025: a Pokémon joined the team as a capture (apply_captures: balls, legendary, event « add_pokemon »).
+signal pokemon_captured(pokemon_id: String)
+## Story 025: one of the player's Pokémon (starter or team) evolved into `pokemon_id`.
+signal form_reached(pokemon_id: String)
 
 var player_id: String = ""
 var display_name: String = ""
@@ -425,6 +431,7 @@ func evolve_starter(data: GameData, badge_number: int = 0) -> Dictionary:
 		evolved = true
 		evolution_stage += 1
 		step_evolved = true
+		form_reached.emit(new_id)
 	else:
 		var idx: int = _best_upgradable_index(starter_pokemon_id)
 		if idx >= 0:
@@ -453,6 +460,11 @@ func _recarry(from_id: String, to_id: String) -> void:
 	for i: int in deck.size():
 		if deck[i].pokemon_id == from_id:
 			deck[i] = deck[i].with_pokemon(to_id)
+
+
+## Story 025: public form of _best_upgradable_index (Pokédex milestone « upgrade_starter_card »).
+func best_upgradable_index(pokemon_id: String) -> int:
+	return _best_upgradable_index(pokemon_id)
 
 
 ## Story 014: deck index of the most expensive card of `pokemon_id` that can still be upgraded (first on ties), -1 if none.
@@ -523,6 +535,7 @@ func evolve_team(data: GameData) -> Array[Dictionary]:
 			_pokemon_infos[new_id] = data.get_pokemon_info(new_id)
 			_recarry(cur, new_id)
 			cur = new_id
+			form_reached.emit(new_id)
 			prog["stage"] = int(prog["stage"]) + 1
 			row["hp_bonus"] = int(row["hp_bonus"]) + data.get_team_evolution_bonus_hp()
 		team_progress.erase(start_id)
@@ -782,6 +795,7 @@ func apply_captures(captured_ids: Array[String]) -> Array[Dictionary]:
 		var first: bool = not captured.has(pid)
 		if first:
 			captured.append(pid)
+		pokemon_captured.emit(pid)
 		rows.append({"id": pid, "name": String(info["name"]), "sprite": String(info["sprite_path"]), "types": info["types"],
 				"cards": cards, "first_time": first})
 	return rows
@@ -897,6 +911,7 @@ func evolve_random_carrier(data: GameData, rng: RandomNumberGenerator) -> Dictio
 	var from_info: Dictionary = data.get_pokemon_info(from_id)
 	_pokemon_infos[to_id] = data.get_pokemon_info(to_id)
 	_recarry(from_id, to_id)
+	form_reached.emit(to_id)
 	var prog: Dictionary = (team_progress.get(from_id, {"battles": 0, "stage": 0}) as Dictionary).duplicate()
 	team_progress.erase(from_id)
 	prog["stage"] = int(prog["stage"]) + 1

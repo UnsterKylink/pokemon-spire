@@ -9,6 +9,9 @@ signal starter_chosen(pokemon_id: String)
 
 const SPRITE_SIZE: Vector2 = Vector2(180, 180)  # story 033: official artwork
 const CARD_SIZE: Vector2 = Vector2(330, 420)
+## Story 025: a Pokédex milestone can propose more starters; the cards shrink so the row stays within this width.
+const ROW_MAX_WIDTH: float = 1220.0
+const CARD_GAP: int = 24
 const COLOR_BG: Color = UiStyle.BG_DEEP
 
 var _choices: Array[String] = []
@@ -30,8 +33,11 @@ func setup(data: GameData, choices: Array[String]) -> void:
 	for child: Node in _cards_box.get_children():
 		_cards_box.remove_child(child)
 		child.queue_free()
+	var width: float = minf(CARD_SIZE.x, (ROW_MAX_WIDTH - CARD_GAP * maxi(0, _choices.size() - 1)) / maxf(1.0, _choices.size()))
 	for i: int in _choices.size():
-		_cards_box.add_child(_make_choice_widget(data, _choices[i], i))
+		var w: Button = _make_choice_widget(data, _choices[i], i)
+		w.custom_minimum_size = Vector2(width, CARD_SIZE.y)
+		_cards_box.add_child(w)
 
 
 ## The proposed Pokémon ids, left to right.
@@ -131,5 +137,5 @@ func _build_ui() -> void:
 	_cards_box = HBoxContainer.new()
 	_cards_box.name = "Cards"
 	_cards_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_cards_box.add_theme_constant_override("separation", 24)
+	_cards_box.add_theme_constant_override("separation", CARD_GAP)
 	column.add_child(_cards_box)

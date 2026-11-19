@@ -76,6 +76,8 @@ const BACKDROP_FINAL_BOSS: String = "ethernatos"
 const QA_LOSE_MAX_TURNS: int = 60
 ## Story 023: the title screen (TitleScreen).
 const SCREEN_TITLE: String = "title"
+## Story 025: the Pokédex screen (from the title screen).
+const SCREEN_POKEDEX: String = "pokedex"
 const TUTORIAL_PATH: String = "res://assets/data/tutorial.json"
 
 var _data: GameData
@@ -173,6 +175,16 @@ var _tutorial: TutorialOverlay
 var _sandbox: bool = false
 var _tutorial_data: Dictionary = {}
 var _title_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## Story 025 (Pokédex): file path ("" = Pokédex off: QA / tests / simulator unless they opt in with
+## qa_set_pokedex_path), the loaded Pokédex, its species list (built on first use), the milestones, the banner, the
+## milestones reached but not announced yet (shown on the next screen when reached mid-battle), the screen.
+var _pokedex_path: String = ""
+var _pokedex: Pokedex = Pokedex.new()
+var _pokedex_catalog: PokedexCatalog
+var _pokedex_rewards: PokedexRewards
+var _pokedex_banner: PokedexBanner
+var _pending_milestones: Array[Dictionary] = []
+var _pokedex_screen: PokedexScreen
 
 
 func _ready() -> void:
@@ -210,6 +222,9 @@ func _ready() -> void:
 	add_child(_pause_menu)
 	_title_rng.randomize()
 	_tutorial_data = _load_tutorial_data()
+	_pokedex_rewards = PokedexRewards.load_from()
+	_pokedex_banner = PokedexBanner.new()
+	add_child(_pokedex_banner)
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
 	_post_fx = PostFx.new()
 	add_child(_post_fx, false, Node.INTERNAL_MODE_BACK)  # story 020b: global image finish, above every screen
@@ -244,6 +259,8 @@ func _ready() -> void:
 		_title_enabled = true
 		_stats_path = PlayerStats.DEFAULT_PATH
 		_stats = PlayerStats.load_from(_stats_path)
+		_pokedex_path = Pokedex.DEFAULT_PATH  # story 025
+		_pokedex = Pokedex.load_from(_pokedex_path)
 		_tutorial_enabled = DisplayServer.get_name() != "headless"
 		GameSettings.apply_window_mode(GameSettings.fullscreen_enabled())
 		_show_title()
@@ -286,7 +303,7 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 		_begin_run(chosen, act_seed)
 		return
 	_pending_act_seed = act_seed
-	_starter_choices = _data.draw_starter_choices(_starter_rng, STARTER_CHOICE_COUNT)
+	_starter_choices = _data.draw_starter_choices(_starter_rng, starter_choice_count())
 	_show_starter_screen()
 
 
@@ -299,6 +316,7 @@ func _begin_run(starter_id: String, act_seed: int) -> void:
 	var run: RunState = RunState.create_with_starter(_data, starter_id)
 	if run == null:
 		return
+	_pokedex_new_run(run)  # story 025: milestone rewards, starter seen + caught, capture / evolution hooks
 	run.set_zones(_data.draw_zones(_zone_rng))  # story 012: the 8 gym types, in zone order
 	var gym_types: Array[String] = []
 	for z: Dictionary in run.zones:
@@ -1239,6 +1257,7 @@ func resume_continue() -> void:
 	_cli_seed = int(String(extras.get("cli_seed", "0")))
 	_last_league_heal = int(extras.get("last_league_heal", -1))
 	_run = result["run"]
+	_pokedex_connect(_run)
 	if String(extras["screen"]) == SCREEN_LEAGUE:
 		_show_league_screen()
 	else:
@@ -1417,6 +1436,7 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	battle.battle_lost.connect(_on_battle_lost)
 	_set_screen(_battle_screen, SCREEN_BATTLE)
 	_battle_screen.setup(battle, _data, _run, encounter_id)
+	_pokedex_mark_seen_combatants(enemies)  # story 025
 	_battle_screen.set_backdrop(_backdrop_for(room_type))
 	_refresh_hud()
 	if _tutorial_enabled and not _sandbox and not _stats.tutorial_done and _run.battles_won == 0:
@@ -1684,6 +1704,9 @@ func qa_show_event(event_id: String) -> void:
 func _show_event_def(event: Dictionary) -> void:
 	_clear_screens()
 	_current_event = event
+	var art: Variant = event.get("art", {})
+	if art is Dictionary and (art as Dictionary).get("pokemon", null) is String:  # story 025: the event's Pokémon is seen
+		_pokedex_mark_seen([String((art as Dictionary)["pokemon"])])
 	_event_screen = EVENT_SCENE.instantiate() as EventScreen
 	_event_screen.option_chosen.connect(_on_event_option_chosen)
 	_event_screen.finished.connect(_after_event)
@@ -1818,6 +1841,10 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 	_refresh_hud()
 	_play_screen_fade()
 	_play_screen_music(screen_name)
+	if _pokedex_banner != null:
+		move_child(_pokedex_banner, get_child_count() - 1)
+		if not _pending_milestones.is_empty():  # story 025: milestone reached in the battle that just ended
+			_show_milestone_banner()
 
 
 ## Story 022: the music of a new screen (audio.json "screens"; a battle picks its own context; badge / evolution keep
@@ -1963,6 +1990,7 @@ func _show_title_screen() -> void:
 	_title_screen.continue_requested.connect(resume_continue)
 	_title_screen.new_game_requested.connect(resume_new_game)
 	_title_screen.tutorial_requested.connect(start_tutorial)
+	_title_screen.pokedex_requested.connect(open_pokedex)
 	_title_screen.options_requested.connect(open_options)
 	_title_screen.quit_requested.connect(func() -> void: get_tree().quit())
 	_set_screen(_title_screen, SCREEN_TITLE)
@@ -2053,6 +2081,8 @@ func handle_escape() -> bool:
 	if _deck_panel != null and _deck_panel.is_open():
 		close_deck()
 		return true
+	if _pokedex_screen != null and _screen_name == SCREEN_POKEDEX:
+		return _pokedex_screen.handle_cancel()
 	if _picker_open():
 		return false
 	return open_pause()
@@ -2195,6 +2225,7 @@ func _clear_screens() -> void:
 	_end_screen = null
 	_resume_screen = null
 	_title_screen = null
+	_pokedex_screen = null
 	_tutorial = null
 	_badge_screen = null
 	_league_screen = null
@@ -2204,3 +2235,151 @@ func _clear_screens() -> void:
 	_offers = []
 	_current_event = {}
 	_current_fight = {}
+
+
+# --- Story 025: Pokédex (seen / caught across runs, milestones, screen) ------------------------------------------------
+
+## QA-ONLY: stores the Pokédex at `path` (a scratch file; "" = Pokédex off) and reloads it. Off by default outside the
+## real game, so QA scripts and tests never touch user://pokedex.json and never get milestone rewards.
+func qa_set_pokedex_path(path: String) -> void:
+	if not QaGate.enabled():
+		return
+	_pokedex_path = path
+	_pokedex = Pokedex.load_from(path) if not path.is_empty() else Pokedex.new()
+	_pending_milestones = []
+
+
+## The Pokédex in use (empty and never saved when off).
+func get_pokedex() -> Pokedex:
+	return _pokedex
+
+
+## The Pokédex species list (built on first use).
+func get_pokedex_catalog() -> PokedexCatalog:
+	if _pokedex_catalog == null:
+		_pokedex_catalog = PokedexCatalog.build(_data)
+	return _pokedex_catalog
+
+
+## The milestones of pokedex_rewards.json.
+func get_pokedex_rewards() -> PokedexRewards:
+	return _pokedex_rewards
+
+
+## QA: the milestone banner (always exists; check get_texts()).
+func get_pokedex_banner() -> PokedexBanner:
+	return _pokedex_banner
+
+
+## QA: the live PokedexScreen (null elsewhere).
+func get_pokedex_screen() -> PokedexScreen:
+	return _pokedex_screen
+
+
+## True when the Pokédex records (a path is set and this is not the tutorial sandbox).
+func pokedex_enabled() -> bool:
+	return not _pokedex_path.is_empty() and not _sandbox
+
+
+## Number of starters proposed at the start of a run: STARTER_CHOICE_COUNT + the « extra_starter_choices » milestones
+## unlocked (Pokédex on only).
+func starter_choice_count() -> int:
+	if not pokedex_enabled() or _pokedex_rewards == null:
+		return STARTER_CHOICE_COUNT
+	return _pokedex_rewards.starter_choice_count(STARTER_CHOICE_COUNT, _caught_species())
+
+
+## « Pokédex » on the title screen: the Pokédex screen (reloaded from its file); « Retour » / Échap go back to the title.
+func open_pokedex() -> void:
+	if _screen_name != SCREEN_TITLE:
+		return
+	if not _pokedex_path.is_empty():
+		_pokedex = Pokedex.load_from(_pokedex_path)
+	_clear_screens()
+	_pokedex_screen = PokedexScreen.new()
+	_pokedex_screen.back_requested.connect(close_pokedex)
+	_set_screen(_pokedex_screen, SCREEN_POKEDEX)
+	_pokedex_screen.setup(_data, get_pokedex_catalog(), _pokedex, _pokedex_rewards)
+
+
+## Leaves the Pokédex screen (back to the title).
+func close_pokedex() -> void:
+	if _screen_name != SCREEN_POKEDEX:
+		return
+	_show_title_screen.call_deferred()  # the screen emitting this is freed by the switch
+
+
+## QA-ONLY: shows the milestone banner for `milestones` at once (`seconds` <= 0 = stays).
+func qa_show_milestone_banner(milestones: Array[Dictionary], seconds: float = 0.0) -> void:
+	if QaGate.enabled() and _pokedex_banner != null:
+		move_child(_pokedex_banner, get_child_count() - 1)
+		_pokedex_banner.show_milestones(milestones, seconds)
+
+
+func _caught_species() -> int:
+	return _pokedex.caught_total(get_pokedex_catalog().slugs())
+
+
+## A NEW run: the unlocked milestones' rewards, the starter seen + caught, the capture / evolution hooks.
+func _pokedex_new_run(run: RunState) -> void:
+	if not pokedex_enabled():
+		return
+	_pokedex_rewards.apply_to_run(run, _caught_species())
+	_pokedex_connect(run)
+	_pokedex.mark_caught(Pokedex.slug_of(run.sprite_path))
+	_pokedex_after_change()
+
+
+func _pokedex_connect(run: RunState) -> void:
+	if not pokedex_enabled() or run == null:
+		return
+	if not run.pokemon_captured.is_connected(_on_pokedex_captured):
+		run.pokemon_captured.connect(_on_pokedex_captured)
+	if not run.form_reached.is_connected(_on_pokedex_form_reached):
+		run.form_reached.connect(_on_pokedex_form_reached)
+
+
+func _on_pokedex_captured(pokemon_id: String) -> void:
+	if not pokedex_enabled():
+		return
+	_pokedex.mark_caught(Pokedex.slug_of(String(_data.get_pokemon_info(pokemon_id).get("sprite_path", ""))))
+	_pokedex_after_change()
+
+
+func _on_pokedex_form_reached(pokemon_id: String) -> void:
+	_pokedex_mark_seen([Pokedex.slug_of(String(_data.get_pokemon_info(pokemon_id).get("sprite_path", "")))])
+
+
+func _pokedex_mark_seen_combatants(enemies: Array[Combatant]) -> void:
+	var slugs: Array[String] = []
+	for c: Combatant in enemies:
+		slugs.append(Pokedex.slug_of(c.sprite_path))
+	_pokedex_mark_seen(slugs)
+
+
+func _pokedex_mark_seen(slugs: Array[String]) -> void:
+	if not pokedex_enabled():
+		return
+	for s: String in slugs:
+		_pokedex.mark_seen(s)
+	_pokedex_after_change()
+
+
+## Saves the Pokédex and queues the milestones newly reached (announced now, or on the next screen after a battle).
+func _pokedex_after_change() -> void:
+	var fresh: Array[Dictionary] = _pokedex_rewards.newly_unlocked(_caught_species(), _pokedex.milestones_claimed)
+	for m: Dictionary in fresh:
+		_pokedex.milestones_claimed.append(String(m["id"]))
+		_pending_milestones.append(m)
+	_pokedex.save()
+	if not _pending_milestones.is_empty() and _screen_name != SCREEN_BATTLE:
+		_show_milestone_banner()
+
+
+func _show_milestone_banner() -> void:
+	if _pokedex_banner == null or _pending_milestones.is_empty():
+		return
+	var list: Array[Dictionary] = _pending_milestones.duplicate()
+	_pending_milestones = []
+	move_child(_pokedex_banner, get_child_count() - 1)
+	_pokedex_banner.show_milestones(list, _pokedex_rewards.banner_seconds)

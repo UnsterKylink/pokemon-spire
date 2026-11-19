@@ -6,13 +6,16 @@ extends Control
 ## pulse when animations are on), a fan of 5 real cards drawn from the card pool (at least one rare and one legendary
 ## when possible; deterministic per launch, QA: set_fan_cards), the rendered logo (assets/art/title/logo.png, label
 ## fallback), a dark gradient towards the bottom, a horizontal row of menu buttons (Continuer — only with a valid save,
-## its save summary just above it —, Nouvelle partie — confirmation when a save exists —, Tutoriel, Options, Quitter)
+## its save summary just above it —, Nouvelle partie — confirmation when a save exists —, Tutoriel, Pokédex (story 025),
+## Options, Quitter; 6 buttons fit the 1280 px row)
 ## and one discreet statistics line (PlayerStats). Display only: it emits signals and Main acts (resume, new run,
 ## tutorial replay, options, quit). Keyboard / gamepad: the buttons take focus (left / right between them).
 
 signal continue_requested
 signal new_game_requested
 signal tutorial_requested
+## Story 025: « Pokédex ».
+signal pokedex_requested
 signal options_requested
 signal quit_requested
 
@@ -49,13 +52,15 @@ const FAN_DIM: Color = Color(0.8, 0.8, 0.8)
 const SHADE_COLOR: Color = Color("#060818")
 const SHADE_STOPS: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(0.167, 0.0), Vector2(0.528, 0.19), Vector2(0.764, 0.64),
 		Vector2(1.0, 0.98)]
-const BUTTON_SIZE: Vector2 = Vector2(198, 52)
-const BUTTON_FONT: int = 23
-const BUTTON_GAP: int = 18
+## Story 025: 6 buttons (with « Continuer ») = 6 x 182 + 5 x 12 = 1152 px, inside the 1280 px row.
+const BUTTON_SIZE: Vector2 = Vector2(182, 52)
+const BUTTON_FONT: int = 22
+const BUTTON_GAP: int = 12
 const MENU_BOTTOM: float = 22.0
 const TEXT_CONTINUE: String = "Continuer"
 const TEXT_NEW_GAME: String = "Nouvelle partie"
 const TEXT_TUTORIAL: String = "Tutoriel"
+const TEXT_POKEDEX: String = "Pokédex"
 const TEXT_OPTIONS: String = "Options"
 const TEXT_QUIT: String = "Quitter"
 ## The three stats texts (get_stats_lines) and the single line shown.
@@ -268,6 +273,11 @@ func press_tutorial() -> void:
 	tutorial_requested.emit()
 
 
+## « Pokédex » (story 025).
+func press_pokedex() -> void:
+	pokedex_requested.emit()
+
+
 ## « Options ».
 func press_options() -> void:
 	options_requested.emit()
@@ -452,6 +462,7 @@ func _build_menu() -> void:
 	_new_game_button = _button("NewGame", TEXT_NEW_GAME, UiStyle.ACCENT_BLUE, press_new_game)
 	for b: Button in [_continue_button, _new_game_button,
 			_button("Tutorial", TEXT_TUTORIAL, UiStyle.ACCENT_BLUE, press_tutorial),
+			_button("Pokedex", TEXT_POKEDEX, UiStyle.ACCENT_BLUE, press_pokedex),
 			_button("Options", TEXT_OPTIONS, UiStyle.ACCENT_BLUE, press_options),
 			_button("Quit", TEXT_QUIT, UiStyle.TEXT_SUB, press_quit)]:
 		_menu.add_child(b)
