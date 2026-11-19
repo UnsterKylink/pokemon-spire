@@ -2711,7 +2711,7 @@ func qa_show_tip(what: String, index: int = 0) -> PackedStringArray:
 			_keyword_tip.visible = false
 		return PackedStringArray()
 	_show_tip_of(c)
-	return _keyword_tip.get_texts()
+	return _keyword_tip.get_texts().duplicate()
 
 
 ## Story 023: the Control carrying the tooltip `what` (see qa_show_tip); null when absent. Also used by the tutorial.
@@ -2775,7 +2775,10 @@ func get_tutorial_target(id: String) -> Control:
 			for i: int in _enemy_views.size():
 				if _battle.enemies[i].is_alive():
 					var v: EnemyView = _enemy_views[i]
-					c = v.panel if id == "enemy" else (v.intent_label if id == "intent" else v.type_badge)
+					if id == "enemy_type":  # the first pill (the row itself spans the whole slot)
+						c = v.type_badge.get_child(0) as Control if v.type_badge.get_child_count() > 0 else null
+					else:
+						c = v.panel if id == "enemy" else v.intent_label
 					break
 		"player_type":
 			c = _player_type_badge

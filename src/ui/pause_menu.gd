@@ -165,6 +165,7 @@ func _show_confirm(kind: String) -> void:
 func _build() -> void:
 	if _main_box != null:
 		return
+	theme = UiStyle.make_theme()  # art-bible fonts / buttons, as the other menu screens
 	var dim := ColorRect.new()
 	dim.color = COLOR_DIM
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)

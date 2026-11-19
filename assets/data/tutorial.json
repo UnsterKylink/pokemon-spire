@@ -1,5 +1,5 @@
 {
-	"_doc": "Premier combat guide (story 023). Lu par src/main.gd et src/ui/tutorial_overlay.gd (TutorialOverlay). steps: bulles dans l'ordre ; target = element de l'ecran de combat pointe (BattleScreen.get_tutorial_target : energy, attack_card, switch_card, block_card, hand, enemy, intent, enemy_type, player_type, elan, talent, end_turn ; absent ou cache = bulle centree sans fleche) ; advance_on (optionnel) = action du joueur qui passe aussi a l'etape suivante (card_played = une carte jouee, switch = changement de Pokemon, end_turn = fin de tour) ; « Suivant » marche toujours. replay: combat fixe rejoue depuis l'ecran titre (bac a sable : aucune sauvegarde, aucune statistique) : starter, team = Pokemon ajoutes a l'equipe (leurs cartes rejoignent le deck), encounter = rencontre de pokemon.json, seed = graine des generateurs (combat deterministe), hand = ids des cartes de la premiere main (prises dans la pioche, dans cet ordre).",
+	"_doc": "Premier combat guide (story 023). Lu par src/main.gd et src/ui/tutorial_overlay.gd (TutorialOverlay). steps: bulles dans l'ordre ; target = element de l'ecran de combat pointe (BattleScreen.get_tutorial_target : energy, attack_card, switch_card, block_card, hand, enemy, intent, enemy_type, player_type, elan, talent, end_turn ; absent ou cache = bulle centree sans fleche) ; advance_on (optionnel) = action du joueur qui passe aussi a l'etape suivante (card_played = une carte jouee, switch = changement de Pokemon, end_turn = fin de tour) ; « Suivant » marche toujours. replay: combat fixe rejoue depuis l'ecran titre (bac a sable : aucune sauvegarde, aucune statistique) : starter, team = Pokemon ajoutes a l'equipe (leurs cartes rejoignent le deck), encounter = rencontre de pokemon.json, seed = graine des generateurs (combat deterministe), hand = ids des cartes de la premiere main (prises dans la pioche, dans cet ordre). side (optionnel) = cote de la bulle par rapport a la cible (left, right, above, below ; defaut : au-dessus d'une cible en bas d'ecran, en dessous sinon).",
 	"replay": {
 		"starter": "salameche",
 		"team": ["pikachu"],
@@ -14,9 +14,9 @@
 			"text": "En haut à gauche : son coût en énergie. Au centre : les dégâts qu'elle inflige. La pastille de couleur indique son type (Feu, Eau…)."},
 		{"id": "play_card", "target": "attack_card", "advance_on": "card_played", "title": "Jouer une carte",
 			"text": "Clique sur cette carte, puis sur l'ennemi que tu veux viser. Essaie maintenant !"},
-		{"id": "intent", "target": "intent", "title": "L'intention ennemie",
+		{"id": "intent", "target": "intent", "side": "left", "title": "L'intention ennemie",
 			"text": "Au-dessus de chaque ennemi, son intention annonce ce qu'il fera à la fin de ton tour : attaquer, se protéger, infliger un statut… Survole-la pour le détail."},
-		{"id": "types", "target": "enemy_type", "title": "Types et efficacité",
+		{"id": "types", "target": "enemy_type", "side": "left", "title": "Types et efficacité",
 			"text": "Comme dans Pokémon, une attaque super efficace inflige le double de dégâts, une attaque peu efficace la moitié. Quand une attaque est sélectionnée, l'ennemi se teinte en vert (super efficace) ou en rouge (peu efficace). Survole une pastille de type pour ses forces et faiblesses."},
 		{"id": "switch", "target": "switch_card", "advance_on": "switch", "title": "Changer de Pokémon",
 			"text": "Cette carte appartient à un autre Pokémon de ton équipe. La jouer le fait entrer sur le terrain : ses types défensifs remplacent ceux du Pokémon actif, et son Talent se déclenche à l'entrée."},

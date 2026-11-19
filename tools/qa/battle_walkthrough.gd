@@ -33,7 +33,8 @@ extends SceneTree
 ## Story 033 (cohérence visuelle: every touched screen in the « menu Pokémon » look, official artwork off-battle,
 ## illustrated events, capture panel, effectiveness float, zone-rule banner; see _coherence_shots; filter `story-033`).
 ## Story 022 (musique et sons: the Options panel with the Musique / Effets sliders, before / after a change; prints the
-## music track Main picks per screen; see _audio_shots; filter `story-022`).
+## music track Main picks per screen; see _audio_shots; filter `story-022`). Story 023 (title screen, options fullscreen, pause
+## + confirmations, battle tooltips, tutorial replay; see _menu_shots; filter `story-023`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 ## Story 032: run seed of the pacing shots (zone maps / zone rule).
@@ -2002,7 +2003,7 @@ func _pacing_map_line(tag: String) -> void:
 
 func _pill_tooltip(bs: BattleScreen) -> String:
 	var pill: Control = bs.find_child("FieldRulePill", true, false) as Control
-	return pill.tooltip_text if pill != null else "?"
+	return bs.get_field_rule_tip_text() if pill != null else "?"  # story 023: the pill uses the KeywordTooltip
 
 
 ## Story 033: scratch save slot and seeds of the coherence shots.
@@ -2230,7 +2231,148 @@ func _audio_shots() -> void:
 		f.close()
 
 
+## Story 023: scratch save / stats of the menu shots (deleted at the end; the player's files are never touched).
+const MENU_SAVE_PATH: String = "user://qa_story023_savegame.json"
+const MENU_STATS_PATH: String = "user://qa_story023_stats.json"
+const MENU_SEED: int = 2323
+
+
+func _menu_clean() -> void:
+	for p: String in [MENU_SAVE_PATH, MENU_SAVE_PATH + ".bak", MENU_SAVE_PATH + ".tmp", MENU_STATS_PATH, MENU_STATS_PATH + ".tmp"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+
+
+func _menu_line(tag: String) -> void:
+	var line: String = "023 %s: screen=%s paused=%s" % [tag, _main.get_current_screen_name(), paused]
+	var t: TitleScreen = _main.get_title_screen()
+	if t != null:
+		line += " buttons=%s stats=%s pokemon=%s" % [t.get_button_texts(), t.get_stats_lines(), t.get_pokemon_sprite().get_file()]
+	var tut: TutorialOverlay = _main.get_tutorial_overlay()
+	if tut != null:
+		line += " step=%d/%d %s target=%s" % [tut.get_step_index() + 1, tut.get_step_count(), tut.get_step_id(), tut.has_target()]
+	if _main.is_paused():
+		line += " confirm=%s" % _main.get_pause_menu().get_confirm_kind()
+	print(line)
+
+
+## Story 023 (filter `story-023`): title screen (without / with a save, new-game confirmation), options with the fullscreen
+## toggle, pause overlay + abandon / quit confirmations, tooltips on an intent / a type pill / the energy gem / a status
+## chip, the tutorial replay (energy, attack card, intent, types with the hint tint, switch, end of turn).
+func _menu_shots() -> void:
+	var settings_backup: Dictionary = GameSettings.load_all()
+	_menu_clean()
+	var stats := PlayerStats.load_from(MENU_STATS_PATH)  # a player with some history, so the panel shows real numbers
+	stats.runs_played = 7
+	stats.runs_won = 1
+	stats.best_score = PlayerStats.VICTORY_SCORE
+	stats.best_text = PlayerStats.TEXT_VICTORY
+	stats.tutorial_done = true
+	stats.save()
+	_main.qa_set_save_path(MENU_SAVE_PATH)
+	_main.qa_set_stats_path(MENU_STATS_PATH)
+	_main.qa_enable_title_screen(true)
+	_main.qa_quit_to_title()
+	await create_timer(0.6).timeout
+	_menu_line("title no save")
+	await _shot("01-titre-sans-sauvegarde")
+	_main.get_title_screen().press_new_game()
+	_main.starter_choose(0)
+	await create_timer(0.3).timeout
+	_main.qa_quit_to_title()
+	await create_timer(0.6).timeout
+	_menu_line("title with save")
+	await _shot("02-titre-avec-sauvegarde")
+	_main.get_title_screen().press_new_game()
+	_menu_line("title confirm")
+	await _shot("03-titre-confirmation-nouvelle-partie")
+	_main.handle_escape()
+	GameSettings.set_value(GameSettings.KEY_FULLSCREEN, true)  # saved only (not applied to the QA window)
+	_main.open_options()
+	print("023 options fullscreen checked=%s" % _main.get_options_panel().is_fullscreen_checked())
+	await _shot("04-options-plein-ecran")
+	_main.get_options_panel().close()
+	GameSettings.set_value(GameSettings.KEY_FULLSCREEN, false)
+	_main.get_title_screen().press_continue()
+	await create_timer(0.3).timeout
+	_main.start_encounter("trio_vol", "wild")
+	await create_timer(0.8).timeout
+	var bs: BattleScreen = _main.get_battle_screen()
+	for i: int in 60:  # the zone-rule banner fades out first
+		if bs.get_field_banner() == null:
+			break
+		await create_timer(0.1).timeout
+	bs.qa_apply_status(0, "burn", 3)
+	print("023 tip intent: %s" % [bs.qa_show_tip("intent", 0)])
+	await _shot("05-infobulle-intention")
+	print("023 tip type: %s" % [bs.qa_show_tip("enemy_type", 2)])
+	await _shot("06-infobulle-type")
+	print("023 tip energy: %s" % [bs.qa_show_tip("energy")])
+	await _shot("07-infobulle-energie")
+	print("023 tip status: %s" % [bs.qa_show_tip("enemy_status", 0)])
+	await _shot("08-infobulle-statut")
+	print("023 tip elan: %s / talent: %s" % [bs.qa_show_tip("elan"), bs.qa_show_tip("talent")])
+	await _shot("08b-infobulle-talent")
+	bs.get_keyword_tooltip().visible = false
+	print("023 escape opens pause: %s" % _main.handle_escape())
+	_menu_line("pause")
+	await _shot("09-pause")
+	_main.get_pause_menu().press_abandon()
+	_menu_line("abandon confirm")
+	await _shot("10-pause-abandon-confirmation")
+	_main.handle_escape()
+	_main.get_pause_menu().press_quit()
+	await _shot("11-pause-quitter-confirmation")
+	_main.handle_escape()
+	_main.get_pause_menu().press_abandon()
+	_main.get_pause_menu().confirm_abandon()
+	await create_timer(0.6).timeout
+	_menu_line("after abandon")
+	print("023 stats after abandon: %s save=%s" % [PlayerStats.load_from(MENU_STATS_PATH).to_dict(), _main.qa_has_save()])
+	await _shot("12-titre-apres-abandon")
+	_main.get_title_screen().press_tutorial()
+	await create_timer(0.8).timeout
+	var tut: TutorialOverlay = _main.get_tutorial_overlay()
+	_menu_line("tutorial 1")
+	await _shot("13-tutoriel-1-energie")
+	tut.next()
+	_menu_line("tutorial 2")
+	await _shot("14-tutoriel-2-carte-attaque")
+	var tbs: BattleScreen = _main.get_battle_screen()
+	tut.next()
+	tbs.play_card_direct(0, 0)  # step 3 ends when a card is played
+	await create_timer(1.5).timeout
+	_menu_line("tutorial 4")
+	await _shot("15-tutoriel-4-intention")
+	tut.next()
+	tbs.select_card(0)  # Flammèche selected: the Chenipan gets the green « super efficace » tint
+	_menu_line("tutorial 5")
+	await _shot("16-tutoriel-5-types")
+	tbs.click_background()
+	tut.next()
+	_menu_line("tutorial 6")
+	await _shot("17-tutoriel-6-switch")
+	tut.next()
+	tut.next()
+	tut.next()
+	_menu_line("tutorial 9")
+	await _shot("18-tutoriel-9-fin-de-tour")
+	tut.skip()
+	await create_timer(0.6).timeout
+	_menu_line("tutorial skipped")
+	_main.qa_enable_title_screen(false)
+	_menu_clean()
+	var f: FileAccess = FileAccess.open(GameSettings.PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(settings_backup, "  "))
+		f.close()
+
+
 func _run() -> void:
+	if _filter == "story-023":
+		await _menu_shots()
+		quit(0)
+		return
 	if _filter == "story-022":
 		await _audio_shots()
 		quit(0)

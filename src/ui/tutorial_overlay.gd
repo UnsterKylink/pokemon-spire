@@ -113,11 +113,16 @@ func skip() -> void:
 		_finish(true)
 
 
-## The player did `action` ("card_played", "switch", "end_turn"): ends the current step if it waits for it.
+## The player did `action` ("card_played", "switch", "end_turn"): ends the current step if it waits for it; when the
+## NEXT step waits for it (the player acted one bubble early), that step is passed too.
 func notify_action(action: String) -> void:
 	if _done or _index < 0:
 		return
 	if String(_steps[_index].get("advance_on", "")) == action:
+		next()
+	elif _index + 1 < _steps.size() and String(_steps[_index].get("advance_on", "")).is_empty() \
+			and String(_steps[_index + 1].get("advance_on", "")) == action:
+		_show_step(_index + 1)
 		next()
 
 
@@ -161,7 +166,8 @@ func _update_target() -> void:
 		_has_target = true
 
 
-## Bubble above the target when it sits in the lower half, below it otherwise; centred when there is no target.
+## Bubble placement: the step's `side` ("left" | "right" | "above" | "below"; default: above a target in the lower half
+## of the screen, below one in the upper half), centred when there is no target; always kept inside the screen.
 func _place_bubble() -> void:
 	if _bubble == null:
 		return
@@ -172,11 +178,20 @@ func _place_bubble() -> void:
 	var pos: Vector2 = (vp - bs) * 0.5
 	if _has_target:
 		var r: Rect2 = _target_rect
+		var side: String = String(_steps[_index].get("side", "")) if _index >= 0 and _index < _steps.size() else ""
+		if side.is_empty():
+			side = "above" if r.get_center().y > vp.y * 0.5 else "below"
 		pos.x = r.get_center().x - bs.x * 0.5
-		if r.get_center().y > vp.y * 0.5:
-			pos.y = r.position.y - BUBBLE_GAP - bs.y
-		else:
-			pos.y = r.end.y + BUBBLE_GAP
+		pos.y = r.get_center().y - bs.y * 0.5
+		match side:
+			"above":
+				pos.y = r.position.y - BUBBLE_GAP - bs.y
+			"below":
+				pos.y = r.end.y + BUBBLE_GAP
+			"left":
+				pos.x = r.position.x - BUBBLE_GAP - bs.x
+			"right":
+				pos.x = r.end.x + BUBBLE_GAP
 	pos.x = clampf(pos.x, MARGIN, vp.x - bs.x - MARGIN)
 	pos.y = clampf(pos.y, MARGIN, vp.y - bs.y - MARGIN)
 	_bubble.position = pos - get_global_rect().position
@@ -189,22 +204,28 @@ func _draw() -> void:
 	var r: Rect2 = Rect2(_target_rect.position - origin, _target_rect.size)
 	var pulse: float = 0.75 + 0.25 * sin(_time * PULSE_SPEED) if _motion else 1.0
 	var col: Color = Color(UiStyle.ACCENT_YELLOW, pulse)
+	var ink: Color = Color(UiStyle.OUTLINE, 0.9)
 	draw_rect(r.grow(2.0), Color(UiStyle.OUTLINE, 0.8 * pulse), false, FRAME_WIDTH + 3.0)
 	draw_rect(r, col, false, FRAME_WIDTH)
-	# Arrow from the bubble edge to the target edge.
+	# Arrow from the bubble edge to the nearest point of the target frame (skipped when they overlap).
 	var b: Rect2 = Rect2(_bubble.position, _bubble.size)
-	var below: bool = b.position.y > r.get_center().y
-	var tip: Vector2 = Vector2(clampf(b.get_center().x, r.position.x + 12.0, r.end.x - 12.0),
-			r.end.y + 4.0 if below else r.position.y - 4.0)
-	var base_y: float = b.position.y if below else b.end.y
-	var base_x: float = clampf(tip.x, b.position.x + 24.0, b.end.x - 24.0)
-	var dir: float = -1.0 if below else 1.0
-	draw_line(Vector2(base_x, base_y), tip, Color(UiStyle.OUTLINE, 0.9), 9.0)
-	draw_line(Vector2(base_x, base_y), tip, col, 5.0)
-	var head_l: Vector2 = tip + Vector2(-ARROW_SIZE * 0.8, dir * -ARROW_SIZE)
-	var head_r: Vector2 = tip + Vector2(ARROW_SIZE * 0.8, dir * -ARROW_SIZE)
-	draw_colored_polygon(PackedVector2Array([tip, head_l, head_r]), col)
-	draw_polyline(PackedVector2Array([tip, head_l, head_r, tip]), Color(UiStyle.OUTLINE, 0.9), 2.0)
+	var tip: Vector2 = _closest_on_rect(r.grow(4.0), b.get_center())
+	var base: Vector2 = _closest_on_rect(b, tip)
+	if base.distance_to(tip) < ARROW_SIZE * 1.2 or b.intersects(r):
+		return
+	var dir: Vector2 = (tip - base).normalized()
+	var normal: Vector2 = Vector2(-dir.y, dir.x)
+	var neck: Vector2 = tip - dir * ARROW_SIZE
+	draw_line(base, neck, ink, 9.0)
+	draw_line(base, neck, col, 5.0)
+	var head: PackedVector2Array = PackedVector2Array([tip, neck + normal * ARROW_SIZE * 0.8, neck - normal * ARROW_SIZE * 0.8])
+	draw_colored_polygon(head, col)
+	draw_polyline(PackedVector2Array([head[0], head[1], head[2], head[0]]), ink, 2.0)
+
+
+## The point of `rect` closest to `p` (p itself when inside).
+static func _closest_on_rect(rect: Rect2, p: Vector2) -> Vector2:
+	return Vector2(clampf(p.x, rect.position.x, rect.end.x), clampf(p.y, rect.position.y, rect.end.y))
 
 
 func _build() -> void:
