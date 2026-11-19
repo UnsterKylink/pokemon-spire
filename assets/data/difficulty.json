@@ -29,14 +29,12 @@
 		{"level": 8, "name": "Inflation", "description": "Les prix du Poké Mart augmentent de 40 %.", "effects": [
 			{"type": "shop_prices", "value": 1.4}
 		]},
-		{"level": 9, "name": "Ligue d'élite", "description": "Le Conseil 4 et le Maître ont plus de PV et frappent plus fort.", "effects": [
-			{"type": "enemy_hp", "rooms": ["league_member", "league_champion"], "value": 1.1},
-			{"type": "enemy_strength", "rooms": ["league_member", "league_champion"], "value": 1}
+		{"level": 9, "name": "Ligue d'élite", "description": "Le Conseil 4 et le Maître ont plus de PV.", "effects": [
+			{"type": "enemy_hp", "rooms": ["league_member", "league_champion"], "value": 1.08}
 		]},
-		{"level": 10, "name": "Éthernatos déchaîné", "description": "Éthernatos a plus de PV, frappe plus fort et récupère des PV à chaque changement de phase.", "effects": [
-			{"type": "enemy_hp", "rooms": ["league_final_boss"], "value": 1.15},
-			{"type": "enemy_strength", "rooms": ["league_final_boss"], "value": 1},
-			{"type": "boss_phase_heal", "value": 10}
+		{"level": 10, "name": "Éthernatos déchaîné", "description": "Éthernatos a plus de PV et récupère des PV à chaque changement de phase.", "effects": [
+			{"type": "enemy_hp", "rooms": ["league_final_boss"], "value": 1.05},
+			{"type": "boss_phase_heal", "value": 6}
 		]}
 	],
 	"cosmetics": {

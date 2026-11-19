@@ -2539,7 +2539,7 @@ func _diff_line(tag: String) -> void:
 		line += " stats=\"%s\" prestige=\"%s\"" % [t.get_stats_line(), t.get_prestige_text()]
 	var ss: StarterScreen = _main.get_starter_screen()
 	if ss != null:
-		line += " selector=%d max=%d" % [ss.get_level(), _main.max_selectable_level()]
+		line += " selector=%d max=%d lines=%d" % [ss.get_level(), _main.max_selectable_level(), ss.get_modifier_lines().size()]
 	if _main.get_run_state() != null and _main.get_hud().visible:
 		line += " hud=\"%s\" tip=\"%s\"" % [_main.get_hud().get_level_text(), _main.get_hud().get_level_tooltip().replace("\n", " | ")]
 	var v: RunEndScreen = _main.get_victory_screen()
@@ -2567,11 +2567,14 @@ func _difficulty_shots() -> void:
 	await create_timer(0.4).timeout
 	_diff_line("starter default")
 	await _shot("02-choix-starter-difficulte-6")
-	_main.get_starter_screen().set_level(3)
-	_diff_line("starter level 3")
-	await _shot("03-choix-starter-difficulte-3")
+	_main.qa_set_difficulty_level(10)  # QA: every level selectable, to show the full list
+	_main.start_new_run(DIFF_QA_SEED)
+	await create_timer(0.4).timeout
+	_diff_line("starter level 10")
+	await _shot("03-choix-starter-difficulte-10")
 	_main.get_starter_screen().set_level(6)
 	_main.starter_choose(0)
+	_main.qa_set_difficulty_level(-1)
 	await create_timer(0.3).timeout
 	_main.qa_start_boss()
 	await create_timer(0.8).timeout

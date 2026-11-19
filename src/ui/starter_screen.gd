@@ -16,7 +16,11 @@ const ROW_MAX_WIDTH: float = 1220.0
 const CARD_GAP: int = 24
 const COLOR_BG: Color = UiStyle.BG_DEEP
 ## Story 026: card height when the difficulty selector + modifier panel are shown (the column stays within 720 px).
-const CARD_HEIGHT_WITH_LEVELS: float = 340.0
+const CARD_HEIGHT_WITH_LEVELS: float = 360.0
+## Story 026: artwork size in that compact layout; the modifier list uses MODIFIER_COLUMNS columns of MODIFIER_COL_WIDTH px.
+const SPRITE_SIZE_WITH_LEVELS: Vector2 = Vector2(140, 140)
+const MODIFIER_COLUMNS: int = 2
+const MODIFIER_COL_WIDTH: float = 530.0
 const TEXT_LEVEL: String = "Difficulté : %d"
 const TEXT_LEVEL_TITLE: String = "Difficulté"
 const TEXT_LEVEL_LOCKED: String = "Niveau max débloqué : %d / %d — gagne une partie complète pour débloquer le suivant."
@@ -37,6 +41,8 @@ var _level_prev: Button
 var _level_next: Button
 var _level_hint: Label
 var _modifiers_label: Label
+var _modifiers_grid: GridContainer
+var _sprite_size: Vector2 = SPRITE_SIZE
 var _card_height: float = CARD_SIZE.y
 
 
@@ -67,9 +73,22 @@ func setup_difficulty(table: Difficulty, max_selectable: int, default_level: int
 	_max_selectable = clampi(max_selectable, 0, table.max_level if table != null else 0)
 	_level_box.visible = table != null
 	_card_height = CARD_HEIGHT_WITH_LEVELS if table != null else CARD_SIZE.y
+	_sprite_size = SPRITE_SIZE_WITH_LEVELS if table != null else SPRITE_SIZE
 	for child: Node in _cards_box.get_children():
 		(child as Control).custom_minimum_size.y = _card_height
+		var sprite: Control = child.find_child("Sprite", true, false) as Control
+		if sprite != null:
+			sprite.custom_minimum_size = _sprite_size
 	set_level(_max_selectable if default_level < 0 else default_level)
+
+
+## Story 026: the lines of the modifier panel (QA).
+func get_modifier_lines() -> Array[String]:
+	var out: Array[String] = []
+	for c: Node in _modifiers_grid.get_children():
+		if not c.is_queued_for_deletion():
+			out.append((c as Label).text)
+	return out
 
 
 ## Story 026: the chosen difficulty level (0 without a selector).
@@ -88,8 +107,21 @@ func set_level(level: int) -> void:
 		_level_next.disabled = _level >= _max_selectable
 		_level_hint.text = TEXT_LEVEL_LOCKED % [_max_selectable, _difficulty.max_level]
 		var lines: Array[String] = _difficulty.describe_lines(_level)
-		_modifiers_label.text = (TEXT_MODIFIERS_HEADER + "\n" if _level > 0 else "") + "\n".join(lines)
-		_level_box.tooltip_text = _modifiers_label.text
+		_modifiers_label.text = TEXT_MODIFIERS_HEADER if _level > 0 else lines[0]
+		for c: Node in _modifiers_grid.get_children():
+			_modifiers_grid.remove_child(c)
+			c.queue_free()
+		if _level > 0:
+			for line: String in lines:
+				var l := Label.new()
+				l.text = line
+				l.custom_minimum_size = Vector2(MODIFIER_COL_WIDTH, 0)
+				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				l.add_theme_font_size_override("font_size", 12)
+				UiStyle.dark_label(l)
+				_modifiers_grid.add_child(l)
+		_level_box.tooltip_text = "\n".join(lines)
 	if changed:
 		level_changed.emit(_level)
 
@@ -132,9 +164,9 @@ func _make_choice_widget(data: GameData, pokemon_id: String, index: int) -> Butt
 	var sprite := TextureRect.new()
 	sprite.name = "Sprite"
 	sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sprite.custom_minimum_size = SPRITE_SIZE
+	sprite.custom_minimum_size = _sprite_size
 	PokemonArt.apply(sprite, String(info["sprite_path"]))  # story 033: official artwork
-	sprite.custom_minimum_size = SPRITE_SIZE
+	sprite.custom_minimum_size = _sprite_size
 	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	box.add_child(sprite)
@@ -235,14 +267,22 @@ func _build_level_selector(column: VBoxContainer) -> void:
 	panel.name = "ModifiersPanel"
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_theme_stylebox_override("panel", UiStyle.menu_sub_panel(UiStyle.FRAME_BLUE, 8.0))
-	panel.custom_minimum_size = Vector2(900, 0)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_level_box.add_child(panel)
+	var pbox := VBoxContainer.new()
+	pbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pbox.add_theme_constant_override("separation", 2)
+	panel.add_child(pbox)
 	_modifiers_label = Label.new()
 	_modifiers_label.name = "Modifiers"
 	_modifiers_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_modifiers_label.add_theme_font_size_override("font_size", 13)
-	_modifiers_label.add_theme_constant_override("line_spacing", -2)
-	_modifiers_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	UiStyle.dark_label(_modifiers_label)
-	panel.add_child(_modifiers_label)
+	UiStyle.dark_label(_modifiers_label, UiStyle.TEXT_SUB)
+	pbox.add_child(_modifiers_label)
+	_modifiers_grid = GridContainer.new()
+	_modifiers_grid.name = "ModifierList"
+	_modifiers_grid.columns = MODIFIER_COLUMNS
+	_modifiers_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_modifiers_grid.add_theme_constant_override("h_separation", 18)
+	_modifiers_grid.add_theme_constant_override("v_separation", 1)
+	pbox.add_child(_modifiers_grid)
