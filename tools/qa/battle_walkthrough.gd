@@ -2259,6 +2259,10 @@ func _menu_line(tag: String) -> void:
 ## Story 023 (filter `story-023`): title screen (without / with a save, new-game confirmation), options with the fullscreen
 ## toggle, pause overlay + abandon / quit confirmations, tooltips on an intent / a type pill / the energy gem / a status
 ## chip, the tutorial replay (energy, attack card, intent, types with the hint tint, switch, end of turn).
+## Story 023 (title layout B): cards forced into the title fan so the title shots are stable (a rare and a legendary).
+const MENU_FAN: PackedStringArray = ["eclair", "danse_flamme", "lance_flammes", "pistolet_a_o", "feu_sacre"]
+
+
 func _menu_shots() -> void:
 	var settings_backup: Dictionary = GameSettings.load_all()
 	_menu_clean()
@@ -2273,6 +2277,7 @@ func _menu_shots() -> void:
 	_main.qa_set_stats_path(MENU_STATS_PATH)
 	_main.qa_enable_title_screen(true)
 	_main.qa_quit_to_title()
+	_main.get_title_screen().set_fan_cards(MENU_FAN)
 	await create_timer(0.6).timeout
 	_menu_line("title no save")
 	await _shot("01-titre-sans-sauvegarde")
@@ -2280,6 +2285,7 @@ func _menu_shots() -> void:
 	_main.starter_choose(0)
 	await create_timer(0.3).timeout
 	_main.qa_quit_to_title()
+	_main.get_title_screen().set_fan_cards(MENU_FAN)
 	await create_timer(0.6).timeout
 	_menu_line("title with save")
 	await _shot("02-titre-avec-sauvegarde")

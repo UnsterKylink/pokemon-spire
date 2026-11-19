@@ -1897,7 +1897,7 @@ func _show_title_screen() -> void:
 	_title_screen.options_requested.connect(open_options)
 	_title_screen.quit_requested.connect(func() -> void: get_tree().quit())
 	_set_screen(_title_screen, SCREEN_TITLE)
-	_title_screen.setup(_stats, summary, error, _pick_title_pokemon())
+	_title_screen.setup(_stats, summary, error, _pick_title_pokemon(), _data)
 
 
 ## One line under « Continuer »: "<Pokémon> — Zone 3/8, 2 badges" or "<Pokémon> — Ligue, combat 2/6".
