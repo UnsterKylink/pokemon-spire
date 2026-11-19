@@ -1,12 +1,12 @@
 # Story 023: Menu principal, pause, options et tutoriel
 
 > **Epic**: Pokémon Spire
-> **Status**: Ready
+> **Status**: In Progress
 > **Layer**: Presentation
 > **Type**: UI
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: [set by /dev-story when implementation begins]
+> **Last Updated**: 2026-11-19
 
 ## Context
 
@@ -33,6 +33,7 @@
 - [ ] Options : volumes, vitesse des animations, plein écran, mémorisées.
 - [ ] Infobulles sur les mots-clés (protection, statuts, types, efficacité…) au survol des cartes et intentions.
 - [ ] Un tutoriel court au premier lancement explique le switch, l'énergie et les types ; il peut être passé et revu.
+- [ ] **Choix du joueur (2026-11-19)** : tutoriel = **premier combat guidé** (bulles pas à pas pointant énergie, carte, intention, switch, types, Élan, fin de tour ; passable ; revoyable depuis le menu). Écran titre = image `assets/art/title/title.jpg` + musique titre + **logo « Pokémon Spire »** (jaune, contour bleu) + **un Pokémon animé tiré au hasard** + **statistiques** (parties jouées / gagnées / meilleur résultat, sauvegardées).
 
 ---
 
