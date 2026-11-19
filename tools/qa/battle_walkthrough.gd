@@ -35,7 +35,9 @@ extends SceneTree
 ## Story 022 (musique et sons: the Options panel with the Musique / Effets sliders, before / after a change; prints the
 ## music track Main picks per screen; see _audio_shots; filter `story-022`). Story 023 (title screen, options fullscreen, pause
 ## + confirmations, battle tooltips, tutorial replay; see _menu_shots; filter `story-023`). Story 025 (Pokédex: title
-## button, grid, filters, sheets, milestones, banner, 4 starters; see _pokedex_shots; filter `story-025`).
+## button, grid, filters, sheets, milestones, banner, 4 starters; see _pokedex_shots; filter `story-025`). Story 026
+## (difficulty levels: title badge, starter selector, HUD badge, prestige trims, victory unlock, Pokédex header; see
+## _difficulty_shots; filter `story-026`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 ## Story 032: run seed of the pacing shots (zone maps / zone rule).
@@ -2500,7 +2502,115 @@ func _pokedex_shots() -> void:
 	_dex_clean()
 
 
+## Story 026: difficulty shots (filter `story-026`): title with the prestige badge + « Niveau max » (and the gold trim on
+## the fan), the starter screen with the level selector and the cumulative modifier list, a battle with the HUD badge
+## « Niv. N » (cards with the prestige trim), the deck with the platinum trim, the victory screen with the level and the
+## unlock line, the Pokédex header. Scratch stats / save files only; the player's settings are restored.
+const DIFF_QA_STATS: String = "user://qa_story026_stats.json"
+const DIFF_QA_SAVE: String = "user://qa_story026_save.json"
+const DIFF_QA_SEED: int = 2626
+
+
+func _diff_clean() -> void:
+	for p: String in [DIFF_QA_STATS, DIFF_QA_STATS + ".tmp", DIFF_QA_SAVE, DIFF_QA_SAVE + ".bak", DIFF_QA_SAVE + ".tmp"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+
+
+func _diff_stats(unlocked: int, best_won: int) -> void:
+	var st := PlayerStats.new()
+	st.path = DIFF_QA_STATS
+	st.runs_played = 14
+	st.runs_won = 6
+	st.best_score = PlayerStats.VICTORY_SCORE
+	st.best_text = PlayerStats.TEXT_VICTORY
+	st.tutorial_done = true
+	st.level_unlocked = unlocked
+	st.best_level_won = best_won
+	st.save()
+	_main.qa_set_stats_path(DIFF_QA_STATS)
+
+
+func _diff_line(tag: String) -> void:
+	var line: String = "026 %s: screen=%s level=%d trim=%s" % [tag, _main.get_current_screen_name(), _main.get_difficulty_level(),
+			CardFace.prestige_trim.to_html(true)]
+	var t: TitleScreen = _main.get_title_screen()
+	if t != null:
+		line += " stats=\"%s\" prestige=\"%s\"" % [t.get_stats_line(), t.get_prestige_text()]
+	var ss: StarterScreen = _main.get_starter_screen()
+	if ss != null:
+		line += " selector=%d max=%d" % [ss.get_level(), _main.max_selectable_level()]
+	if _main.get_run_state() != null and _main.get_hud().visible:
+		line += " hud=\"%s\" tip=\"%s\"" % [_main.get_hud().get_level_text(), _main.get_hud().get_level_tooltip().replace("\n", " | ")]
+	var v: RunEndScreen = _main.get_victory_screen()
+	if v != null:
+		line += " end=\"%s\"" % v.get_level_text()
+	var ps: PokedexScreen = _main.get_pokedex_screen()
+	if ps != null:
+		line += " dex_level=\"%s\"" % ps.get_level_text()
+	print(line)
+
+
+func _difficulty_shots() -> void:
+	_diff_clean()
+	var saved_prestige: bool = GameSettings.prestige_frame_enabled()
+	GameSettings.set_value(GameSettings.KEY_PRESTIGE_FRAME, true)
+	_main.qa_set_save_path(DIFF_QA_SAVE)
+	_diff_stats(6, 5)  # levels 0..6 unlocked, level 5 won -> gold trim
+	_main.qa_enable_title_screen(true)
+	_main.qa_quit_to_title()
+	_main.get_title_screen().set_fan_cards(MENU_FAN)
+	await create_timer(0.6).timeout
+	_diff_line("title")
+	await _shot("01-titre-badge-prestige")
+	_main.start_new_run(DIFF_QA_SEED)
+	await create_timer(0.4).timeout
+	_diff_line("starter default")
+	await _shot("02-choix-starter-difficulte-6")
+	_main.get_starter_screen().set_level(3)
+	_diff_line("starter level 3")
+	await _shot("03-choix-starter-difficulte-3")
+	_main.get_starter_screen().set_level(6)
+	_main.starter_choose(0)
+	await create_timer(0.3).timeout
+	_main.qa_start_boss()
+	await create_timer(0.8).timeout
+	_diff_line("battle")
+	await _shot("04-combat-badge-niv6-liseré-or")
+	_diff_stats(10, 10)  # platinum trim
+	_main.toggle_deck()
+	await create_timer(0.4).timeout
+	_diff_line("deck platinum")
+	await _shot("05-deck-liseré-platine")
+	_main.toggle_deck()
+	_diff_stats(6, 5)
+	_main.qa_skip_to_league()
+	_main.qa_set_league_stage(_main.get_league().size() - 1)
+	_main.qa_win_league_fight()
+	await create_timer(0.5).timeout
+	_diff_line("victory")
+	await _shot("06-victoire-niveau-6-deblocage")
+	_main.qa_quit_to_title()
+	_main.get_title_screen().set_fan_cards(MENU_FAN)
+	await create_timer(0.6).timeout
+	_diff_line("title after win")
+	await _shot("07-titre-apres-victoire")
+	_main.get_title_screen().press_pokedex()
+	await create_timer(0.3).timeout
+	_main.get_pokedex_screen().get_grid().load_visible_now()
+	_diff_line("pokedex")
+	await _shot("08-pokedex-entete-niveau")
+	_main.qa_enable_title_screen(false)
+	GameSettings.set_value(GameSettings.KEY_PRESTIGE_FRAME, saved_prestige)
+	_main.qa_set_stats_path("")
+	_diff_clean()
+
+
 func _run() -> void:
+	if _filter == "story-026":
+		await _difficulty_shots()
+		quit(0)
+		return
 	if _filter == "story-025":
 		await _pokedex_shots()
 		quit(0)

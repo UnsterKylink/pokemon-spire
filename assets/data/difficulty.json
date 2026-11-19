@@ -3,22 +3,21 @@
 	"max_level": 10,
 	"levels": [
 		{"level": 1, "name": "Élites aguerris", "description": "Les dresseurs d'élite ont plus de PV et frappent plus fort.", "effects": [
-			{"type": "enemy_hp", "rooms": ["elite"], "value": 1.15},
+			{"type": "enemy_hp", "rooms": ["elite"], "value": 1.3},
 			{"type": "enemy_strength", "rooms": ["elite"], "value": 1}
 		]},
-		{"level": 2, "name": "Champions motivés", "description": "Les Champions d'arène et ton rival ont plus de PV et frappent plus fort.", "effects": [
-			{"type": "enemy_hp", "rooms": ["boss", "rival", "rival_final"], "value": 1.12},
-			{"type": "enemy_strength", "rooms": ["boss", "rival", "rival_final"], "value": 1}
+		{"level": 2, "name": "Champions motivés", "description": "Les Champions d'arène et ton rival ont plus de PV.", "effects": [
+			{"type": "enemy_hp", "rooms": ["boss", "rival", "rival_final"], "value": 1.05}
 		]},
-		{"level": 3, "name": "Bourse légère", "description": "Tu gagnes 25 % d'argent en moins.", "effects": [
-			{"type": "money_gain", "value": 0.75}
+		{"level": 3, "name": "Bourse légère", "description": "Tu gagnes 45 % d'argent en moins.", "effects": [
+			{"type": "money_gain", "value": 0.55}
 		]},
-		{"level": 4, "name": "Infirmière débordée", "description": "Le Centre Pokémon et les pauses de la Ligue soignent 25 % de moins.", "effects": [
-			{"type": "center_heal", "value": 0.75},
-			{"type": "league_heal", "value": 0.75}
+		{"level": 4, "name": "Infirmière débordée", "description": "Le Centre Pokémon et les pauses de la Ligue soignent 20 % de moins.", "effects": [
+			{"type": "center_heal", "value": 0.8},
+			{"type": "league_heal", "value": 0.8}
 		]},
 		{"level": 5, "name": "Hautes herbes", "description": "Les Pokémon sauvages et légendaires ont plus de PV et frappent plus fort.", "effects": [
-			{"type": "enemy_hp", "rooms": ["wild", "legendary"], "value": 1.12},
+			{"type": "enemy_hp", "rooms": ["wild", "legendary"], "value": 1.2},
 			{"type": "enemy_strength", "rooms": ["wild", "legendary"], "value": 1}
 		]},
 		{"level": 6, "name": "Sac encombré", "description": "Ton deck de départ contient un « Débris » injouable.", "effects": [
@@ -27,17 +26,17 @@
 		{"level": 7, "name": "Départ fragile", "description": "Tu commences la partie avec 8 PV max de moins.", "effects": [
 			{"type": "start_max_hp", "value": -8}
 		]},
-		{"level": 8, "name": "Inflation", "description": "Les prix du Poké Mart augmentent de 25 %.", "effects": [
-			{"type": "shop_prices", "value": 1.25}
+		{"level": 8, "name": "Inflation", "description": "Les prix du Poké Mart augmentent de 40 %.", "effects": [
+			{"type": "shop_prices", "value": 1.4}
 		]},
 		{"level": 9, "name": "Ligue d'élite", "description": "Le Conseil 4 et le Maître ont plus de PV et frappent plus fort.", "effects": [
 			{"type": "enemy_hp", "rooms": ["league_member", "league_champion"], "value": 1.1},
 			{"type": "enemy_strength", "rooms": ["league_member", "league_champion"], "value": 1}
 		]},
 		{"level": 10, "name": "Éthernatos déchaîné", "description": "Éthernatos a plus de PV, frappe plus fort et récupère des PV à chaque changement de phase.", "effects": [
-			{"type": "enemy_hp", "rooms": ["league_final_boss"], "value": 1.1},
+			{"type": "enemy_hp", "rooms": ["league_final_boss"], "value": 1.15},
 			{"type": "enemy_strength", "rooms": ["league_final_boss"], "value": 1},
-			{"type": "boss_phase_heal", "value": 8}
+			{"type": "boss_phase_heal", "value": 10}
 		]}
 	],
 	"cosmetics": {
