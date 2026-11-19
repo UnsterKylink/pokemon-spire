@@ -214,7 +214,7 @@ func is_milestones_shown() -> bool:
 	return _side_mode == "milestones"
 
 
-## Échap: closes the milestones / sheet first, else back to the title. Always true (handled).
+## Échap: back to the title (same as « Retour »). Always true (handled).
 func handle_cancel() -> bool:
 	if _tooltip != null:
 		_tooltip.visible = false

@@ -147,7 +147,8 @@ func _relayout() -> void:
 	var width: float = _scroll.size.x - 14.0 if _scroll != null else size.x
 	_columns = maxi(1, int(floor((width + CELL_GAP) / (CELL_SIZE.x + CELL_GAP))))
 	var rows: int = ceili(float(_entries.size()) / float(_columns))
-	custom_minimum_size = Vector2(_columns * (CELL_SIZE.x + CELL_GAP) - CELL_GAP, maxf(0.0, rows * (CELL_SIZE.y + CELL_GAP) - CELL_GAP))
+	# Height only: the width follows the window (a width here would push the side window around).
+	custom_minimum_size = Vector2(0.0, maxf(0.0, rows * (CELL_SIZE.y + CELL_GAP) - CELL_GAP))
 	queue_redraw()
 
 

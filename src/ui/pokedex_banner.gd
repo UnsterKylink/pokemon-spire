@@ -7,7 +7,7 @@ extends Control
 
 const TEXT_TITLE: String = "Palier du Pokédex débloqué : %s"
 const TEXT_NEXT_RUN: String = "%s Actif dès la prochaine partie."
-const WIDTH: float = 640.0
+const WIDTH: float = 760.0
 const TOP: float = 70.0
 const FADE_SECONDS: float = 0.35
 
