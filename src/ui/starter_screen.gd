@@ -6,6 +6,8 @@ extends Control
 
 ## Emitted when the player clicks a proposal.
 signal starter_chosen(pokemon_id: String)
+## Story 026: the chosen difficulty level changed (selector arrows).
+signal level_changed(level: int)
 
 const SPRITE_SIZE: Vector2 = Vector2(180, 180)  # story 033: official artwork
 const CARD_SIZE: Vector2 = Vector2(330, 420)
@@ -13,12 +15,29 @@ const CARD_SIZE: Vector2 = Vector2(330, 420)
 const ROW_MAX_WIDTH: float = 1220.0
 const CARD_GAP: int = 24
 const COLOR_BG: Color = UiStyle.BG_DEEP
+## Story 026: card height when the difficulty selector + modifier panel are shown (the column stays within 720 px).
+const CARD_HEIGHT_WITH_LEVELS: float = 340.0
+const TEXT_LEVEL: String = "Difficulté : %d"
+const TEXT_LEVEL_TITLE: String = "Difficulté"
+const TEXT_LEVEL_LOCKED: String = "Niveau max débloqué : %d / %d — gagne une partie complète pour débloquer le suivant."
+const TEXT_MODIFIERS_HEADER: String = "Modificateurs actifs (cumulés) :"
 
 var _choices: Array[String] = []
 var _cards_box: HBoxContainer
 var _title: Label
 var _done: bool = false
 var _built: bool = false
+## Story 026: difficulty selector (hidden until setup_difficulty).
+var _difficulty: Difficulty
+var _level: int = 0
+var _max_selectable: int = 0
+var _level_box: VBoxContainer
+var _level_label: Label
+var _level_prev: Button
+var _level_next: Button
+var _level_hint: Label
+var _modifiers_label: Label
+var _card_height: float = CARD_SIZE.y
 
 
 func _ready() -> void:
@@ -36,8 +55,43 @@ func setup(data: GameData, choices: Array[String]) -> void:
 	var width: float = minf(CARD_SIZE.x, (ROW_MAX_WIDTH - CARD_GAP * maxi(0, _choices.size() - 1)) / maxf(1.0, _choices.size()))
 	for i: int in _choices.size():
 		var w: Button = _make_choice_widget(data, _choices[i], i)
-		w.custom_minimum_size = Vector2(width, CARD_SIZE.y)
+		w.custom_minimum_size = Vector2(width, _card_height)
 		_cards_box.add_child(w)
+
+
+## Story 026: shows the difficulty selector: levels 0..`max_selectable` of `table` (clamped to its max_level), starting on
+## `default_level` (-1 = the highest selectable). Call after setup(); without it the run is level 0.
+func setup_difficulty(table: Difficulty, max_selectable: int, default_level: int = -1) -> void:
+	_build_ui()
+	_difficulty = table
+	_max_selectable = clampi(max_selectable, 0, table.max_level if table != null else 0)
+	_level_box.visible = table != null
+	_card_height = CARD_HEIGHT_WITH_LEVELS if table != null else CARD_SIZE.y
+	for child: Node in _cards_box.get_children():
+		(child as Control).custom_minimum_size.y = _card_height
+	set_level(_max_selectable if default_level < 0 else default_level)
+
+
+## Story 026: the chosen difficulty level (0 without a selector).
+func get_level() -> int:
+	return _level
+
+
+## Story 026: selects `level` (clamped to 0..max selectable) and refreshes the modifier list.
+func set_level(level: int) -> void:
+	var lvl: int = clampi(level, 0, _max_selectable)
+	var changed: bool = lvl != _level
+	_level = lvl
+	if _level_label != null and _difficulty != null:
+		_level_label.text = TEXT_LEVEL % _level
+		_level_prev.disabled = _level <= 0
+		_level_next.disabled = _level >= _max_selectable
+		_level_hint.text = TEXT_LEVEL_LOCKED % [_max_selectable, _difficulty.max_level]
+		var lines: Array[String] = _difficulty.describe_lines(_level)
+		_modifiers_label.text = (TEXT_MODIFIERS_HEADER + "\n" if _level > 0 else "") + "\n".join(lines)
+		_level_box.tooltip_text = _modifiers_label.text
+	if changed:
+		level_changed.emit(_level)
 
 
 ## The proposed Pokémon ids, left to right.
@@ -139,3 +193,56 @@ func _build_ui() -> void:
 	_cards_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_cards_box.add_theme_constant_override("separation", CARD_GAP)
 	column.add_child(_cards_box)
+	_build_level_selector(column)
+
+
+## Story 026: « Difficulté : ◀ N ▶ » + the cumulative modifier list in a white panel (hidden until setup_difficulty).
+func _build_level_selector(column: VBoxContainer) -> void:
+	column.add_theme_constant_override("separation", 14)
+	_level_box = VBoxContainer.new()
+	_level_box.name = "LevelSelector"
+	_level_box.visible = false
+	_level_box.add_theme_constant_override("separation", 6)
+	column.add_child(_level_box)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	_level_box.add_child(row)
+	_level_prev = Button.new()
+	_level_prev.name = "LevelPrev"
+	_level_prev.text = "◀"
+	_level_prev.custom_minimum_size = Vector2(48, 40)
+	UiStyle.apply_button(_level_prev)
+	_level_prev.pressed.connect(func() -> void: set_level(_level - 1))
+	row.add_child(_level_prev)
+	_level_label = CardView.make_label(26)
+	_level_label.name = "LevelLabel"
+	_level_label.custom_minimum_size = Vector2(240, 0)
+	UiStyle.apply_label(_level_label, "title")
+	row.add_child(_level_label)
+	_level_next = Button.new()
+	_level_next.name = "LevelNext"
+	_level_next.text = "▶"
+	_level_next.custom_minimum_size = Vector2(48, 40)
+	UiStyle.apply_button(_level_next)
+	_level_next.pressed.connect(func() -> void: set_level(_level + 1))
+	row.add_child(_level_next)
+	_level_hint = CardView.make_label(14)
+	_level_hint.name = "LevelHint"
+	_level_hint.add_theme_color_override("font_color", UiStyle.TEXT_MUTED)
+	_level_box.add_child(_level_hint)
+	var panel := PanelContainer.new()
+	panel.name = "ModifiersPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", UiStyle.menu_sub_panel(UiStyle.FRAME_BLUE, 8.0))
+	panel.custom_minimum_size = Vector2(900, 0)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_level_box.add_child(panel)
+	_modifiers_label = Label.new()
+	_modifiers_label.name = "Modifiers"
+	_modifiers_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_modifiers_label.add_theme_font_size_override("font_size", 13)
+	_modifiers_label.add_theme_constant_override("line_spacing", -2)
+	_modifiers_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UiStyle.dark_label(_modifiers_label)
+	panel.add_child(_modifiers_label)

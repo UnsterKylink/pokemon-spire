@@ -41,12 +41,13 @@ var _last_defeated: Array[String] = []
 
 
 ## Plays one run; returns the per-run record (JSON-friendly dictionary).
-static func play_game(data: GameData, game_seed: int, policy_cfg: Dictionary) -> Dictionary:
+## Story 026: `level` = difficulty level of the run (0 = normal game), applied right after the run is created like Main.
+static func play_game(data: GameData, game_seed: int, policy_cfg: Dictionary, level: int = 0) -> Dictionary:
 	var sim: RefCounted = (load("res://tools/balance/sim_run.gd") as GDScript).new()
-	return sim._play(data, game_seed, policy_cfg)
+	return sim._play(data, game_seed, policy_cfg, level)
 
 
-func _play(data: GameData, game_seed: int, policy_cfg: Dictionary) -> Dictionary:
+func _play(data: GameData, game_seed: int, policy_cfg: Dictionary, level: int = 0) -> Dictionary:
 	_data = data
 	_policy = SimPolicy.new(data, policy_cfg, game_seed + 7919)
 	var rngs: Array[RandomNumberGenerator] = [_battle_rng, _encounter_rng, _reward_rng, _event_rng, _starter_rng, _loot_rng,
@@ -58,6 +59,7 @@ func _play(data: GameData, game_seed: int, policy_cfg: Dictionary) -> Dictionary
 	var choices: Array[String] = data.draw_starter_choices(_starter_rng, 3)
 	var starter: String = _policy.pick_starter(choices)
 	_run = RunState.create_with_starter(data, starter)
+	_run.apply_difficulty(data, level)  # story 026 (Main._begin_run)
 	_run.set_zones(data.draw_zones(_zone_rng))
 	var gym_types: Array[String] = []
 	for z: Dictionary in _run.zones:
@@ -82,7 +84,7 @@ func _record(starter: String, won: bool) -> Dictionary:
 			"deck_size": _run.deck.size(), "max_hp": _run.max_hp, "badges": _run.badges.size(), "fights": _fights,
 			"fights_by_room": _fights_by_room, "hp_lost_by_zone": _hp_lost_by_zone, "potions_used": _potions_used,
 			"potions_bought": _potions_bought, "items": _run.items.size(), "money": _run.money, "stalled": _stalled,
-			"illegal": _policy.illegal_moves, "evolution_stage": _run.evolution_stage, "zones": zone_types}
+			"illegal": _policy.illegal_moves, "level": _run.difficulty_level, "evolution_stage": _run.evolution_stage, "zones": zone_types}
 
 
 ## The 8 zones. Returns false when the run is lost on the way.
@@ -180,7 +182,7 @@ func _room_fight(node: MapNode) -> bool:
 func _fight(encounter_id: String, enemies: Array[Combatant], room_type: String, stage_name: String) -> bool:
 	var battle: Battle = _run.create_battle(enemies, _data.get_type_chart(), _battle_rng)
 	SpecialFights.apply_fight_mechanics(_data, battle, room_type, _run.current_zone(),  # story 030
-			_run.current_league_fight() if room_type == SpecialFights.LEAGUE_ROOM else {})
+			_run.current_league_fight() if room_type == SpecialFights.LEAGUE_ROOM else {}, _run)  # story 026
 	var potions_before: int = battle.potions.size()
 	battle.start()
 	var hp_before: int = _run.hp

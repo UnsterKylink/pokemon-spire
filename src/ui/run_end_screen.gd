@@ -53,11 +53,18 @@ const STAT_BATTLES: String = "Combats gagnés"
 const STAT_HP: String = "PV"
 const STAT_MONEY: String = "Pokédollars"
 const STAT_ITEMS: String = "Objets"
+## Story 026: the difficulty level played (+ the level a full victory unlocked).
+const TEXT_LEVEL: String = "Niveau %d"
+const TEXT_LEVEL_UNLOCKED: String = "Niveau %d — Niveau %d débloqué !"
+const COLOR_LEVEL: Color = Color(1.0, 0.62, 0.45)
 
 var _victory: bool = false
 var _built: bool = false
 var _title: Label
 var _subtitle: Label
+var _level_label: Label
+## Story 026: set by Main BEFORE setup(): the level this victory unlocked (-1 = none).
+var unlocked_level: int = -1
 var _sprite: TextureRect
 var _name_label: Label
 var _badges: HBoxContainer
@@ -82,6 +89,11 @@ func _ready() -> void:
 	_build_ui()
 
 
+## Story 026: the difficulty line (« Niveau 3 », « Niveau 3 — Niveau 4 débloqué ! »).
+func get_level_text() -> String:
+	return _level_label.text if _level_label != null else ""
+
+
 ## Fills the summary from `run` (read only). `victory` picks the title / colours.
 func setup(data: GameData, run: RunState, victory: bool) -> void:
 	_build_ui()
@@ -102,6 +114,9 @@ func setup(data: GameData, run: RunState, victory: bool) -> void:
 				run.league_stage + 1, run.league.size()]
 	else:
 		_subtitle.text = TEXT_DEFEAT_SUB_ZONES % [String(s["name"]), int(s["zone"]), int(s["zone_count"]), String(zone["type_name"])]
+	_level_label.text = TEXT_LEVEL_UNLOCKED % [run.difficulty_level, unlocked_level] if unlocked_level >= 0 \
+			else TEXT_LEVEL % run.difficulty_level  # story 026
+	_level_label.tooltip_text = "\n".join(run.difficulty_lines())
 	PokemonArt.apply(_sprite, String(s["sprite"]))  # story 033: official artwork
 	_sprite.modulate = Color.WHITE if victory else Color(0.6, 0.6, 0.65, 0.85)
 	_name_label.text = String(s["name"])
@@ -290,6 +305,13 @@ func _build_ui() -> void:
 	_subtitle = CardView.make_label(22)
 	_subtitle.name = "Subtitle"
 	root.add_child(_subtitle)
+	_level_label = CardView.make_label(20)  # story 026
+	_level_label.name = "Level"
+	_level_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	_level_label.add_theme_color_override("font_color", COLOR_LEVEL)
+	_level_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_level_label.add_theme_constant_override("outline_size", 5)
+	root.add_child(_level_label)
 	var body := HBoxContainer.new()
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL

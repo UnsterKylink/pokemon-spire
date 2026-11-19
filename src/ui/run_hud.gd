@@ -68,8 +68,14 @@ const TEXT_BALLS_LINE: String = "%s ×%d"
 const TEXT_BALLS_NONE: String = "Aucune Ball. Achète-en au Poké Mart ou gagne-en en combat."
 const TEXT_BALLS_HINT: String = "En combat sauvage : bouton « Capturer »."
 const BALL_ICON_SIDE: float = 24.0
+## Story 026: difficulty badge (shown from level 1).
+const TEXT_LEVEL_BADGE: String = "Niv. %d"
+const TEXT_LEVEL_TIP: String = "Difficulté : niveau %d\n%s"
+const COLOR_LEVEL: Color = UiStyle.ACCENT_RED
 
 var _money: Label
+var _level_badge: PanelContainer
+var _level_label: Label
 var _items_box: HBoxContainer
 var _items_scroll: ScrollContainer
 var _more_chip: PanelContainer
@@ -125,6 +131,19 @@ func _init() -> void:
 	_money.mouse_filter = Control.MOUSE_FILTER_STOP
 	_money.tooltip_text = "Pokédollars"
 	row.add_child(_money)
+	_level_badge = PanelContainer.new()  # story 026
+	_level_badge.name = "LevelBadge"
+	_level_badge.visible = false
+	_level_badge.mouse_filter = Control.MOUSE_FILTER_STOP
+	_level_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_level_badge.add_theme_stylebox_override("panel", UiStyle.badge(COLOR_LEVEL))
+	_level_label = CardView.make_label(16)
+	_level_label.name = "LevelText"
+	_level_label.add_theme_color_override("font_color", UiStyle.TEXT)
+	_level_label.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
+	_level_label.add_theme_constant_override("outline_size", 4)
+	_level_badge.add_child(_level_label)
+	row.add_child(_level_badge)
 	_badges_caption = _caption(TEXT_BADGES)
 	row.add_child(_badges_caption)
 	_badges_box = HBoxContainer.new()
@@ -235,6 +254,9 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 	if run == null:
 		return
 	_money.text = format_money(run.money)
+	_level_badge.visible = run.difficulty_level > 0  # story 026
+	_level_label.text = TEXT_LEVEL_BADGE % run.difficulty_level
+	_level_badge.tooltip_text = TEXT_LEVEL_TIP % [run.difficulty_level, "\n".join(run.difficulty_lines())]
 	BadgeEmblem.fill_row(_badges_box, run, BADGE_SLOT_SIDE)
 	_badges_caption.visible = _badges_box.visible
 	var in_league: bool = run.is_in_league()
@@ -271,6 +293,16 @@ func refresh(run: RunState, battle: Battle = null) -> void:
 	for i: int in maxi(run.max_potions(), potions.size()):
 		_potions_box.add_child(_make_potion_slot(potions, i, battle))
 	_refresh_balls(run)
+
+
+## Story 026: the difficulty badge text ("" when hidden: level 0).
+func get_level_text() -> String:
+	return _level_label.text if _level_badge.visible else ""
+
+
+## Story 026: the difficulty badge tooltip (active modifiers).
+func get_level_tooltip() -> String:
+	return _level_badge.tooltip_text
 
 
 ## Story 017: "Balls : N", one icon per ball carried (kind colours), tooltip = "Poké Ball ×2" lines.

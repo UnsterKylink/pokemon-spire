@@ -97,6 +97,8 @@ var pending_statuses: Array[Dictionary] = []
 var pending_fight: Dictionary = {}
 ## Story 018: cards the player must still pick to forget (event remove_card_choice); see remove_card_at. Not saved (transient).
 var pending_card_removals: int = 0
+## Story 026: the difficulty level of this run (0 = normal game; Difficulty, assets/data/difficulty.json). Saved with the run.
+var difficulty_level: int = 0
 ## Added to the base map seed per zone index to derive a zone's map seed.
 const ZONE_SEED_STEP: int = 1000003
 
@@ -160,6 +162,46 @@ static func create_with_starter(data: GameData, starter_id: String) -> RunState:
 func _init_services(data: GameData) -> void:
 	_data = data
 	money = data.get_starting_money()
+
+
+# --- Difficulty levels (story 026) ------------------------------------------------------------------
+
+## Sets the run's difficulty level (clamped to the data's 0..max_level) and applies its start-of-run effects ONCE:
+## start_max_hp (max AND current HP, never below 1) and start_junk (junk cards added to the deck). Call right after the
+## run is created (Main._begin_run / the simulator), never on a loaded run.
+func apply_difficulty(data: GameData, level: int) -> void:
+	if data == null:
+		return
+	difficulty_level = data.get_difficulty().clamp_level(level)
+	var fx: Dictionary = difficulty_effects()
+	var dhp: int = int(fx[Difficulty.EFFECT_START_MAX_HP])
+	if dhp != 0:
+		max_hp = maxi(1, max_hp + dhp)
+		hp = max_hp
+	for i: int in int(fx[Difficulty.EFFECT_START_JUNK]):
+		var junk: CardData = data.get_junk_card()
+		if junk != null:
+			deck.append(junk)
+
+
+## The folded effects of the run's level (Difficulty.effects_for; neutral without data).
+func difficulty_effects() -> Dictionary:
+	if _data == null:
+		return Difficulty.neutral_effects()
+	return _data.get_difficulty().effects_for(difficulty_level)
+
+
+## The French lines of the run's active modifiers (Difficulty.describe_lines; HUD / end screen tooltips).
+func difficulty_lines() -> Array[String]:
+	if _data == null:
+		return [] as Array[String]
+	return _data.get_difficulty().describe_lines(difficulty_level)
+
+
+## A Poké Mart price after the level's shop_prices multiplier (rounded up).
+func shop_price(base_price: int) -> int:
+	var m: float = float(difficulty_effects()[Difficulty.EFFECT_SHOP_PRICES])
+	return base_price if m == 1.0 else ceili(snappedf(base_price * m, 0.0001))
 
 
 ## Adds a reward card to the deck.
@@ -397,7 +439,7 @@ func advance_league(heal_pct: float) -> int:
 	if not is_in_league() or league_fights_won <= league_stage or is_league_final_stage():
 		return -1
 	league_stage += 1
-	return heal_percent(heal_pct)
+	return heal_percent(heal_pct * float(difficulty_effects()[Difficulty.EFFECT_LEAGUE_HEAL]))  # story 026
 
 
 ## Story 007 / 014: one evolution step of the chosen starter (Main calls it after the badges of zones.json
@@ -659,8 +701,10 @@ func remove_card(card_id: String) -> bool:
 # --- Money, items, potions (story 006) -------------------------------------------------------------
 
 ## Adds Pokédollars (negative amounts are ignored).
+## Story 026: scaled by the level's money_gain multiplier (rounded down).
 func add_money(amount: int) -> void:
-	money += maxi(amount, 0)
+	var m: float = float(difficulty_effects()[Difficulty.EFFECT_MONEY_GAIN])
+	money += maxi(amount, 0) if m == 1.0 else floori(snappedf(maxi(amount, 0) * m, 0.0001))
 
 
 ## Pays `amount` Pokédollars. False (nothing changes) if the run cannot afford it.
@@ -815,8 +859,10 @@ func rest_heal_preview() -> int:
 
 
 ## The Centre's heal rule: % of max HP (act1.json room_types.center.heal_percent).
+## Story 026: x the level's center_heal multiplier.
 func rest_heal_percent() -> float:
-	return float(_data.get_room_type("center").get("heal_percent", 0))
+	return float(_data.get_room_type("center").get("heal_percent", 0)) \
+			* float(difficulty_effects()[Difficulty.EFFECT_CENTER_HEAL])
 
 
 ## True if deck[deck_index] exists and can still be improved (not already upgraded, rule changes something).
@@ -842,7 +888,7 @@ func preview_upgrade(deck_index: int) -> CardData:
 ## Price of the next Poké Mart card removal: base_price + price_step per removal already made this run.
 func removal_price() -> int:
 	var cfg: Dictionary = _data.get_removal_config()
-	return int(cfg["base_price"]) + int(cfg["price_step"]) * card_removals
+	return shop_price(int(cfg["base_price"]) + int(cfg["price_step"]) * card_removals)  # story 026: level prices
 
 
 # --- Rival, legendary events, event queues (story 018) ----------------------------------------------

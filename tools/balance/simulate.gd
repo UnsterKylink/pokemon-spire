@@ -1,7 +1,7 @@
 extends SceneTree
 ## Balance simulator (story 019): plays COMPLETE runs with the auto-player policy (tools/balance/sim_policy.gd) on the real
 ## game logic and writes one JSON record per run.
-##   godot --headless --path . -s res://tools/balance/simulate.gd -- --games=N --seed=S --out=path.json [--offset=K] [--policy=file.json]
+##   godot --headless --path . -s res://tools/balance/simulate.gd -- --games=N --seed=S --out=path.json [--offset=K] [--policy=file.json] [--level=N]
 ## Game i (i = offset .. offset+N-1) uses seed S * 1000003 + i * 101 + 1, so shards (--offset) concatenate to the same results as
 ## one long run. Reports: `python3 tools/balance/make_report.py --tag=<tag> a.json b.json ...` (merges shards, prints the summary and
 ## writes design/balance/report-<tag>.md); `tools/balance/run.sh <games> <seed> <tag>` does shards + report in one go.
@@ -15,6 +15,7 @@ func _initialize() -> void:
 	var offset: int = 0
 	var out_path: String = ""
 	var policy_path: String = ""
+	var level: int = 0  # story 026: difficulty level of every simulated run
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--games="):
 			games = int(arg.substr(8))
@@ -26,6 +27,8 @@ func _initialize() -> void:
 			out_path = arg.substr(6)
 		elif arg.begins_with("--policy="):
 			policy_path = arg.substr(9)
+		elif arg.begins_with("--level="):
+			level = int(arg.substr(8))
 	var overrides: Dictionary = {}
 	if not policy_path.is_empty():
 		overrides = JSON.parse_string(FileAccess.get_file_as_string(policy_path))
@@ -38,21 +41,21 @@ func _initialize() -> void:
 	var runs: Array[Dictionary] = []
 	var wins: int = 0
 	for i: int in range(offset, offset + games):
-		var rec: Dictionary = SimRun.play_game(data, game_seed(base_seed, i), overrides)
+		var rec: Dictionary = SimRun.play_game(data, game_seed(base_seed, i), overrides, level)
 		rec["i"] = i
 		runs.append(rec)
 		if bool(rec["won"]):
 			wins += 1
 	var elapsed: float = float(Time.get_ticks_msec() - t0) / 1000.0
-	print("simulate: %d games, %d wins (%.1f %%), %.1f s (%.2f games/s)" % [games, wins, 100.0 * wins / maxi(games, 1), elapsed,
-			games / maxf(elapsed, 0.001)])
+	print("simulate: level %d, %d games, %d wins (%.1f %%), %.1f s (%.2f games/s)" % [level, games, wins,
+			100.0 * wins / maxi(games, 1), elapsed, games / maxf(elapsed, 0.001)])
 	if not out_path.is_empty():
 		var f := FileAccess.open(out_path, FileAccess.WRITE)
 		if f == null:
 			push_error("simulate: cannot write %s" % out_path)
 			quit(1)
 			return
-		f.store_string(JSON.stringify({"base_seed": base_seed, "offset": offset, "games": games, "elapsed_s": elapsed,
+		f.store_string(JSON.stringify({"base_seed": base_seed, "level": level, "offset": offset, "games": games, "elapsed_s": elapsed,
 				"policy_overrides": overrides, "runs": runs}))
 		f.close()
 	quit(0)

@@ -127,8 +127,9 @@ static func apply_legendary_win(data: GameData, run: RunState, legendary_id: Str
 ## the fight (GameData.ROOM_GYM = the zone's gym, "league" = `league_fight`; story 032: "wild" / "elite" = the zone's light
 ## zone rule, map rooms and event fights alike); other rooms (rival, legendary, QA "") get nothing. Shared by Main and
 ## the simulator. Returns the applied rule ({} if none).
+## Story 026: with `run`, the run's difficulty level also scales the enemies (apply_difficulty).
 static func apply_fight_mechanics(data: GameData, battle: Battle, room_type: String, zone: Dictionary,
-		league_fight: Dictionary) -> Dictionary:
+		league_fight: Dictionary, run: RunState = null) -> Dictionary:
 	var rule: Dictionary = {}
 	if room_type == GameData.ROOM_GYM:
 		rule = data.get_gym_field_rule(String(zone.get("type_id", "")))
@@ -139,4 +140,26 @@ static func apply_fight_mechanics(data: GameData, battle: Battle, room_type: Str
 		if String(league_fight.get("kind", "")) == "final_boss" and not battle.enemies.is_empty():
 			battle.enemies[0].phases = data.get_boss_phases()
 	battle.set_field_rule(rule)
+	if run != null:
+		apply_difficulty(battle, run.difficulty_effects(), Difficulty.room_key(room_type, league_fight))
 	return rule
+
+
+## Story 026: applies the folded difficulty effects `fx` (Difficulty.effects_for) to the enemies of `battle` BEFORE
+## Battle.start(): max HP x enemy_hp[room_key] (rounded up, HP full), Force + enemy_strength[room_key], and the final
+## boss phases heal boss_phase_heal % more (league_final_boss only, max 100). Level 0 / room_key "" change nothing.
+static func apply_difficulty(battle: Battle, fx: Dictionary, room_key: String) -> void:
+	if room_key.is_empty():
+		return
+	var mult: float = float((fx.get(Difficulty.EFFECT_ENEMY_HP, {}) as Dictionary).get(room_key, 1.0))
+	var bonus: int = int((fx.get(Difficulty.EFFECT_ENEMY_STRENGTH, {}) as Dictionary).get(room_key, 0))
+	for e: Combatant in battle.enemies:
+		if mult != 1.0:
+			e.max_hp = maxi(1, ceili(snappedf(e.max_hp * mult, 0.0001)))
+			e.hp = e.max_hp
+		e.strength += bonus
+	var phase_heal: float = float(fx.get(Difficulty.EFFECT_BOSS_PHASE_HEAL, 0.0))
+	if room_key == "league_final_boss" and phase_heal > 0.0:
+		for e: Combatant in battle.enemies:
+			for ph: Dictionary in e.phases:
+				ph["heal_percent"] = minf(100.0, float(ph.get("heal_percent", 0.0)) + phase_heal)

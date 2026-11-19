@@ -4,7 +4,8 @@ extends RefCounted
 ## One slot (DEFAULT_PATH, JSON). The file holds everything needed to rebuild the run EXACTLY at a SAFE point (the act map or
 ## a league intermission; never mid-battle): RunState (identity, form/evolution state, HP, deck as card id + carrier +
 ## upgraded flag, money, items, potions, balls, captured (story 017, optional on load), story 018 rival / legendary_seen /
-## pending_statuses (optional on load: an older save gets no-rival-progress defaults), badges, zones, league draw...), the current zone's map graph + ActProgress, and
+## pending_statuses (optional on load: an older save gets no-rival-progress defaults), story 026 difficulty_level (optional:
+## an older save is a level-0 run), badges, zones, league draw...), the current zone's map graph + ActProgress, and
 ## `extras` (Main's RNG seeds AND states, screen, CLI seed...). Ids are rebuilt through GameData, so a save that
 ## references unknown data is refused with a clear reason instead of crashing.
 ## Big integers (RNG seeds / states, map seed) are stored as STRINGS: JSON numbers are doubles and would lose bits.
@@ -71,7 +72,7 @@ static func to_dict(run: RunState, extras: Dictionary = {}) -> Dictionary:
 			"league_fights_won": run.league_fights_won, "final_boss_defeated": run.final_boss_defeated, "act": act,
 			"rival_name": run.rival_name, "rival_starter_id": run.rival_starter_id,
 			"rival_encounters_done": run.rival_encounters_done.duplicate(), "legendary_seen": run.legendary_seen.duplicate(),
-			"pending_statuses": run.pending_statuses.duplicate(true)}
+			"pending_statuses": run.pending_statuses.duplicate(true), "difficulty_level": run.difficulty_level}
 	return {"version": VERSION, "saved_at": Time.get_datetime_string_from_system(false, true),
 			"saved_unix": int(Time.get_unix_time_from_system()), "run": run_dict, "extras": extras.duplicate(true)}
 
@@ -205,7 +206,7 @@ static func _check_references(rd: Dictionary, game: GameData) -> String:
 		if game.get_pokemon_info(String(rd[k])).is_empty():
 			return "Pokémon inconnu : %s" % rd[k]
 	for e: Dictionary in rd["deck"]:
-		if not game.has_card(String(e["id"])):
+		if not game.has_deck_card(String(e["id"])):  # story 026: junk cards (start_junk) too
 			return "carte inconnue : %s" % e["id"]
 		if not String(e["pokemon"]).is_empty() and game.get_pokemon_info(String(e["pokemon"])).is_empty():
 			return "Pokémon inconnu : %s" % e["pokemon"]
@@ -314,7 +315,7 @@ static func _build_run(rd: Dictionary, game: GameData) -> RunState:
 	r.bonus_hand_size = int(rd["bonus_hand_size"])
 	r.bonus_energy = int(rd["bonus_energy"])
 	for e: Dictionary in rd["deck"]:
-		var card: CardData = game.get_card(String(e["id"]))
+		var card: CardData = game.get_deck_card(String(e["id"]))
 		if card.pokemon_id != String(e["pokemon"]):
 			card = card.with_pokemon(String(e["pokemon"]))
 		if bool(e["up"]):
@@ -361,6 +362,9 @@ static func _build_run(rd: Dictionary, game: GameData) -> RunState:
 		r.rival_encounters_done.append(id)
 	for id: String in rd.get("legendary_seen", []):
 		r.legendary_seen.append(id)
+	# Story 026: the difficulty level (optional: a save written before story 026 is a level-0 run).
+	var lvl: Variant = rd.get("difficulty_level", 0)
+	r.difficulty_level = game.get_difficulty().clamp_level(int(lvl) if _is_num(lvl) else 0)
 	for e: Dictionary in rd.get("pending_statuses", []):
 		r.pending_statuses.append({"id": String(e["id"]), "value": int(e["value"])})
 	# Pokémon lookup table: every base Pokémon + every form referenced by the save (evolved forms included).

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Usage: tools/balance/run.sh <games> <seed> <tag> [shards=4] [policy.json]
+# Usage: tools/balance/run.sh <games> <seed> <tag> [shards=4] [policy.json] [level=0]
+# Story 026: level = difficulty level of every run (or LEVEL=N in the environment); pass "" as policy to keep the default policy.
 # Runs the simulator in parallel shards (games are independent: game i uses seed*1000003+i*101+1, so the result does not depend on the
 # shard count), merges them and writes design/balance/report-<tag>.md. GODOT can override the binary path.
 set -euo pipefail
-GAMES=${1:-500}; SEED=${2:-1}; TAG=${3:-run}; SHARDS=${4:-4}; POLICY=${5:-}
+GAMES=${1:-500}; SEED=${2:-1}; TAG=${3:-run}; SHARDS=${4:-4}; POLICY=${5:-}; LEVEL=${6:-${LEVEL:-0}}
 GODOT=${GODOT:-/root/godot/Godot_v4.6.3-stable_linux.x86_64}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${TMPDIR:-/tmp}/balance-$TAG; mkdir -p "$OUT"; rm -f "$OUT"/shard*.json
@@ -13,6 +14,7 @@ for s in $(seq 0 $((SHARDS - 1))); do
   [ "$N" -le 0 ] && continue
   ARGS=(--games=$N --seed=$SEED --offset=$OFF --out="$OUT/shard$s.json")
   [ -n "$POLICY" ] && ARGS+=(--policy="$POLICY")
+  ARGS+=(--level=$LEVEL)
   "$GODOT" --headless --path "$ROOT" -s res://tools/balance/simulate.gd -- "${ARGS[@]}" > "$OUT/shard$s.log" 2>&1 &
 done
 wait

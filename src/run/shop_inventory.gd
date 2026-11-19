@@ -27,20 +27,20 @@ static func generate(data: GameData, run: RunState, rng: RandomNumberGenerator) 
 		var e := ShopEntry.new()
 		e.kind = ShopEntry.KIND_CARD
 		e.card = offer.card
-		e.price = int((cfg["card_prices"] as Dictionary)[offer.card.rarity])
+		e.price = run.shop_price(int((cfg["card_prices"] as Dictionary)[offer.card.rarity]))  # story 026: level prices
 		inv.cards.append(e)
 	var item_count: int = rng.randi_range(int(cfg["item_count_min"]), int(cfg["item_count_max"]))
 	for item: ItemData in LootGenerator.pick_items(data, run, item_count, rng):
 		var e := ShopEntry.new()
 		e.kind = ShopEntry.KIND_ITEM
 		e.item = item
-		e.price = int((cfg["item_prices"] as Dictionary)[item.rarity])
+		e.price = run.shop_price(int((cfg["item_prices"] as Dictionary)[item.rarity]))  # story 026: level prices
 		inv.items.append(e)
 	for potion: PotionData in LootGenerator.pick_potions(data, int(cfg["potion_count"]), rng):
 		var e := ShopEntry.new()
 		e.kind = ShopEntry.KIND_POTION
 		e.potion = potion
-		e.price = potion.price
+		e.price = run.shop_price(potion.price)  # story 026: level prices
 		inv.potions.append(e)
 	var ball_cfg: Dictionary = data.get_ball_shop_config()
 	if not ball_cfg.is_empty():
@@ -49,7 +49,7 @@ static func generate(data: GameData, run: RunState, rng: RandomNumberGenerator) 
 			var e := ShopEntry.new()
 			e.kind = ShopEntry.KIND_BALL
 			e.ball = ball
-			e.price = ball.price
+			e.price = run.shop_price(ball.price)  # story 026: level prices
 			inv.balls.append(e)
 	return inv
 

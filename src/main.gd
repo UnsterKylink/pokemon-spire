@@ -1425,7 +1425,7 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	var battle: Battle = _run.create_battle(enemies, _data.get_type_chart(), _battle_rng, _data.capture_allowed_in(room_type))
 	# Story 030: gym / league field rule and Éthernatos's phases (before the battle screen starts the battle).
 	SpecialFights.apply_fight_mechanics(_data, battle, room_type, _run.current_zone(),
-			_run.current_league_fight() if room_type == ROOM_LEAGUE else {})
+			_run.current_league_fight() if room_type == ROOM_LEAGUE else {}, _run)  # story 026: difficulty level
 	battle.state_changed.connect(_refresh_hud)
 	battle.item_triggered.connect(_on_item_triggered)
 	_battle_screen = BATTLE_SCENE.instantiate() as BattleScreen
