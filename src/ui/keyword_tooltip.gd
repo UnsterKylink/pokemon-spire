@@ -1,6 +1,7 @@
 class_name KeywordTooltip
 extends PanelContainer
-## Story 027: keyword tooltip shown above a hovered hand card — one entry per keyword of the card (Épuisement,
+## Story 027: keyword tooltip shown above a hovered hand card (story 023: also enemy intents, status chips, type pills,
+## the energy gem, Élan box, talent and field-rule pills — below the anchor when there is no room above) — one entry per keyword of the card (Épuisement,
 ## Rétention, Faiblesse, Vulnérable, Force, Élan, Multi-coups, Talent), name + player text from talents.json `keywords`.
 ## Display only: never takes the mouse, clamped inside the viewport.
 
@@ -60,7 +61,10 @@ func show_for(entries: Array[Dictionary], anchor: Rect2) -> void:
 	var vp: Vector2 = get_viewport_rect().size
 	var parent_origin: Vector2 = (get_parent() as Control).get_global_rect().position if get_parent() is Control else Vector2.ZERO
 	var gx: float = clampf(anchor.get_center().x - WIDTH * 0.5, 6.0, vp.x - WIDTH - 6.0)
-	var gy: float = maxf(6.0, anchor.position.y - get_combined_minimum_size().y - GAP)
+	var h: float = get_combined_minimum_size().y
+	var gy: float = anchor.position.y - h - GAP
+	if gy < 6.0:  # story 023: no room above (top-row pills): below the anchor instead
+		gy = minf(anchor.end.y + GAP, vp.y - h - 6.0)
 	position = Vector2(gx, gy) - parent_origin
 
 

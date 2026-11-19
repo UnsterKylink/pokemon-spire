@@ -1,7 +1,8 @@
 class_name OptionsPanel
 extends Control
-## Options overlay (opened from the "Options" button of the run bar): type-effectiveness hint on / off, the
-## animation speed and (story 022) the music / sound-effect volumes. Saves at once (GameSettings / BattleFxDirector /
+## Options overlay (opened from the "Options" button of the run bar, the title screen and the pause menu — story 023):
+## type-effectiveness hint on / off, the animation speed, (story 022) the music / sound-effect volumes and (story 023) the
+## fullscreen window. Processes while the tree is paused (opened from the pause menu). Saves at once (GameSettings / BattleFxDirector /
 ## AudioManager) and emits `changed` so the open screen updates.
 
 ## Emitted after any option changed.
@@ -9,7 +10,7 @@ signal changed
 ## Emitted when the panel closes.
 signal closed
 
-const PANEL_SIZE: Vector2 = Vector2(560, 420)
+const PANEL_SIZE: Vector2 = Vector2(560, 470)
 const COLOR_DIM: Color = Color(0, 0, 0, 0.55)
 const TEXT_TITLE: String = "Options"
 const TEXT_TYPE_HINTS: String = "Indicateur d'efficacité des types"
@@ -19,10 +20,13 @@ const TEXT_CLOSE: String = "Fermer"
 const TEXT_MUSIC: String = "Musique"
 const TEXT_SFX: String = "Effets"
 const TEXT_PERCENT: String = "%d %%"
+const TEXT_FULLSCREEN: String = "Plein écran"
+const TEXT_FULLSCREEN_TIP: String = "Affiche le jeu en plein écran (mémorisé pour les prochains lancements)."
 
 ## Story 022: the game's AudioManager (set by Main); null = the sliders only save the values.
 var audio: AudioManager = null
 var _type_hints: CheckButton
+var _fullscreen: CheckButton
 var _speed_button: Button
 var _music_slider: HSlider
 var _sfx_slider: HSlider
@@ -31,6 +35,7 @@ var _sfx_value: Label
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS  # story 023: usable from the pause menu (tree paused)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
@@ -63,6 +68,13 @@ func _ready() -> void:
 	_type_hints.add_theme_font_size_override("font_size", 20)
 	_type_hints.toggled.connect(_on_type_hints_toggled)
 	box.add_child(_type_hints)
+	_fullscreen = CheckButton.new()
+	_fullscreen.name = "Fullscreen"
+	_fullscreen.text = TEXT_FULLSCREEN
+	_fullscreen.tooltip_text = TEXT_FULLSCREEN_TIP
+	_fullscreen.add_theme_font_size_override("font_size", 20)
+	_fullscreen.toggled.connect(_on_fullscreen_toggled)
+	box.add_child(_fullscreen)
 	_speed_button = Button.new()
 	_speed_button.name = "Speed"
 	_speed_button.custom_minimum_size = Vector2(320, 44)
@@ -94,6 +106,7 @@ func open() -> void:
 	position = Vector2.ZERO
 	size = get_viewport_rect().size  # the parent (Main) may not be a sized Control
 	_type_hints.set_pressed_no_signal(GameSettings.type_hints_enabled())
+	_fullscreen.set_pressed_no_signal(GameSettings.fullscreen_enabled())
 	_refresh_speed()
 	_music_slider.set_value_no_signal(_volume("music") * 100.0)
 	_sfx_slider.set_value_no_signal(_volume("sfx") * 100.0)
@@ -137,6 +150,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("ui_cancel"):
 		close()
 		get_viewport().set_input_as_handled()
+
+
+## Story 023, QA: sets the fullscreen option as the checkbox does (saved and applied).
+func set_fullscreen(on: bool) -> void:
+	_fullscreen.button_pressed = on
+
+
+## Story 023, QA: true when the fullscreen checkbox is ticked.
+func is_fullscreen_checked() -> bool:
+	return _fullscreen.button_pressed
+
+
+func _on_fullscreen_toggled(on: bool) -> void:
+	GameSettings.set_fullscreen(on)
+	changed.emit()
 
 
 func _on_type_hints_toggled(on: bool) -> void:

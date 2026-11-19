@@ -18,6 +18,9 @@ const DARK_TEXT_LUMINANCE: float = 0.5
 const COLOR_TEXT_LIGHT: Color = Color(1.0, 1.0, 1.0)
 const COLOR_TEXT_DARK: Color = Color(0.1, 0.1, 0.12)
 
+## Story 023: when set (BattleScreen._bind_tip: (Control, Callable) -> void), chips show the battle's KeywordTooltip
+## on hover instead of the native tooltip.
+var tip_binder: Callable = Callable()
 var _combatant: Combatant
 var _book: StatusBook
 
@@ -95,6 +98,9 @@ func _make_chip(def: StatusData, value: int, turns: int) -> PanelContainer:
 	# PASS: hovering shows the tooltip, clicks still reach the enemy panel (card targeting).
 	chip.mouse_filter = Control.MOUSE_FILTER_PASS
 	chip.tooltip_text = TEXT_TOOLTIP % [def.display_name, def.description]
+	if tip_binder.is_valid():
+		var entries: Array[Dictionary] = KeywordBook.status_entries(def)
+		tip_binder.call(chip, func() -> Array[Dictionary]: return entries)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = def.color
 	sb.set_corner_radius_all(CHIP_RADIUS)

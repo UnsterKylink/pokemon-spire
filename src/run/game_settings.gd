@@ -57,3 +57,30 @@ static func get_float(key: String, fallback: float) -> float:
 	if value is float or value is int:
 		return float(value)
 	return fallback
+
+
+## Story 023: fullscreen window (Options « Plein écran »); applied at launch by Main (real game only).
+const KEY_FULLSCREEN: String = "fullscreen"
+
+
+## True when the player chose the fullscreen window (default: windowed).
+static func fullscreen_enabled() -> bool:
+	return get_bool(KEY_FULLSCREEN)
+
+
+## Saves the fullscreen choice and applies it to the window (see apply_window_mode).
+static func set_fullscreen(on: bool) -> void:
+	set_value(KEY_FULLSCREEN, on)
+	apply_window_mode(on)
+
+
+## Puts the main window in fullscreen (`on`) or windowed mode. No-op headless (no real window).
+static func apply_window_mode(on: bool) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var current: DisplayServer.WindowMode = DisplayServer.window_get_mode()
+	var is_full: bool = current == DisplayServer.WINDOW_MODE_FULLSCREEN or current == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if on and not is_full:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	elif not on and is_full:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)

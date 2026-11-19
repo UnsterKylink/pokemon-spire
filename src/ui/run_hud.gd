@@ -14,6 +14,8 @@ signal potion_pressed(index: int)
 signal deck_pressed
 ## Emitted by the "Options" button: Main opens the options panel.
 signal options_pressed
+## Story 023: emitted by the "Pause" button: Main opens the pause menu.
+signal pause_pressed
 
 const HEIGHT: float = 44.0
 ## Currency suffix. The default font has no "₽" glyph (it only renders through OS font fallback, absent on
@@ -38,7 +40,10 @@ const BADGE_SLOT_SIDE: float = 22.0
 const FLASH_DURATION: float = 0.7
 const TEXT_DECK: String = "Deck"
 const TEXT_OPTIONS: String = "Options"
-const TEXT_OPTIONS_TIP: String = "Options du jeu (indicateur des types, vitesse des animations)."
+const TEXT_OPTIONS_TIP: String = "Options du jeu (indicateur des types, vitesse des animations, volumes, plein écran)."
+## Story 023: the pause button (same as the Échap key).
+const TEXT_PAUSE: String = "Pause"
+const TEXT_PAUSE_TIP: String = "Mettre la partie en pause (Échap)."
 const TEXT_DECK_TIP: String = "Voir ton deck (Échap pour fermer)."
 const TEXT_DECK_BLOCKED: String = "Termine d'abord le choix de carte en cours."
 const TEXT_BADGES: String = "Badges :"
@@ -207,6 +212,21 @@ func _init() -> void:
 		osb.border_width_bottom = 4 if state != "pressed" else 2
 	options_button.pressed.connect(func() -> void: options_pressed.emit())
 	row.add_child(options_button)
+	var pause_button: Button = Button.new()
+	pause_button.name = "PauseButton"
+	pause_button.text = TEXT_PAUSE
+	pause_button.tooltip_text = TEXT_PAUSE_TIP
+	pause_button.custom_minimum_size = Vector2(76, 32)
+	pause_button.focus_mode = Control.FOCUS_NONE
+	pause_button.add_theme_font_size_override("font_size", 17)
+	UiStyle.apply_button(pause_button, UiStyle.ACCENT_RED)
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		var psb: StyleBoxFlat = pause_button.get_theme_stylebox(state)
+		psb.content_margin_top = 1.0 if state != "pressed" else 3.0
+		psb.content_margin_bottom = 3.0 if state != "pressed" else 1.0
+		psb.border_width_bottom = 4 if state != "pressed" else 2
+	pause_button.pressed.connect(func() -> void: pause_pressed.emit())
+	row.add_child(pause_button)
 
 
 ## Redraws the bar from `run` (read only). In a battle pass it: its potion list is shown and the slots the

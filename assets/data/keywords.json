@@ -1,0 +1,35 @@
+{
+	"_doc": "Infobulles du combat (story 023). Lu par src/ui/keyword_book.gd (KeywordBook) et affiche par KeywordTooltip au survol. intents: type d'intention ennemie (EnemyIntent.type ; attack_multi = attaque en plusieurs coups, attack_charged = attaque chargee, skip = le Pokemon perd son tour) -> {name, description} ; le statut d'une intention ajoute la fiche du statut (statuses.json). ui: elements de l'ecran de combat -> {name, description} (energy = gemme d'energie, field_rule / zone_rule = pastille de regle, talent = pastille de talent ; elan reprend talents.json keywords.elan). type: modeles de l'infobulle d'une pastille de type (%s = liste de types separes par des virgules ; une ligne vide est omise). Les mots-cles des cartes restent dans talents.json keywords.",
+	"intents": {
+		"attack": {"name": "Attaque", "description": "Cet ennemi attaquera ton Pokémon actif à la fin de ton tour. Ta Protection absorbe les dégâts en premier ; le type de l'attaque face aux types de ton Pokémon actif peut les doubler ou les réduire."},
+		"attack_multi": {"name": "Multi-coups", "description": "L'attaque frappe plusieurs fois (dégâts × coups). Chaque coup est réduit séparément par ta Protection."},
+		"attack_charged": {"name": "Attaque chargée", "description": "L'ennemi a chargé son énergie : cette attaque est beaucoup plus forte. Protège-toi ou change de Pokémon pour mieux l'encaisser."},
+		"block": {"name": "Protection", "description": "L'ennemi gagne de la Protection : elle absorbe tes prochains dégâts, puis disparaît au début de son tour suivant."},
+		"buff": {"name": "Renforcement", "description": "L'ennemi gagne de la Force : chacun de ses coups inflige ce nombre de dégâts en plus pour le reste du combat."},
+		"status": {"name": "Altération", "description": "L'ennemi va infliger un statut à ton équipe (voir ci-dessous)."},
+		"heal": {"name": "Soin", "description": "L'ennemi récupère des PV au lieu d'attaquer."},
+		"heal_ally": {"name": "Soigne allié", "description": "L'ennemi soigne l'allié le plus blessé de son équipe."},
+		"block_ally": {"name": "Protège allié", "description": "L'ennemi donne de la Protection à un allié."},
+		"charge": {"name": "Charge", "description": "L'ennemi n'attaque pas ce tour-ci : il prépare une Attaque chargée pour le tour suivant."},
+		"strip_block": {"name": "Brise-garde", "description": "Retire jusqu'à ce montant de Protection à ton Pokémon avant d'agir."},
+		"drain_energy": {"name": "Vol d'énergie", "description": "Tu auras moins d'énergie au début de ton prochain tour."},
+		"add_junk": {"name": "Débris", "description": "Ajoute des cartes « Débris » inutiles dans ta défausse : elles encombrent ta main quand tu les pioches."},
+		"skip": {"name": "Tour perdu", "description": "L'ennemi est endormi ou gelé : il ne fera rien ce tour-ci."},
+		"ko": {"name": "K.O.", "description": "Ce Pokémon est hors de combat."}
+	},
+	"ui": {
+		"energy": {"name": "Énergie", "description": "Chaque carte coûte de l'énergie (le chiffre en haut à gauche de la carte). L'énergie revient au maximum au début de chaque tour ; ce qui n'est pas dépensé est perdu."},
+		"field_rule": {"name": "Règle de terrain", "description": "Une règle spéciale s'applique pendant tout ce combat d'arène ou de Ligue."},
+		"zone_rule": {"name": "Règle de zone", "description": "Une règle propre à la zone s'applique à ce combat."},
+		"talent": {"name": "Talent", "description": "Se déclenche quand ce Pokémon entre sur le terrain (une seule fois par combat)."},
+		"switch": {"name": "Changement de Pokémon", "description": "Jouer une carte d'un autre Pokémon de l'équipe le fait entrer : ses types défensifs remplacent ceux du Pokémon actif et son Talent se déclenche."}
+	},
+	"type": {
+		"name": "Type %s",
+		"super": "Super efficace contre : %s",
+		"weak": "Peu efficace contre : %s",
+		"immune": "Sans effet contre : %s",
+		"fears": "En défense, craint : %s",
+		"separator": ", "
+	}
+}

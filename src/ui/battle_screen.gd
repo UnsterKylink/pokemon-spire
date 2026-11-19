@@ -327,6 +327,8 @@ var _exhaust_label: Label
 var _field_pill: Label
 var _field_banner: PanelContainer
 var _keyword_tip: KeywordTooltip
+## Story 023: the field rule tooltip text (the pill uses the KeywordTooltip instead of the native tooltip).
+var _field_tip_text: String = ""
 var _elan_shown: int = 0
 var _preview_target: int = -1
 var _rec_hit_count: int = 0
@@ -680,7 +682,18 @@ func _refresh_field_pill() -> void:
 	if not rule.is_empty():
 		var zone_rule: bool = _is_zone_rule(rule)
 		_field_pill.text = (TEXT_ZONE_RULE_PILL if zone_rule else TEXT_FIELD_RULE_PILL) % String(rule["name"])
-		_field_pill.tooltip_text = (TEXT_ZONE_RULE_TIP if zone_rule else TEXT_FIELD_RULE_TIP) % [String(rule["name"]), String(rule["description"])]
+		_field_tip_text = (TEXT_ZONE_RULE_TIP if zone_rule else TEXT_FIELD_RULE_TIP) % [String(rule["name"]), String(rule["description"])]
+		var generic: Dictionary = KeywordBook.entry("ui", "zone_rule" if zone_rule else "field_rule")
+		var title: String = (TEXT_ZONE_RULE_BANNER if zone_rule else TEXT_FIELD_RULE_BANNER) % String(rule["name"])
+		var entries: Array[Dictionary] = [{"name": title, "description": String(rule["description"])}]
+		if not generic.is_empty():
+			entries.append(generic)
+		_bind_tip(_field_pill, func() -> Array[Dictionary]: return entries)
+
+
+## Story 023: the field / zone rule tooltip text ("Règle de terrain : <nom>\n<description>"; "" without a rule). QA.
+func get_field_rule_tip_text() -> String:
+	return _field_tip_text if get_field_rule_pill_text() != "" else ""
 
 
 ## Story 032: true for a zone's light rule (shown « Zone : … » / « Règle de zone : … »).
@@ -943,6 +956,9 @@ func _build_ui() -> void:
 	player_box.add_child(name_row)
 	_player_name = _make_label(28)
 	_outline(_player_name, OUTLINE_BIG)
+	_bind_tip(_player_name, func() -> Array[Dictionary]:  # story 023: how a switch works
+		var e: Dictionary = KeywordBook.entry("ui", "switch")
+		return [e] as Array[Dictionary] if not e.is_empty() else [] as Array[Dictionary])
 	name_row.add_child(_player_name)
 	_talent_pill = _make_label(CHIP_FONT)
 	_talent_pill.name = "TalentPill"
@@ -974,6 +990,7 @@ func _build_ui() -> void:
 	status_line.add_theme_constant_override("separation", 6)
 	player_box.add_child(status_line)
 	_player_chips = StatusChipRow.new()
+	_player_chips.tip_binder = _bind_tip  # story 023: chip tooltips through the KeywordTooltip
 	status_line.add_child(_player_chips)
 	_elan_box = PanelContainer.new()
 	_elan_box.name = "ElanBox"
@@ -1051,8 +1068,10 @@ func _build_ui() -> void:
 	_energy_gem = EnergyGem.new()
 	_energy_gem.name = "EnergyGem"
 	_energy_gem.mouse_filter = Control.MOUSE_FILTER_PASS
-	_energy_gem.tooltip_text = TEXT_ENERGY
 	_energy_gem.custom_minimum_size = Vector2.ONE * ENERGY_GEM_SIZE
+	_bind_tip(_energy_gem, func() -> Array[Dictionary]:  # story 023
+		var e: Dictionary = KeywordBook.entry("ui", "energy")
+		return [e] as Array[Dictionary] if not e.is_empty() else [] as Array[Dictionary])
 	_energy_gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	energy_box.add_child(_energy_gem)
 	_energy_label = _make_label(19)
@@ -1249,6 +1268,16 @@ func _make_type_badge(font_size: int = 16) -> PanelContainer:
 
 func _set_badge_row(row: HBoxContainer, type_ids: Array[String]) -> void:
 	CardView.set_badge_row(row, type_ids, _data.get_type_chart())
+	_bind_type_tips(row, type_ids)
+
+
+## Story 023: each type pill of `row` shows its effectiveness summary on hover (KeywordBook.type_entries).
+func _bind_type_tips(row: HBoxContainer, type_ids: Array[String]) -> void:
+	var chart: TypeChart = _data.get_type_chart()
+	var badges: Array[Node] = row.get_children()  # one badge per type id (unknown ones hidden), see CardView
+	for i: int in mini(badges.size(), type_ids.size()):
+		var tid: String = type_ids[i]
+		_bind_tip(badges[i] as Control, func() -> Array[Dictionary]: return KeywordBook.type_entries(tid, chart))
 
 
 func _make_float_text() -> FloatText:
@@ -1343,6 +1372,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		v.intent_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		v.intent_label.clip_text = true  # never widens the slot; the font shrinks to fit first (_fit_intent_font)
 		v.panel.add_child(v.intent_label)
+		_bind_tip(v.intent_label, _intent_tip_entries.bind(i))  # story 023: what the intent does
 		v.sprite = _make_sprite_holder("EnemySprite%d" % i, sprite_scale)
 		v.sprite.show_pokemon(enemies[i].sprite_path, false)
 		v.panel.add_child(v.sprite)
@@ -1359,6 +1389,7 @@ func _build_enemy_views(enemies: Array[Combatant]) -> void:
 		_outline(v.block_label, OUTLINE_SMALL)
 		hp_row.add_child(v.block_label)
 		v.status_chips = StatusChipRow.new()
+		v.status_chips.tip_binder = _bind_tip  # story 023
 		v.panel.add_child(v.status_chips)
 		v.status_chips.bind(enemies[i], _data.get_status_book())
 		v.float_text = _make_float_text()
@@ -2494,7 +2525,11 @@ func _refresh_talent_pill() -> void:
 		return
 	var used: bool = _battle.is_talent_used(_battle.active_pokemon_id)
 	_talent_pill.text = TEXT_TALENT_USED % String(info["name"]) if used else String(info["name"])
-	_talent_pill.tooltip_text = TEXT_TALENT_TIP % [String(info["name"]), String(info["description"]), _keyword_text("talent")]
+	var talent_entries: Array[Dictionary] = [{"name": "Talent : %s" % String(info["name"]), "description": String(info["description"])}]
+	var generic: Dictionary = KeywordBook.entry("ui", "talent")
+	if not generic.is_empty():
+		talent_entries.append(generic)
+	_bind_tip(_talent_pill, func() -> Array[Dictionary]: return talent_entries)  # story 023: KeywordTooltip
 	var bg: Color = UiStyle.TALENT_USED if used else UiStyle.TALENT
 	var sb: StyleBoxFlat = CardFace._pill(bg, UiStyle.OUTLINE)
 	sb.content_margin_left = 7
@@ -2535,7 +2570,9 @@ func _set_elan_display(value: int, animate: bool) -> void:
 	_elan_bonus.text = TEXT_ELAN_BONUS % (value * per) if value > 0 and per > 0 else ""
 	_elan_bonus.visible = not _elan_bonus.text.is_empty()
 	_elan_box.modulate = Color.WHITE if value > 0 else Color(1, 1, 1, 0.7)
-	_elan_box.tooltip_text = _keyword_text("elan")
+	var elan_entry: Dictionary = (book.keywords.get("elan", {}) as Dictionary) if book != null else {}
+	_bind_tip(_elan_box, func() -> Array[Dictionary]:  # story 023: KeywordTooltip
+		return [{"name": String(elan_entry.get("name", kname)), "description": String(elan_entry.get("description", ""))}] as Array[Dictionary])
 	if animate and value > _elan_shown:
 		_fx.pulse(_elan_box, BattleFxDirector.cfg_f("elan", "pulse_scale", 1.3), BattleFxDirector.cfg_f("elan", "seconds", 0.3))
 	elif animate and value < _elan_shown:
@@ -2620,6 +2657,101 @@ func _show_card_tip(i: int, b: Button) -> void:
 		var info: Dictionary = _talent_info_of(card.pokemon_id)
 		entries.append({"name": "Talent : %s" % String(info.get("name", "")), "description": String(info.get("description", ""))})
 	_keyword_tip.show_for(entries, b.get_global_rect())
+
+
+# --- Story 023: hover tooltips on intents, chips, pills, energy ---------------------------------------------------
+
+## Story 023: shows the KeywordTooltip over `c` while hovered; `provider` returns its entries ([{name, description}]),
+## called at each hover (so it can read the live state). Rebinding replaces the provider. Clicks still pass through.
+func _bind_tip(c: Control, provider: Callable) -> void:
+	if c == null:
+		return
+	c.set_meta("tip_provider", provider)
+	c.tooltip_text = ""
+	if c.has_meta("tip_bound"):
+		return
+	c.set_meta("tip_bound", true)
+	if c.mouse_filter == Control.MOUSE_FILTER_IGNORE:
+		c.mouse_filter = Control.MOUSE_FILTER_PASS
+	c.mouse_entered.connect(_show_tip_of.bind(c))
+	c.mouse_exited.connect(_hide_tip_of.bind(c))
+
+
+func _show_tip_of(c: Control) -> void:
+	if _keyword_tip == null or not is_instance_valid(c) or not c.is_visible_in_tree() or not c.has_meta("tip_provider"):
+		return
+	var entries: Array[Dictionary] = []
+	entries.assign((c.get_meta("tip_provider") as Callable).call())
+	_keyword_tip.show_for(entries, c.get_global_rect())
+	_keyword_tip.set_meta("tip_owner", c)
+
+
+func _hide_tip_of(c: Control) -> void:
+	if _keyword_tip != null and _keyword_tip.get_meta("tip_owner", null) == c:
+		_keyword_tip.visible = false
+
+
+## Story 023: the entries of enemy `enemy_index`'s intent tooltip (live intent; K.O. entry once fainted).
+func _intent_tip_entries(enemy_index: int) -> Array[Dictionary]:
+	if _battle == null or enemy_index < 0 or enemy_index >= _battle.enemies.size():
+		return [] as Array[Dictionary]
+	var e: Combatant = _battle.enemies[enemy_index]
+	if e.is_alive() and (e.intent == null or _battle.state != Battle.State.PLAYER_TURN):
+		return [] as Array[Dictionary]
+	return KeywordBook.intent_entries(e.intent, _data.get_status_book(), e.is_alive())
+
+
+## Story 023, QA: shows the hover tooltip of a battle element as the mouse would and returns its texts. `what` =
+## "intent" | "enemy_type" | "enemy_status" (enemy `index`), "player_type" | "player_status" (pill `index`), "energy",
+## "elan", "talent", "field_rule". Empty when the element is absent / hidden.
+func qa_show_tip(what: String, index: int = 0) -> PackedStringArray:
+	var c: Control = get_tip_target(what, index)
+	if c == null:
+		if _keyword_tip != null:
+			_keyword_tip.visible = false
+		return PackedStringArray()
+	_show_tip_of(c)
+	return _keyword_tip.get_texts()
+
+
+## Story 023: the Control carrying the tooltip `what` (see qa_show_tip); null when absent. Also used by the tutorial.
+func get_tip_target(what: String, index: int = 0) -> Control:
+	var c: Control = null
+	match what:
+		"intent", "enemy_type", "enemy_status":
+			if index >= 0 and index < _enemy_views.size():
+				var v: EnemyView = _enemy_views[index]
+				if what == "intent":
+					c = v.intent_label
+				elif what == "enemy_type":
+					c = v.type_badge.get_child(0) as Control if v.type_badge.get_child_count() > 0 else null
+				else:
+					c = _first_chip(v.status_chips)
+		"player_type":
+			c = _player_type_badge.get_child(index) as Control if index < _player_type_badge.get_child_count() else null
+		"player_status":
+			c = _first_chip(_player_chips)
+		"energy":
+			c = _energy_gem
+		"elan":
+			c = _elan_box
+		"talent":
+			c = _talent_pill
+		"field_rule":
+			c = _field_pill
+	return c if c != null and c.is_visible_in_tree() else null
+
+
+func _first_chip(row: StatusChipRow) -> Control:
+	for chip: Node in row.get_children():
+		if not chip.is_queued_for_deletion() and chip.name != StatusChipRow.PLACEHOLDER:
+			return chip as Control
+	return null
+
+
+## Story 023: the KeywordTooltip (QA / tutorial).
+func get_keyword_tooltip() -> KeywordTooltip:
+	return _keyword_tip
 
 
 func _on_elan_changed(value: int) -> void:
