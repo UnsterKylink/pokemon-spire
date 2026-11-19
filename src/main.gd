@@ -24,6 +24,13 @@ extends Control
 ## 'rival' map rooms (zones of rival.json) and automatically after the last badge, before the league screen; events are
 ## filtered by zone, may be legendary (rare), may queue a fight (started after the event's "Continuer") or a card removal.
 ## API: get_rival_info(), get_current_fight(), get_last_special_reward(), event_option_available(), event_remove_card().
+## story-023-menu-options-tutoriel: in the real game the launch shows the TitleScreen (Continuer / Nouvelle partie / Tutoriel /
+## Options / Quitter + PlayerStats); Échap or the run bar « Pause » opens the PauseMenu (the tree is PAUSED while it is open:
+## every screen stops — battle input, tweens, animations — only the menu, the options panel and the music keep running);
+## « Abandonner » counts the run as lost in the stats, deletes the save and goes back to the title. The first battle of the
+## very first run shows the TutorialOverlay (assets/data/tutorial.json), replayable from the title on a fixed sandbox fight
+## (no save, no stats). QA scripts keep the old launch flow (resume screen / starter) and no tutorial unless they opt in
+## (qa_enable_title_screen, qa_set_stats_path, qa_enable_first_run_tutorial).
 ## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
@@ -67,6 +74,9 @@ const BACKDROP_LEGENDARY: String = "legendary"
 const BACKDROP_FINAL_BOSS: String = "ethernatos"
 ## QA: player turns qa_lose_battle() ends at most before giving up.
 const QA_LOSE_MAX_TURNS: int = 60
+## Story 023: the title screen (TitleScreen).
+const SCREEN_TITLE: String = "title"
+const TUTORIAL_PATH: String = "res://assets/data/tutorial.json"
 
 var _data: GameData
 var _run: RunState
@@ -148,6 +158,19 @@ var _options_panel: OptionsPanel
 ## Story 022: music / sound effects / cries (assets/data/audio.json); muted when headless.
 var _audio: AudioManager
 var _offers: Array[RewardOffer] = []
+## Story 023: title screen (real game launch), the pause menu, the player's stats ("" path = stats off: QA / CLI runs),
+## the guided-battle overlay, whether the first-run tutorial may show, and the tutorial replay sandbox (no save, no stats).
+var _title_enabled: bool = false
+var _title_screen: TitleScreen
+var _pause_menu: PauseMenu
+var _stats_path: String = ""
+var _stats: PlayerStats = PlayerStats.new()
+var _run_recorded: bool = false
+var _tutorial_enabled: bool = false
+var _tutorial: TutorialOverlay
+var _sandbox: bool = false
+var _tutorial_data: Dictionary = {}
+var _title_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -158,6 +181,7 @@ func _ready() -> void:
 	_encounter_order = _data.get_encounter_order()
 	_audio = AudioManager.new()
 	_audio.name = "Audio"
+	_audio.process_mode = Node.PROCESS_MODE_ALWAYS  # story 023: music and button sounds keep playing in the pause menu
 	add_child(_audio)
 	UiStyle.install_button_sounds(get_tree(), _audio.play_event.bind("button_pressed"), _audio.play_event.bind("button_hovered"))
 	_hud = RunHud.new()
@@ -166,6 +190,7 @@ func _ready() -> void:
 	_hud.potion_pressed.connect(battle_use_potion)
 	_hud.deck_pressed.connect(toggle_deck)
 	_hud.options_pressed.connect(open_options)
+	_hud.pause_pressed.connect(open_pause)
 	add_child(_hud)
 	_deck_panel = DeckOverlay.new()
 	add_child(_deck_panel)
@@ -173,6 +198,16 @@ func _ready() -> void:
 	_options_panel.audio = _audio
 	add_child(_options_panel)
 	_options_panel.changed.connect(_on_options_changed)
+	_pause_menu = PauseMenu.new()
+	_pause_menu.cancel_handler = handle_escape
+	_pause_menu.resume_requested.connect(close_pause)
+	_pause_menu.options_requested.connect(open_options)
+	_pause_menu.abandon_confirmed.connect(abandon_run)
+	_pause_menu.quit_to_title_requested.connect(quit_to_title)
+	_pause_menu.quit_game_requested.connect(func() -> void: get_tree().quit())
+	add_child(_pause_menu)
+	_title_rng.randomize()
+	_tutorial_data = _load_tutorial_data()
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
 	add_child(PostFx.new(), false, Node.INTERNAL_MODE_BACK)  # story 020b: global image finish, above every screen
 	var forced_seed: int = 0
@@ -200,6 +235,12 @@ func _ready() -> void:
 	_cli_seed = forced_seed
 	_autosave = not cli_forced and get_tree().current_scene == self  # the real game only (see the header)
 	if _autosave:
+		# Story 023: the real game: title screen, stats, first-run tutorial (never headless), saved window mode.
+		_title_enabled = true
+		_stats_path = PlayerStats.DEFAULT_PATH
+		_stats = PlayerStats.load_from(_stats_path)
+		_tutorial_enabled = DisplayServer.get_name() != "headless"
+		GameSettings.apply_window_mode(GameSettings.fullscreen_enabled())
 		_show_title()
 		return
 	start_new_run(forced_seed)
@@ -227,6 +268,8 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_team_evolution_rows = []
 	_hud.visible = false
 	_resume_result = {}
+	_sandbox = false
+	_run_recorded = false
 	var rngs: Array[RandomNumberGenerator] = _rng_list()
 	for i: int in rngs.size():
 		if act_seed != 0:
@@ -1117,7 +1160,7 @@ func qa_quit_to_title() -> void:
 
 ## "Reprendre" on the resume screen: rebuilds the saved run (state, map, RNG states) and shows its map / league screen.
 func resume_continue() -> void:
-	if _screen_name != SCREEN_RESUME or not bool(_resume_result.get("ok", false)):
+	if _screen_name not in [SCREEN_RESUME, SCREEN_TITLE] or not bool(_resume_result.get("ok", false)):
 		return
 	var result: Dictionary = _resume_result
 	_clear_screens()
@@ -1128,6 +1171,8 @@ func resume_continue() -> void:
 	_evolution_summary = {}
 	_team_evolution_rows = []
 	_resume_result = {}
+	_sandbox = false
+	_run_recorded = false
 	var extras: Dictionary = result["extras"]
 	var rngs: Array[RandomNumberGenerator] = _rng_list()
 	for i: int in RNG_NAMES.size():
@@ -1143,7 +1188,7 @@ func resume_continue() -> void:
 
 ## "Nouvelle partie" on the resume screen: the save (or its unreadable remains) is deleted, then the starter choice.
 func resume_new_game() -> void:
-	if _screen_name != SCREEN_RESUME:
+	if _screen_name not in [SCREEN_RESUME, SCREEN_TITLE]:
 		return
 	SaveGame.delete(_save_path)
 	start_new_run(_cli_seed)
@@ -1152,6 +1197,9 @@ func resume_new_game() -> void:
 ## Launch / relaunch: a valid save -> resume screen; an unreadable one -> the same screen with the reason (the file is kept
 ## as .bak); none -> the starter choice.
 func _show_title() -> void:
+	if _title_enabled:
+		_show_title_screen()
+		return
 	var result: Dictionary = SaveGame.load_run(_save_path, _data)
 	if bool(result.get("missing", false)):
 		start_new_run(_cli_seed)
@@ -1194,7 +1242,7 @@ func _check_extras(run: RunState, extras: Dictionary) -> String:
 
 ## Writes the autosave if enabled (SAFE points only: called when the map / league screen is shown). True if written.
 func _autosave_now() -> bool:
-	if not _autosave or _run == null or _run.is_defeated():
+	if not _autosave or _sandbox or _run == null or _run.is_defeated():
 		return false
 	var rngs: Dictionary = {}
 	var list: Array[RandomNumberGenerator] = _rng_list()
@@ -1206,7 +1254,7 @@ func _autosave_now() -> bool:
 
 
 func _delete_save() -> void:
-	if _autosave:
+	if _autosave and not _sandbox:
 		SaveGame.delete(_save_path)
 
 
@@ -1312,6 +1360,8 @@ func _launch_battle(encounter_id: String, enemies: Array[Combatant], room_type: 
 	_battle_screen.setup(battle, _data, _run, encounter_id)
 	_battle_screen.set_backdrop(_backdrop_for(room_type))
 	_refresh_hud()
+	if _tutorial_enabled and not _sandbox and not _stats.tutorial_done and _run.battles_won == 0:
+		_attach_tutorial()  # story 023: the very first battle of the very first run
 
 
 ## Story 020: battle backdrop id (assets/data/backdrops.json) for a fight in `room_type`: the league hall for league
@@ -1326,6 +1376,10 @@ func _backdrop_for(room_type: String) -> String:
 
 
 func _on_battle_won(defeated_ids: Array[String]) -> void:
+	if _sandbox:  # story 023: the tutorial replay ends with the fight
+		_end_sandbox()
+		return
+	_mark_tutorial_done()
 	var won_battle: Battle = _battle_screen.get_battle()
 	_run.record_battle_result(won_battle.player, defeated_ids)
 	# Story 017: captured Pokémon left the battle (not in defeated_ids: no xp / stolen card); they join the team now.
@@ -1452,6 +1506,7 @@ func _enter_league() -> void:
 func _on_battle_lost() -> void:
 	_delete_save()  # the run is lost: no way back to a safe point by quitting
 	_run.record_battle_result(_battle_screen.get_battle().player)
+	_record_run_end(false)  # story 023: counted at once (quitting on the defeat overlay must not lose it)
 	_refresh_hud()
 
 
@@ -1523,11 +1578,15 @@ func _show_victory() -> void:
 func _show_defeat() -> void:
 	if _run == null or not _run.is_defeated():
 		return
+	if _sandbox:
+		_end_sandbox()
+		return
 	_show_run_end(false)
 
 
 func _show_run_end(victory: bool) -> void:
 	_delete_save()  # victory or defeat ends the run for good
+	_record_run_end(victory)
 	_clear_screens()
 	_end_screen = RunEndScreen.new()
 	_end_screen.new_run_requested.connect(_on_new_run_requested)
@@ -1686,7 +1745,7 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 	_screen_name = screen_name
 	add_child(screen)
 	# No HUD on the starter choice nor on the end summaries (they show money / items themselves).
-	var show_hud: bool = _run != null and screen_name not in [SCREEN_STARTER, SCREEN_VICTORY, SCREEN_DEFEAT]
+	var show_hud: bool = _run != null and screen_name not in [SCREEN_STARTER, SCREEN_VICTORY, SCREEN_DEFEAT, SCREEN_TITLE]
 	_hud.visible = show_hud
 	screen.offset_top = RunHud.HEIGHT if show_hud else 0.0
 	if _deck_panel != null:
@@ -1766,6 +1825,283 @@ func is_screen_fading() -> bool:
 	return _fade != null and _fade.visible
 
 
+# --- Story 023: title screen, pause menu, player stats, guided first battle ---------------------------------------
+
+## QA-ONLY: shows the TitleScreen on (re)launch (qa_quit_to_title / abandon / quit) instead of the old resume flow.
+func qa_enable_title_screen(enabled: bool) -> void:
+	_title_enabled = enabled
+
+
+## QA-ONLY: stores the player stats at `path` (a scratch file; "" = stats off) and reloads them.
+func qa_set_stats_path(path: String) -> void:
+	_stats_path = path
+	_stats = PlayerStats.load_from(path)
+
+
+## QA-ONLY: lets the first battle of a run show the tutorial while the stats say it was never seen.
+func qa_enable_first_run_tutorial(enabled: bool) -> void:
+	_tutorial_enabled = enabled
+
+
+## QA: the live TitleScreen (null elsewhere).
+func get_title_screen() -> TitleScreen:
+	return _title_screen
+
+
+## QA: the pause menu (always exists; check is_open()).
+func get_pause_menu() -> PauseMenu:
+	return _pause_menu
+
+
+## QA: the guided-battle overlay of the current battle (null when none).
+func get_tutorial_overlay() -> TutorialOverlay:
+	return _tutorial if _tutorial != null and is_instance_valid(_tutorial) else null
+
+
+## The player stats in use (PlayerStats; not saved when the stats are off).
+func get_player_stats() -> PlayerStats:
+	return _stats
+
+
+## True in the tutorial replay sandbox (no save, no stats).
+func is_tutorial_sandbox() -> bool:
+	return _sandbox
+
+
+## Shows the title screen: save check (a valid save offers « Continuer »; an unreadable one is kept as .bak and its reason
+## shown), stats, a random Pokémon of the starter candidates (never the one of the previous launch).
+func _show_title_screen() -> void:
+	get_tree().paused = false
+	_stats = PlayerStats.load_from(_stats_path)
+	var result: Dictionary = SaveGame.load_run(_save_path, _data)
+	var summary: String = ""
+	var error: String = ""
+	if not bool(result.get("missing", false)):
+		if bool(result.get("ok", false)):
+			var reason: String = _check_extras(result["run"], result["extras"])
+			if not reason.is_empty():
+				result = SaveGame._fail(reason)
+		if bool(result.get("ok", false)):
+			summary = _save_summary(result["run"])
+		else:
+			SaveGame.quarantine(_save_path)
+			error = String(result.get("error", ""))
+	_clear_screens()
+	_run = null
+	_sandbox = false
+	_resume_result = result if bool(result.get("ok", false)) else {}
+	_title_screen = TitleScreen.new()
+	_title_screen.continue_requested.connect(resume_continue)
+	_title_screen.new_game_requested.connect(resume_new_game)
+	_title_screen.tutorial_requested.connect(start_tutorial)
+	_title_screen.options_requested.connect(open_options)
+	_title_screen.quit_requested.connect(func() -> void: get_tree().quit())
+	_set_screen(_title_screen, SCREEN_TITLE)
+	_title_screen.setup(_stats, summary, error, _pick_title_pokemon())
+
+
+## One line under « Continuer »: "<Pokémon> — Zone 3/8, 2 badges" or "<Pokémon> — Ligue, combat 2/6".
+func _save_summary(run: RunState) -> String:
+	var s: Dictionary = run.get_summary()
+	if run.is_in_league():
+		return "%s — Ligue, combat %d/%d" % [String(s["name"]), run.league_stage + 1, run.league.size()]
+	return "%s — Zone %d/%d, %s" % [String(s["name"]), int(s["zone"]), int(s["zone_count"]),
+			String(PlayerStats.result_of(run)["text"])]
+
+
+## Sprite path of a random starter candidate (not the previous launch's one); remembered in the stats.
+func _pick_title_pokemon() -> String:
+	var pool: Array[String] = _data.get_starter_candidates().duplicate()
+	if pool.size() > 1:
+		pool.erase(_stats.last_title_pokemon)
+	if pool.is_empty():
+		return ""
+	var pid: String = pool[_title_rng.randi_range(0, pool.size() - 1)]
+	_stats.last_title_pokemon = pid
+	if not _stats_path.is_empty():
+		_stats.save()
+	return String(_data.get_pokemon_info(pid).get("sprite_path", ""))
+
+
+## Opens the pause menu (Échap / run bar « Pause ») during a run and pauses the tree. False when not in a run screen.
+func open_pause() -> bool:
+	if _run == null or _hud == null or not _hud.visible or _pause_menu.is_open():
+		return false
+	if _screen_name in [SCREEN_NONE, SCREEN_TITLE, SCREEN_STARTER, SCREEN_RESUME, SCREEN_VICTORY, SCREEN_DEFEAT]:
+		return false
+	close_deck()
+	if _battle_screen != null:
+		var tip: KeywordTooltip = _battle_screen.get_keyword_tooltip()
+		if tip != null:
+			tip.visible = false
+	_pause_menu.sandbox = _sandbox
+	move_child(_pause_menu, get_child_count() - 1)
+	_pause_menu.open()
+	get_tree().paused = true
+	return true
+
+
+## « Reprendre »: closes the pause menu (and the options opened from it) and unpauses.
+func close_pause() -> void:
+	_pause_menu.close()
+	_options_panel.close()
+	get_tree().paused = false
+
+
+## True while the pause menu is open.
+func is_paused() -> bool:
+	return _pause_menu != null and _pause_menu.is_open()
+
+
+## « Abandonner la partie » (confirmed): the run counts as lost in the stats, its save is deleted, back to the title.
+## In the tutorial sandbox: back to the title only.
+func abandon_run() -> void:
+	close_pause()
+	if _run == null:
+		return
+	if not _sandbox:
+		_record_run_end(false)
+		_delete_save()
+	_return_to_title()
+
+
+## « Quitter le jeu » → « Écran titre »: the autosave (last map / league screen) is kept; back to the title.
+func quit_to_title() -> void:
+	close_pause()
+	_return_to_title()
+
+
+## The Échap key (routed by the pause menu, which processes while paused): closes the topmost overlay first — options,
+## pause confirmation / pause menu, title confirmation, deck panel — else opens the pause menu in a run. True if handled.
+func handle_escape() -> bool:
+	if _options_panel != null and _options_panel.is_open():
+		_options_panel.close()
+		return true
+	if _pause_menu.is_open():
+		return _pause_menu.handle_cancel()
+	if _title_screen != null and _title_screen.cancel_confirm():
+		return true
+	if _deck_panel != null and _deck_panel.is_open():
+		close_deck()
+		return true
+	if _picker_open():
+		return false
+	return open_pause()
+
+
+func _return_to_title() -> void:
+	get_tree().paused = false
+	_clear_screens()
+	_run = null
+	_sandbox = false
+	_hud.visible = false
+	if _title_enabled or _autosave:
+		_show_title()
+	else:
+		start_new_run(_cli_seed)
+
+
+## Counts the current run's end in the player stats once (never in the sandbox nor with the stats off).
+func _record_run_end(victory: bool) -> void:
+	if _run_recorded or _sandbox or _run == null or _stats_path.is_empty():
+		return
+	_run_recorded = true
+	_stats = PlayerStats.load_from(_stats_path)
+	_stats.record_run_end(PlayerStats.result_of(_run), victory)
+	_stats.save()
+
+
+func _mark_tutorial_done() -> void:
+	if _stats.tutorial_done or _sandbox:
+		return
+	if not _stats_path.is_empty():
+		_stats = PlayerStats.load_from(_stats_path)
+	_stats.tutorial_done = true
+	if not _stats_path.is_empty():
+		_stats.save()
+
+
+func _load_tutorial_data() -> Dictionary:
+	var f: FileAccess = FileAccess.open(TUTORIAL_PATH, FileAccess.READ)
+	if f == null:
+		push_error("Main: missing %s" % TUTORIAL_PATH)
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	return parsed if parsed is Dictionary else {}
+
+
+## « Tutoriel » on the title: the fixed guided battle (tutorial.json `replay`: starter + team, encounter, seed, first
+## hand) in a sandbox run — no save, no stats; the win, the defeat or « Passer le tutoriel » go back to the title.
+func start_tutorial() -> void:
+	var rp: Dictionary = _tutorial_data.get("replay", {}) if _tutorial_data.get("replay", {}) is Dictionary else {}
+	var starter: String = String(rp.get("starter", _data.get_default_player_id()))
+	var encounter: String = String(rp.get("encounter", ""))
+	if not _encounter_order.has(encounter):
+		push_error("Main: tutorial encounter '%s' unknown" % encounter)
+		return
+	get_tree().paused = false
+	_clear_screens()
+	_last_loot = {}
+	_last_captures = []
+	_last_badge = {}
+	_encounter_id = ""
+	_fight_room_type = ""
+	_resume_result = {}
+	var rngs: Array[RandomNumberGenerator] = _rng_list()
+	var tut_seed: int = int(rp.get("seed", 1))
+	for i: int in rngs.size():
+		rngs[i].seed = tut_seed + i + 1
+	var run: RunState = RunState.create_with_starter(_data, starter)
+	if run == null:
+		return
+	var team: Array[String] = []
+	team.assign(rp.get("team", []))
+	run.apply_captures(team)
+	_run = run
+	_sandbox = true
+	_run_recorded = true
+	_launch_battle(encounter, _data.create_enemies(encounter), "")
+	if _battle_screen == null:
+		return
+	var hand: Array[String] = []
+	hand.assign(rp.get("hand", []))
+	if not hand.is_empty():
+		_battle_screen.set_tutorial_hand(hand)
+	_attach_tutorial()
+
+
+func _attach_tutorial() -> void:
+	var steps: Variant = _tutorial_data.get("steps", [])
+	if _battle_screen == null or not (steps is Array) or (steps as Array).is_empty():
+		return
+	_tutorial = TutorialOverlay.new()
+	_battle_screen.add_child(_tutorial)
+	var battle: Battle = _battle_screen.get_battle()
+	battle.card_played.connect(_on_tutorial_action.bind("card_played").unbind(1))
+	battle.active_pokemon_changed.connect(_on_tutorial_action.bind("switch").unbind(2))
+	battle.turn_started.connect(_on_tutorial_action.bind("end_turn"))
+	_tutorial.finished.connect(_on_tutorial_finished)
+	_tutorial.setup(steps, _battle_screen.get_tutorial_target, BattleFxDirector.saved_enabled())
+
+
+func _on_tutorial_action(action: String) -> void:
+	if _tutorial != null and is_instance_valid(_tutorial):
+		_tutorial.notify_action(action)
+
+
+func _on_tutorial_finished(skipped: bool) -> void:
+	_mark_tutorial_done()
+	if _sandbox and skipped:
+		_end_sandbox.call_deferred()  # the overlay emitting this lives in the battle screen being freed
+
+
+## End of the tutorial replay (win, defeat or skip): back to the title.
+func _end_sandbox() -> void:
+	if _sandbox:
+		_return_to_title()
+
+
 ## Redraws the HUD from the run (and the live battle's potions).
 func _refresh_hud() -> void:
 	if _hud != null and _run != null:
@@ -1789,6 +2125,8 @@ func _clear_screens() -> void:
 	_evolution_screen = null
 	_end_screen = null
 	_resume_screen = null
+	_title_screen = null
+	_tutorial = null
 	_badge_screen = null
 	_league_screen = null
 	_evolution_offers = []

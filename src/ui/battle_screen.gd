@@ -2749,6 +2749,63 @@ func _first_chip(row: StatusChipRow) -> Control:
 	return null
 
 
+## Story 023 (guided first battle): the Control a tutorial step points at, null when absent / hidden. `id` = "energy",
+## "attack_card" (an attack of the active Pokémon), "switch_card" (a card of another team Pokémon), "block_card" (a
+## card giving Protection), "hand", "enemy", "intent", "enemy_type", "player_type", "elan", "talent", "end_turn".
+func get_tutorial_target(id: String) -> Control:
+	if _battle == null:
+		return null
+	var c: Control = null
+	match id:
+		"energy":
+			c = _energy_gem
+		"hand":
+			c = _hand_box
+		"attack_card", "switch_card", "block_card":
+			var buttons: Array[Node] = _hand_box.get_children()
+			for i: int in mini(buttons.size(), _battle.hand.size()):
+				var card: CardData = _battle.hand[i]
+				var other: bool = not card.pokemon_id.is_empty() and card.pokemon_id != _battle.active_pokemon_id
+				var ok: bool = (id == "attack_card" and card.deals_damage() and not other) \
+						or (id == "switch_card" and other) or (id == "block_card" and card.block > 0 and not card.deals_damage())
+				if ok and not buttons[i].is_queued_for_deletion():
+					c = buttons[i] as Control
+					break
+		"enemy", "intent", "enemy_type":
+			for i: int in _enemy_views.size():
+				if _battle.enemies[i].is_alive():
+					var v: EnemyView = _enemy_views[i]
+					c = v.panel if id == "enemy" else (v.intent_label if id == "intent" else v.type_badge)
+					break
+		"player_type":
+			c = _player_type_badge
+		"elan":
+			c = _elan_box
+		"talent":
+			c = _talent_pill
+		"end_turn":
+			c = _end_turn_button
+	return c if c != null and is_instance_valid(c) and c.is_visible_in_tree() else null
+
+
+## Story 023 (tutorial replay only, a sandbox run): puts `cards` (taken from the draw pile, matched by deck key) in the
+## hand in place of the drawn ones, so the guided battle always starts with the same hand. Cards not found are skipped.
+func set_tutorial_hand(card_ids: Array[String]) -> void:
+	_auto_skip()
+	if _battle == null:
+		return
+	_battle.draw_pile.append_array(_battle.hand)
+	_battle.hand.clear()
+	for cid: String in card_ids:
+		for j: int in _battle.draw_pile.size():
+			if _battle.draw_pile[j].id == cid:
+				_battle.hand.append(_battle.draw_pile[j])
+				_battle.draw_pile.remove_at(j)
+				break
+	_selected_index = -1
+	_refresh()
+
+
 ## Story 023: the KeywordTooltip (QA / tutorial).
 func get_keyword_tooltip() -> KeywordTooltip:
 	return _keyword_tip

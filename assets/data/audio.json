@@ -36,6 +36,7 @@
 		"event": "evenement"
 	},
 	"screens": {
+		"title": "title",
 		"resume": "title",
 		"starter": "title",
 		"map": "map",
