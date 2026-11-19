@@ -42,6 +42,6 @@
 | 022 | Musique et effets sonores | Visual/Feel | Complete | N/A |
 | 023 | Menu principal, pause, options et tutoriel | UI | Complete | N/A |
 | 024 | Version .exe Windows et optimisation | Integration | Complete | N/A |
-| 025 | Pokédex | UI | In Progress | N/A |
+| 025 | Pokédex | UI | Complete | N/A |
 | 026 | Niveaux de difficulté (façon Ascension) | Logic | Ready | N/A |
 | 013b | Grande diversité de Pokémon | Integration | Complete | N/A |
