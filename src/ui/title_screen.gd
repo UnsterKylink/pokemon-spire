@@ -49,9 +49,9 @@ const FAN_DIM: Color = Color(0.8, 0.8, 0.8)
 const SHADE_COLOR: Color = Color("#060818")
 const SHADE_STOPS: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(0.167, 0.0), Vector2(0.528, 0.19), Vector2(0.764, 0.64),
 		Vector2(1.0, 0.98)]
-const BUTTON_SIZE: Vector2 = Vector2(212, 52)
+const BUTTON_SIZE: Vector2 = Vector2(198, 52)
 const BUTTON_FONT: int = 23
-const BUTTON_GAP: int = 22
+const BUTTON_GAP: int = 18
 const MENU_BOTTOM: float = 22.0
 const TEXT_CONTINUE: String = "Continuer"
 const TEXT_NEW_GAME: String = "Nouvelle partie"
@@ -464,8 +464,14 @@ func _build_menu() -> void:
 	_continue_caption.add_theme_color_override("font_color", UiStyle.CREAM)
 	_continue_caption.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
 	_continue_caption.add_theme_constant_override("outline_size", 5)
-	_continue_caption.size = Vector2(BUTTON_SIZE.x + 160.0, 24)
-	_continue_caption.position = Vector2(-80.0, -30.0)
+	_continue_caption.anchor_left = 0.0
+	_continue_caption.anchor_right = 1.0
+	_continue_caption.anchor_top = 0.0
+	_continue_caption.anchor_bottom = 0.0
+	_continue_caption.offset_left = -90.0
+	_continue_caption.offset_right = 90.0
+	_continue_caption.offset_top = -30.0
+	_continue_caption.offset_bottom = -6.0
 	_continue_button.add_child(_continue_caption)
 	_stats_label = CardView.make_label(16)
 	_stats_label.name = "Stats"
