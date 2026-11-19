@@ -40,6 +40,23 @@ func is_enabled() -> bool:
 	return _rect.visible
 
 
+## Story 023 (title layout B): turns the vignette off / back on (shader default). The title screen has its own dark
+## backdrop and bottom gradient; the vignette there dimmed the outer menu buttons' white text.
+func set_vignette_enabled(on: bool) -> void:
+	if _material == null:
+		return
+	var default_v: Variant = RenderingServer.shader_get_parameter_default(_material.shader.get_rid(), "vignette_strength")
+	_material.set_shader_parameter("vignette_strength", default_v if on else 0.0)
+
+
+## True when the vignette is drawn (QA).
+func is_vignette_enabled() -> bool:
+	if _material == null or not _rect.visible:
+		return false
+	var v: Variant = _material.get_shader_parameter("vignette_strength")
+	return v == null or float(v) > 0.0
+
+
 ## Sets one post_finish.gdshader uniform (halo_strength, saturation, contrast, vignette_strength, grain_strength...).
 func set_param(param: String, value: Variant) -> void:
 	if _material != null:

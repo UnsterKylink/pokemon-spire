@@ -147,6 +147,8 @@ var _team_evolution_rows: Array[Dictionary] = []
 var _shop: ShopInventory
 ## Permanent money / items / potions bar (story 006), above every run screen except the starter choice.
 var _hud: RunHud
+## Story 020b: global image finish (story 023: no vignette on the title screen).
+var _post_fx: PostFx
 ## Story 033: screen-switch fade (dark veil over everything, fading out after each switch; animations.json
 ## "screen_transition"). Off at the « Instantané » animation speed and headless.
 var _fade: ColorRect
@@ -209,7 +211,8 @@ func _ready() -> void:
 	_title_rng.randomize()
 	_tutorial_data = _load_tutorial_data()
 	move_child(_hud, get_child_count() - 1)  # the panel sits under the HUD, so the Deck button stays usable
-	add_child(PostFx.new(), false, Node.INTERNAL_MODE_BACK)  # story 020b: global image finish, above every screen
+	_post_fx = PostFx.new()
+	add_child(_post_fx, false, Node.INTERNAL_MODE_BACK)  # story 020b: global image finish, above every screen
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
 	var cli_forced: bool = false
@@ -1744,6 +1747,8 @@ func _set_screen(screen: Control, screen_name: String) -> void:
 	_screen = screen
 	_screen_name = screen_name
 	add_child(screen)
+	if _post_fx != null:
+		_post_fx.set_vignette_enabled(screen_name != SCREEN_TITLE)  # the title draws its own darkening
 	# No HUD on the starter choice nor on the end summaries (they show money / items themselves).
 	var show_hud: bool = _run != null and screen_name not in [SCREEN_STARTER, SCREEN_VICTORY, SCREEN_DEFEAT, SCREEN_TITLE]
 	_hud.visible = show_hud
