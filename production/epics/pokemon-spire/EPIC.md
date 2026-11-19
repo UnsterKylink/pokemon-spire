@@ -41,7 +41,7 @@
 | 033 | Cohérence visuelle (étape C) | Visual/Feel | Complete | N/A |
 | 022 | Musique et effets sonores | Visual/Feel | Complete | N/A |
 | 023 | Menu principal, pause, options et tutoriel | UI | Complete | N/A |
-| 024 | Version .exe Windows et optimisation | Integration | Ready | N/A |
+| 024 | Version .exe Windows et optimisation | Integration | In Progress | N/A |
 | 025 | Pokédex | UI | Ready | N/A |
 | 026 | Niveaux de difficulté (façon Ascension) | Logic | Ready | N/A |
 | 013b | Grande diversité de Pokémon | Integration | Complete | N/A |
