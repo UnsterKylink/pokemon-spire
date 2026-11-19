@@ -1,8 +1,8 @@
 class_name TitleScreen
 extends Control
 ## Story 023 (story-023-menu-options-tutoriel): the title screen shown at launch (real game). The player's painting
-## (assets/art/title/title.jpg, cover-fit), the « Pokémon Spire » logo (UiStyle.apply_logo: yellow fill, thick blue
-## outline), a random animated Pokémon standing on the path (AnimatedPokemon, front sheet; chosen by Main), the menu window
+## (assets/art/title/title.jpg, cover-fit), the « Pokémon Spire » logo (rendered image assets/art/title/logo.png from tools/art/make_logo.py,
+## label fallback), a random Pokémon standing on the path (official HD artwork, gentle bob; chosen by Main), the menu window
 ## (Continuer — only with a valid save —, Nouvelle partie — confirmation when a save exists —, Tutoriel, Options,
 ## Quitter) and the statistics window (parties jouées / gagnées / meilleur résultat, PlayerStats). Display only: it emits
 ## signals and Main acts (resume, new run, tutorial replay, options, quit). Keyboard / gamepad: the buttons take focus.
@@ -18,7 +18,13 @@ const LOGO_TEXT: String = "Pokémon Spire"
 const LOGO_SIZE: int = 92
 const LOGO_OUTLINE: int = 18
 const SUBTITLE: String = "Roguelike de cartes"
-const POKEMON_BOX: Vector2 = Vector2(300, 300)
+## Rendered logo (tools/art/make_logo.py); the label logo is the fallback.
+const LOGO_PATH: String = "res://assets/art/title/logo.png"
+const LOGO_WIDTH: float = 560.0
+const POKEMON_BOX: Vector2 = Vector2(270, 270)
+## Gentle idle bob of the title Pokémon (px, seconds per half cycle).
+const BOB_HEIGHT: float = 8.0
+const BOB_TIME: float = 1.4
 ## Feet of the Pokémon, as fractions of the screen (on the painted path).
 const POKEMON_ANCHOR: Vector2 = Vector2(0.4, 0.93)
 const MENU_WIDTH: float = 330.0
@@ -40,8 +46,10 @@ const TEXT_CANCEL: String = "Annuler"
 
 var _built: bool = false
 var _background: TextureRect
-var _logo: Label
-var _pokemon: AnimatedPokemon
+var _logo: Control
+## Official artwork of the title Pokémon (HD, smooth), bobbing gently.
+var _pokemon: TextureRect
+var _bob: Tween
 var _menu: VBoxContainer
 var _continue_button: Button
 var _continue_caption: Label
@@ -76,8 +84,8 @@ func setup(stats: PlayerStats, save_summary: String, save_error: String, pokemon
 	_stats_lines[1].text = TEXT_WON % s.runs_won
 	_stats_lines[2].text = TEXT_BEST % s.best_result_text()
 	_pokemon_sprite = pokemon_sprite
-	_pokemon.show_pokemon(pokemon_sprite, false)
-	_pokemon.set_motion_enabled(BattleFxDirector.saved_enabled())
+	_pokemon.texture = PokemonArt.texture_for_sprite(pokemon_sprite)
+	_start_bob()
 	_confirm.visible = false
 	_focus_later(_continue_button if _has_save else _menu.get_node("NewGame") as Button)
 
@@ -168,7 +176,21 @@ func _notification(what: int) -> void:
 func _place_pokemon() -> void:
 	var feet: Vector2 = size * POKEMON_ANCHOR
 	_pokemon.size = POKEMON_BOX
-	_pokemon.position = Vector2(feet.x - POKEMON_BOX.x * 0.5, feet.y - POKEMON_BOX.y * AnimatedPokemon.FEET_RATIO)
+	_pokemon.position = Vector2(feet.x - POKEMON_BOX.x * 0.5, feet.y - POKEMON_BOX.y)
+	_start_bob()
+
+
+## Idle bob (skipped when animations are off).
+func _start_bob() -> void:
+	if _bob != null:
+		_bob.kill()
+		_bob = null
+	if _pokemon == null or not is_inside_tree() or not BattleFxDirector.saved_enabled():
+		return
+	var y0: float = _pokemon.position.y
+	_bob = create_tween().set_loops()
+	_bob.tween_property(_pokemon, "position:y", y0 - BOB_HEIGHT, BOB_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_bob.tween_property(_pokemon, "position:y", y0, BOB_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 func _build() -> void:
@@ -191,32 +213,47 @@ func _build() -> void:
 		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(fill)
 	# Logo, top left over the sky (the spire stays visible on the right).
-	var logo_box := VBoxContainer.new()
-	logo_box.name = "LogoBox"
-	logo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	logo_box.position = Vector2(48, 26)
-	logo_box.add_theme_constant_override("separation", -6)
-	add_child(logo_box)
-	_logo = Label.new()
-	_logo.name = "Logo"
-	_logo.text = LOGO_TEXT
-	_logo.add_theme_font_size_override("font_size", LOGO_SIZE)
-	UiStyle.apply_logo(_logo, LOGO_OUTLINE)
-	logo_box.add_child(_logo)
-	var sub := Label.new()
-	sub.text = SUBTITLE
-	sub.add_theme_font_override("font", UiStyle.font_title())
-	sub.add_theme_font_size_override("font_size", 26)
-	sub.add_theme_color_override("font_color", UiStyle.TEXT)
-	sub.add_theme_color_override("font_outline_color", UiStyle.LOGO_BLUE)
-	sub.add_theme_constant_override("outline_size", 8)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	logo_box.add_child(sub)
+	if ResourceLoader.exists(LOGO_PATH):
+		var logo := TextureRect.new()
+		logo.name = "Logo"
+		logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		logo.texture = load(LOGO_PATH) as Texture2D
+		logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		logo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		var tex_size: Vector2 = logo.texture.get_size()
+		logo.size = Vector2(LOGO_WIDTH, LOGO_WIDTH * tex_size.y / tex_size.x)
+		logo.position = Vector2(36, 14)
+		add_child(logo)
+		_logo = logo
+	else:
+		var logo_box := VBoxContainer.new()
+		logo_box.name = "LogoBox"
+		logo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		logo_box.position = Vector2(48, 26)
+		logo_box.add_theme_constant_override("separation", -6)
+		add_child(logo_box)
+		var label := Label.new()
+		label.name = "Logo"
+		label.text = LOGO_TEXT
+		label.add_theme_font_size_override("font_size", LOGO_SIZE)
+		UiStyle.apply_logo(label, LOGO_OUTLINE)
+		logo_box.add_child(label)
+		var sub := Label.new()
+		sub.text = SUBTITLE
+		sub.add_theme_font_override("font", UiStyle.font_title())
+		sub.add_theme_font_size_override("font_size", 26)
+		sub.add_theme_color_override("font_color", UiStyle.TEXT)
+		sub.add_theme_color_override("font_outline_color", UiStyle.LOGO_BLUE)
+		sub.add_theme_constant_override("outline_size", 8)
+		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		logo_box.add_child(sub)
+		_logo = logo_box
 	# The Pokémon on the path.
-	_pokemon = AnimatedPokemon.new()
+	_pokemon = TextureRect.new()
 	_pokemon.name = "TitlePokemon"
 	_pokemon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pokemon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_pokemon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_pokemon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_pokemon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	add_child(_pokemon)
@@ -351,7 +388,7 @@ func _button(node_name: String, text: String, color: Color, on_press: Callable) 
 
 ## Soft ground shadow under the title Pokémon (drawn behind it).
 class _Shadow extends Control:
-	var target: AnimatedPokemon
+	var target: TextureRect
 
 	func _process(_delta: float) -> void:
 		queue_redraw()
@@ -359,9 +396,9 @@ class _Shadow extends Control:
 	func _draw() -> void:
 		if target == null or not is_instance_valid(target):
 			return
-		var feet: Vector2 = target.position + Vector2(target.size.x * 0.5, target.get_feet_y())
-		var r: Rect2 = target.get_drawn_rect()
-		var w: float = maxf(r.size.x * 0.8, 60.0)
+		# Fixed ground point (the Pokémon bobs above it); width from the box.
+		var feet: Vector2 = Vector2(target.position.x + target.size.x * 0.5, get_parent_control().size.y * POKEMON_ANCHOR.y - 6.0)
+		var w: float = target.size.x * 0.62
 		draw_set_transform(feet, 0.0, Vector2(1.0, 0.28))
 		draw_circle(Vector2.ZERO, w * 0.5, Color(0, 0, 0, 0.32))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
