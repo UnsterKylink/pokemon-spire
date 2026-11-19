@@ -31,7 +31,7 @@
 | 019 | Équilibrage et cartes manquantes | Config/Data | Ready | N/A |
 | 020 | Style graphique, fonds de combat et cartes | Visual/Feel | Complete | N/A |
 | 020b | Refonte visuelle premium (Pokémon animés, objets, cartes holo, finitions) | Visual/Feel | Complete | N/A |
-| 021 | Animations d'attaque et de combat | Visual/Feel | In Progress | N/A |
+| 021 | Animations d'attaque et de combat | Visual/Feel | Complete | N/A |
 | 027 | Profondeur du combat : effets de cartes, Talents et Élan | Logic | Complete | N/A |
 | 028 | Réécriture des cartes par type | Config/Data | Complete | N/A |
 | 029 | Objets variés et objets à build | Logic | Complete | N/A |

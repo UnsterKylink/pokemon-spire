@@ -14,4 +14,4 @@
 
 | Rôle | Statut |
 |---|---|
-| Joueur / direction artistique (ressenti en jeu) | [ ] Approved |
+| Joueur (ressenti en jeu) | [x] Approved (2026-11-19) |
