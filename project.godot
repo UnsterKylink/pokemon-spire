@@ -7,6 +7,9 @@ config_version=5
 
 config/name="Pokémon Spire"
 run/main_scene="res://src/main.tscn"
+config/icon="res://assets/art/icon/icon.png"
+config/description="Un roguelike de cartes Pokémon : gravis la Spire, bats les 8 champions, la Ligue et Éthernatos."
+config/version="1.0.0"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 
 [rendering]
