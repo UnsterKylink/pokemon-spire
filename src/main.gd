@@ -31,7 +31,7 @@ extends Control
 ## very first run shows the TutorialOverlay (assets/data/tutorial.json), replayable from the title on a fixed sandbox fight
 ## (no save, no stats). QA scripts keep the old launch flow (resume screen / starter) and no tutorial unless they opt in
 ## (qa_enable_title_screen, qa_set_stats_path, qa_enable_first_run_tutorial).
-## CLI (user args, after `--`): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
+## CLI (user args, after `--`; ignored in exported builds, see QaGate): `--seed=<int>` forces the first map seed (and seeds the run RNGs, for QA);
 ## `--starter=<id>` skips the starter choice (QA / repro); `--encounter=<id>` starts that encounter directly (debug).
 
 const STARTER_ARG_PREFIX: String = "--starter="
@@ -216,7 +216,9 @@ func _ready() -> void:
 	var forced_seed: int = 0
 	var debug_encounter: String = ""
 	var cli_forced: bool = false
-	for arg: String in OS.get_cmdline_user_args():
+	# Story 024: CLI QA flags are ignored in an exported build (see QaGate).
+	var cli_args: PackedStringArray = OS.get_cmdline_user_args() if QaGate.enabled() else PackedStringArray()
+	for arg: String in cli_args:
 		if arg.begins_with(STARTER_ARG_PREFIX) or arg.begins_with(SEED_ARG_PREFIX) or arg.begins_with(ENCOUNTER_ARG_PREFIX):
 			cli_forced = true
 		if arg.begins_with(STARTER_ARG_PREFIX):
@@ -553,6 +555,8 @@ func battle_use_ball(ball: Variant, enemy_index: int) -> Dictionary:
 
 ## QA-ONLY CHEAT (story 017): gives one ball `ball_id` (if the bag has room).
 func qa_give_ball(ball_id: String) -> void:
+	if not QaGate.enabled():
+		return
 	if _run != null and _run.add_ball(ball_id):
 		_refresh_hud()
 
@@ -641,6 +645,8 @@ func shop_leave() -> void:
 
 ## QA-ONLY: opens the Centre ("center") or the Mart ("mart") screen directly, without moving on the map.
 func qa_open_room(room_type: String) -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	if room_type == "center":
@@ -651,18 +657,24 @@ func qa_open_room(room_type: String) -> void:
 
 ## QA-ONLY CHEAT: gives held item `item_id` (on_pickup effects apply).
 func qa_give_item(item_id: String) -> void:
+	if not QaGate.enabled():
+		return
 	if _run != null and _run.add_item(_data.get_item(item_id)):
 		_refresh_hud()
 
 
 ## QA-ONLY CHEAT: gives potion `potion_id` (if the belt has room).
 func qa_give_potion(potion_id: String) -> void:
+	if not QaGate.enabled():
+		return
 	if _run != null and _run.add_potion(_data.get_potion(potion_id)):
 		_refresh_hud()
 
 
 ## QA-ONLY CHEAT: sets the run's Pokédollars.
 func qa_set_money(amount: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _run != null:
 		_run.money = maxi(amount, 0)
 		_refresh_hud()
@@ -729,6 +741,8 @@ func get_deck_panel() -> DeckOverlay:
 ## QA-ONLY CHEAT: pads the deck with `n` extra cards cycling through the player's reward pool (every 4th one
 ## upgraded "+") to test long decks.
 func qa_give_cards(n: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	var pool: Array[CardData] = _data.get_reward_pool(_run.player_id)
@@ -785,6 +799,8 @@ func get_team_evolution_rows() -> Array[Dictionary]:
 ## QA-ONLY CHEAT (story 014): the starter's form goes to `stage` (0..) through the real evolution rule, silently
 ## (no screen, one RunState.evolve_starter step per stage, bonuses applied). Returns the stage reached.
 func qa_set_evolution_stage(stage: int) -> int:
+	if not QaGate.enabled():
+		return 0
 	if _run == null:
 		return 0
 	while _run.evolution_stage < stage:
@@ -797,6 +813,8 @@ func qa_set_evolution_stage(stage: int) -> int:
 
 ## QA-ONLY CHEAT (story 014): counts `n` won battles (battles_won + team progress) without fighting.
 func qa_win_battles(n: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	for i: int in n:
@@ -807,11 +825,15 @@ func qa_win_battles(n: int) -> void:
 ## QA-ONLY (story 014): checks the team evolutions as after a won battle; shows the summary screen (then the map) and
 ## returns true if some Pokémon was due.
 func qa_check_team_evolution() -> bool:
+	if not QaGate.enabled():
+		return false
 	return _run != null and _show_team_evolution(_show_map)
 
 
 ## QA-ONLY (story 014): runs the starter evolution of badge number `badge_number` (screen flow, as after the badge).
 func qa_show_starter_evolution(badge_number: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _run != null:
 		_show_evolution(badge_number)
 
@@ -855,6 +877,8 @@ func battle_defeat_continue() -> void:
 ## QA-ONLY: starts the current zone's Champion fight ("boss" room: the zone's gym encounter and gym modifiers, as on the
 ## map) with the CURRENT run, without walking the map. The win goes through the real gym flow (reward -> badge...).
 func qa_start_boss() -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	var encounter_id: String = _data.pick_encounter(ROOM_BOSS, _run.zone_floors(), _encounter_rng, _run.current_zone())
@@ -864,12 +888,16 @@ func qa_start_boss() -> void:
 
 ## QA-ONLY alias of qa_start_boss (story 012 wording).
 func qa_start_gym() -> void:
+	if not QaGate.enabled():
+		return
 	qa_start_boss()
 
 
 ## QA-ONLY CHEAT: wins the current zone's gym through the real win path (starts the gym fight if none is running, then
 ## the battle-won handler): loot + card reward screen next, then badge_continue-able badge screen after the reward.
 func qa_win_gym() -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	if _battle_screen == null or _fight_room_type != ROOM_BOSS:
@@ -885,6 +913,8 @@ func qa_win_gym() -> void:
 ## QA-ONLY CHEAT: jumps to zone `index` (0-based) with a fresh map, keeping HP / deck / money / items; no badge or bonus is
 ## granted for the zones skipped. False if the index is out of range.
 func qa_set_zone(index: int) -> bool:
+	if not QaGate.enabled():
+		return false
 	if _run == null or index < 0 or index >= _run.zones.size():
 		return false
 	_run.jump_to_zone(index)
@@ -896,6 +926,8 @@ func qa_set_zone(index: int) -> bool:
 
 ## QA-ONLY CHEAT: enters the current zone's gym room directly (marks it visited) and starts the Champion fight.
 func qa_skip_to_gym() -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null or _run.act == null:
 		return
 	var gym_id: String = _run.act.graph.boss_id()
@@ -907,6 +939,8 @@ func qa_skip_to_gym() -> void:
 
 ## QA-ONLY CHEAT: sets every living enemy of the live battle to `value` HP (clamped 1..max), to win quickly.
 func qa_set_enemy_hp(value: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _battle_screen == null:
 		return
 	for e: Combatant in _battle_screen.get_battle().enemies:
@@ -919,6 +953,8 @@ func qa_set_enemy_hp(value: int) -> void:
 ## QA-ONLY CHEAT: loses the live battle through the real enemy turns (player at 1 HP, no block, ends turns).
 ## True if the battle is lost (the defeat overlay is then shown; battle_defeat_continue() goes on).
 func qa_lose_battle() -> bool:
+	if not QaGate.enabled():
+		return false
 	if _battle_screen == null:
 		return false
 	var b: Battle = _battle_screen.get_battle()
@@ -958,6 +994,8 @@ func reward_close_deck() -> void:
 ## QA-ONLY CHEAT (walkthroughs): sets the run HP (and the live battle's player HP) to `value`,
 ## clamped to 1..max HP. Never called by the game itself.
 func qa_set_hp(value: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	_run.hp = clampi(value, 1, _run.max_hp)
@@ -1029,6 +1067,8 @@ func get_league_screen() -> Control:
 ## QA-ONLY CHEAT: jumps to the last zone and enters the league at stage 0 (league intro screen) without playing the
 ## zones: no badge or bonus is granted.
 func qa_skip_to_league() -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null or _run.league.is_empty():
 		return
 	_run.jump_to_zone(_run.zones.size() - 1)
@@ -1039,6 +1079,8 @@ func qa_skip_to_league() -> void:
 
 ## QA-ONLY CHEAT: jumps to league stage `stage` (clamped) and shows the league screen; earlier fights count as won.
 func qa_set_league_stage(stage: int) -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null or _run.league.is_empty():
 		return
 	if not _run.is_in_league():
@@ -1051,6 +1093,8 @@ func qa_set_league_stage(stage: int) -> void:
 ## QA-ONLY CHEAT: wins the current league fight through the real win path (starts it from the league screen if needed,
 ## then the battle-won handler): card reward next (members / Maître), or the final victory (final boss).
 func qa_win_league_fight() -> void:
+	if not QaGate.enabled():
+		return
 	if _run == null:
 		return
 	if _screen_name == SCREEN_LEAGUE:
@@ -1113,6 +1157,8 @@ func event_remove_card(deck_index: int) -> bool:
 ## QA-ONLY CHEAT (story 018): wins the battle on screen (any kind: rival, pre-league rival, event / legendary fight...)
 ## through the real win path (_on_battle_won with every enemy as defeated). Ignored outside a battle.
 func qa_win_current_fight() -> void:
+	if not QaGate.enabled():
+		return
 	if _battle_screen == null:
 		return
 	var ids: Array[String] = []
@@ -1130,28 +1176,38 @@ func get_resume_screen() -> ResumeScreen:
 
 ## QA-ONLY: points the save slot at `path` (a scratch file) AND turns autosave on, so QA runs never touch the real save.
 func qa_set_save_path(path: String) -> void:
+	if not QaGate.enabled():
+		return
 	_save_path = path
 	_autosave = true
 
 
 ## QA-ONLY: turns autosave on / off without changing the path.
 func qa_set_autosave(enabled: bool) -> void:
+	if not QaGate.enabled():
+		return
 	_autosave = enabled
 
 
 ## QA: true if a file exists in the save slot.
 func qa_has_save() -> bool:
+	if not QaGate.enabled():
+		return false
 	return SaveGame.exists(_save_path)
 
 
 ## QA-ONLY: writes the save now (as on the map, or on the league screen). False if autosave is off or there is no run.
 func qa_save_now() -> bool:
+	if not QaGate.enabled():
+		return false
 	return _autosave_now()
 
 
 ## QA-ONLY: simulates quitting and relaunching: drops the run and shows the resume screen (valid / unreadable save) or the
 ## starter choice (no save), exactly like the launch of the real game. Without autosave it just starts a fresh run.
 func qa_quit_to_title() -> void:
+	if not QaGate.enabled():
+		return
 	_clear_screens()
 	_run = null
 	_hud.visible = false
@@ -1617,6 +1673,8 @@ func _show_event() -> void:
 
 ## QA-ONLY (story 018 UI shots): shows event `event_id` of events.json ({rival} substituted), no draw. Ignored if unknown.
 func qa_show_event(event_id: String) -> void:
+	if not QaGate.enabled():
+		return
 	var event: Dictionary = _data.get_event(event_id)
 	if _run == null or event.is_empty():
 		return
@@ -1834,17 +1892,23 @@ func is_screen_fading() -> bool:
 
 ## QA-ONLY: shows the TitleScreen on (re)launch (qa_quit_to_title / abandon / quit) instead of the old resume flow.
 func qa_enable_title_screen(enabled: bool) -> void:
+	if not QaGate.enabled():
+		return
 	_title_enabled = enabled
 
 
 ## QA-ONLY: stores the player stats at `path` (a scratch file; "" = stats off) and reloads them.
 func qa_set_stats_path(path: String) -> void:
+	if not QaGate.enabled():
+		return
 	_stats_path = path
 	_stats = PlayerStats.load_from(path)
 
 
 ## QA-ONLY: lets the first battle of a run show the tutorial while the stats say it was never seen.
 func qa_enable_first_run_tutorial(enabled: bool) -> void:
+	if not QaGate.enabled():
+		return
 	_tutorial_enabled = enabled
 
 

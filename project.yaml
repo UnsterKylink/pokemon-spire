@@ -42,6 +42,10 @@ commands:
   run: '"C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe" --path . --windowed --resolution 1280x720'
   smoke: '"C:/Users/killi/Downloads/Godot_v4.6.3-stable_win64.exe" --headless --quit-after 5'
 
+performance:
+  target_fps: 60          # in battle, with animations (story 024)
+  max_load_seconds: 5     # launch to title screen
+
 # NOTE: this template ships with no `modes:` block, and the six knobs below must
 # never be added to one.
 #

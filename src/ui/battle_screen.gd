@@ -856,6 +856,8 @@ func play_card_direct(index: int, enemy_index: int = -1) -> bool:
 ## QA-ONLY CHEAT: applies `value` of status `status_id` through Battle.apply_status (immunities and feedback
 ## included) to enemy `target_index`, or to the player when -1. Returns false when refused. Never called by the game.
 func qa_apply_status(target_index: int, status_id: String, value: int) -> bool:
+	if not QaGate.enabled():
+		return false
 	_auto_skip()
 	if _battle == null:
 		return false
@@ -872,6 +874,8 @@ func qa_apply_status(target_index: int, status_id: String, value: int) -> bool:
 ## QA-ONLY: replaces the hand with the given card ids (and refills energy) so a walkthrough
 ## can stage a matchup. Never called by the game itself.
 func qa_force_hand(card_ids: Array[String]) -> void:
+	if not QaGate.enabled():
+		return
 	_auto_skip()
 	if _battle == null:
 		return
