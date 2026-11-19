@@ -6,7 +6,7 @@ extends Control
 ## PokedexRewards.banner_seconds. Display only.
 
 const TEXT_TITLE: String = "Palier du Pokédex débloqué : %s"
-const TEXT_NEXT_RUN: String = "%s (dès la prochaine partie)"
+const TEXT_NEXT_RUN: String = "%s Actif dès la prochaine partie."
 const WIDTH: float = 640.0
 const TOP: float = 70.0
 const FADE_SECONDS: float = 0.35

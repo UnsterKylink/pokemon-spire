@@ -34,7 +34,8 @@ extends SceneTree
 ## illustrated events, capture panel, effectiveness float, zone-rule banner; see _coherence_shots; filter `story-033`).
 ## Story 022 (musique et sons: the Options panel with the Musique / Effets sliders, before / after a change; prints the
 ## music track Main picks per screen; see _audio_shots; filter `story-022`). Story 023 (title screen, options fullscreen, pause
-## + confirmations, battle tooltips, tutorial replay; see _menu_shots; filter `story-023`).
+## + confirmations, battle tooltips, tutorial replay; see _menu_shots; filter `story-023`). Story 025 (Pokédex: title
+## button, grid, filters, sheets, milestones, banner, 4 starters; see _pokedex_shots; filter `story-025`).
 ## Optional 2nd user arg = story filter: `-- <out_dir> story-007` runs ONLY that story's shots (no stray shots).
 
 ## Story 032: run seed of the pacing shots (zone maps / zone rule).
@@ -2374,7 +2375,136 @@ func _menu_shots() -> void:
 		f.close()
 
 
+## Story 025: Pokédex shots (filter `story-025`): title with the « Pokédex » button, the grid (seen / caught /
+## silhouettes), a type filter, the sheet of a caught and of an unseen Pokémon, the milestone list, the milestone banner
+## during a run (24 -> 25 caught) and the 4-starter choice it unlocks. Scratch Pokédex / save / stats files only.
+const DEX_QA_PATH: String = "user://qa_story025_pokedex.json"
+const DEX_QA_SAVE: String = "user://qa_story025_save.json"
+const DEX_QA_STATS: String = "user://qa_story025_stats.json"
+const DEX_QA_SEED: int = 2525
+
+
+func _dex_clean() -> void:
+	for p: String in [DEX_QA_PATH, DEX_QA_PATH + ".tmp", DEX_QA_SAVE, DEX_QA_SAVE + ".bak", DEX_QA_SAVE + ".tmp",
+			DEX_QA_STATS, DEX_QA_STATS + ".tmp"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+
+
+func _dex_line(tag: String) -> void:
+	var line: String = "025 %s: screen=%s" % [tag, _main.get_current_screen_name()]
+	var ps: PokedexScreen = _main.get_pokedex_screen()
+	if ps != null:
+		line += " counters=\"%s\" listed=%d detail=%s milestones=%s cols=%d loaded=%d cache=%d" % [ps.get_counter_text(),
+				ps.get_listed_slugs().size(), ps.get_detail_slug(), ps.is_milestones_shown(), ps.get_grid().get_columns(),
+				ps.get_grid().loaded_texture_count(), PokedexGrid.cache_size()]
+	var t: TitleScreen = _main.get_title_screen()
+	if t != null:
+		line += " buttons=%s" % [t.get_button_texts()]
+	line += " banner=%s" % [_main.get_pokedex_banner().get_texts()]
+	print(line)
+
+
+func _pokedex_shots() -> void:
+	_dex_clean()
+	var catalog: PokedexCatalog = _main.get_pokedex_catalog()
+	var dex := Pokedex.new()
+	dex.path = DEX_QA_PATH
+	var gen1: Array[Dictionary] = catalog.filtered(1, "", "all", null)
+	var caught: int = 0
+	for i: int in gen1.size():
+		var slug: String = String(gen1[i]["slug"])
+		if slug == "charmander" or (i % 3 == 0 and caught < 23):
+			dex.mark_caught(slug)
+			dex.mark_seen(slug)
+			caught = dex.caught_total()
+		elif i % 2 == 0 and i < 120:
+			for k: int in 1 + i % 4:
+				dex.mark_seen(slug)
+	dex.milestones_claimed.append("dex_10")
+	dex.save()
+	print("025 seeded: caught=%d seen=%d total=%d" % [dex.caught_total(), dex.seen_total(), catalog.size()])
+	_main.qa_set_save_path(DEX_QA_SAVE)
+	_main.qa_set_stats_path(DEX_QA_STATS)
+	_main.qa_set_pokedex_path(DEX_QA_PATH)
+	_main.qa_enable_title_screen(true)
+	_main.qa_quit_to_title()
+	_main.get_title_screen().set_fan_cards(MENU_FAN)
+	await create_timer(0.6).timeout
+	_dex_line("title")
+	await _shot("01-titre-bouton-pokedex")
+	_main.get_title_screen().press_pokedex()
+	await create_timer(0.3).timeout
+	var ps: PokedexScreen = _main.get_pokedex_screen()
+	ps.get_grid().load_visible_now()
+	_dex_line("grid gen 1")
+	await _shot("02-grille-gen1")
+	ps.set_type_filter("fire")
+	ps.get_grid().load_visible_now()
+	_dex_line("type fire")
+	await _shot("03-filtre-type-feu")
+	ps.set_type_filter("")
+	ps.open_detail("charmander")
+	ps.get_grid().load_visible_now()
+	await create_timer(0.3).timeout
+	_dex_line("detail caught")
+	await _shot("04-fiche-capture")
+	var unseen: String = ""
+	for e: Dictionary in gen1:
+		if not dex.is_seen(String(e["slug"])) and int(e["dex"]) > 20:
+			unseen = String(e["slug"])
+			break
+	ps.open_detail(unseen)
+	ps.get_grid().load_visible_now()
+	_dex_line("detail unseen %s" % unseen)
+	await _shot("05-fiche-jamais-vu")
+	ps.show_milestones()
+	_dex_line("milestones")
+	await _shot("06-paliers")
+	ps.set_status_filter("caught")
+	ps.select_generation(1)
+	ps.get_grid().load_visible_now()
+	_dex_line("caught filter")
+	await _shot("07-filtre-captures")
+	# Milestone during a run: 24 caught -> a capture on the map reaches 25 (« Dresseur curieux »).
+	var d2: Pokedex = Pokedex.load_from(DEX_QA_PATH)
+	var gen2: Array[Dictionary] = catalog.filtered(2, "", "all", null)
+	var k2: int = 0
+	while d2.caught_total() < 24 and k2 < gen2.size():
+		d2.mark_caught(String(gen2[k2]["slug"]))
+		k2 += 1
+	d2.save()
+	_main.qa_set_pokedex_path(DEX_QA_PATH)
+	_main.start_new_run(DEX_QA_SEED, "salameche")
+	await create_timer(0.4).timeout
+	var target: String = ""
+	for pid: String in ["rattata", "pidgey", "zubat", "geodude", "caterpie"]:
+		if not d2.is_caught(Pokedex.slug_of(String(_main.get_run_state().get_pokemon_info(pid).get("sprite_path", "")))):
+			target = pid
+			break
+	_main.get_run_state().apply_captures([target] as Array[String])
+	_dex_line("banner after capturing %s" % target)
+	await _shot("08-banniere-palier")
+	_main.get_pokedex_banner().hide_banner()
+	_main.qa_quit_to_title()  # the run was autosaved on the map: « Continuer » + 5 buttons = the 6-button row
+	_main.get_title_screen().set_fan_cards(MENU_FAN)
+	await create_timer(0.6).timeout
+	_dex_line("title with save")
+	await _shot("09-titre-6-boutons")
+	_main.start_new_run(DEX_QA_SEED + 1)
+	await create_timer(0.4).timeout
+	_dex_line("starter choices %s" % [_main.get_starter_choices()])
+	await _shot("10-choix-4-starters")
+	_main.qa_enable_title_screen(false)
+	_main.qa_set_pokedex_path("")
+	_dex_clean()
+
+
 func _run() -> void:
+	if _filter == "story-025":
+		await _pokedex_shots()
+		quit(0)
+		return
 	if _filter == "story-023":
 		await _menu_shots()
 		quit(0)

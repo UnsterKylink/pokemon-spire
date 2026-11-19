@@ -15,9 +15,9 @@ const STATUS_SEEN: String = "seen"
 const STATUS_CAUGHT: String = "caught"
 const STATUSES: Array[String] = [STATUS_ALL, STATUS_SEEN, STATUS_CAUGHT]
 const STATUS_TEXTS: Array[String] = ["Tous", "Vus", "Capturés"]
-const SIDE_WIDTH: float = 410.0
+const SIDE_WIDTH: float = 440.0
 const DETAIL_ART: Vector2 = Vector2(210, 190)
-const MINI_CARD: Vector2 = Vector2(128, 150)
+const MINI_CARD: Vector2 = Vector2(120, 142)
 const TEXT_TITLE: String = "Pokédex"
 const TEXT_COUNTERS: String = "Vus : %d   /   Capturés : %d   /   Total : %d"
 const TEXT_BACK: String = "Retour"
@@ -337,7 +337,7 @@ func _clear_side() -> void:
 func _side_label(font_size: int, color: Color) -> Label:
 	var l: Label = CardView.make_label(font_size)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(SIDE_WIDTH - 50.0, 0)
+	l.custom_minimum_size = Vector2(SIDE_WIDTH - 70.0, 0)
 	l.add_theme_color_override("font_color", color)
 	_side_box.add_child(l)
 	return l
