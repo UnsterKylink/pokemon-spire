@@ -19,4 +19,4 @@ file d'animation) ne jouent pas — seuls la musique, les clics et le son « car
 
 | Rôle | Statut |
 |---|---|
-| Joueur / direction artistique (écoute en jeu : musiques, sons, cris, volumes) | [ ] Approved |
+| Joueur / direction artistique (écoute en jeu : musiques, sons, cris, volumes) | [x] Approved (2026-11-19) |

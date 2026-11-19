@@ -1,12 +1,12 @@
 # Story 022: Musique et effets sonores
 
 > **Epic**: Pokémon Spire
-> **Status**: In Progress
+> **Status**: Complete
 > **Layer**: Presentation
 > **Type**: Visual/Feel
 > **Estimate**: [fill before starting]
 > **Manifest Version**: N/A (minimal — no control manifest)
-> **Last Updated**: 2026-11-18
+> **Last Updated**: 2026-11-19
 
 ## Context
 
@@ -28,10 +28,10 @@
 
 *From `design/game-brief.md` (section « Après le MVP — feuille de route », étape 5), scoped to this story:*
 
-- [ ] Musiques différentes pour la carte, les combats sauvages, les Dresseurs / Champions, le Conseil 4, Éthernatos, la victoire et la défaite.
-- [ ] Effets sonores pour les cartes jouées, les coups (selon l'efficacité), les menus, les achats, la capture et l'évolution.
-- [ ] Volumes musique / effets réglables et mémorisés.
-- [ ] Sons libres de droits ou créés pour le projet, listés avec leur source.
+- [x] Musiques différentes pour la carte, les combats sauvages, les Dresseurs / Champions, le Conseil 4, Éthernatos, la victoire et la défaite.
+- [x] Effets sonores pour les cartes jouées, les coups (selon l'efficacité), les menus, les achats, la capture et l'évolution.
+- [x] Volumes musique / effets réglables et mémorisés.
+- [x] Sons libres de droits ou créés pour le projet, listés avec leur source.
 
 ---
 
@@ -64,7 +64,7 @@
 **Required evidence**:
 - Visual/Feel : a retained screenshot in `production/qa/evidence/` + sign-off in `production/qa/evidence/[story-slug]-evidence.md`
 
-**Status**: [ ] Not yet created
+**Status**: [x] Capture des Options + fiche de validation `production/qa/evidence/story-022-musique-et-sons-evidence.md`
 
 ---
 
@@ -72,3 +72,10 @@
 
 - Depends on: Story 021
 - Unlocks: Story 023
+
+## Completion Notes
+**Completed**: 2026-11-19
+**Criteria**: 4/4 (validé par le joueur à l'écoute ; t22_audio 141/0, t11 950/0, t25 0 échec ; 7 anciens tests échouent comme avant la story)
+**Deviations**: Advisory only — musiques 8-bit originales générées par `tools/audio/chiptune.py` (au lieu de morceaux libres de droits) ; cris officiels PokéAPI (propriété Nintendo : à retirer avant toute diffusion publique) ; en vitesse « Instantané » seuls les sons liés aux animations de combat sont coupés (musique, clics et son de carte jouée restent) ; bruitages `card_draw`, `coin`, `energy`, `level_up` non utilisés ; avertissement « resources still in use at exit » en lancement sans fenêtre ; sources listées dans `design/audio/sources.md`
+**Test Evidence**: Visual/Feel — `tests/scratch/t22_audio.gd`, capture `production/qa/evidence/story-022-musique-et-sons/`, validation du joueur à l'écoute (2026-11-19)
+**Code Review**: Skipped — Solo mode
