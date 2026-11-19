@@ -1,0 +1,697 @@
+{
+ "_doc": "Story 025 (Pokédex) : numéro du Pokédex national (dex) et génération (1-9) de chaque Pokémon de pokemon.json (player, enemies, evolutions) absent de roster.json (le roster porte déjà dex / generation). Clé = slug du sprite (nom du fichier sans extension), la clé d'espèce du Pokédex. Généré par tools/pokedex/generate_species.py depuis les CSV PokéAPI ; NE PAS éditer à la main.",
+ "species": {
+  "bulbasaur": {
+   "dex": 1,
+   "generation": 1
+  },
+  "ivysaur": {
+   "dex": 2,
+   "generation": 1
+  },
+  "venusaur": {
+   "dex": 3,
+   "generation": 1
+  },
+  "charmander": {
+   "dex": 4,
+   "generation": 1
+  },
+  "charmeleon": {
+   "dex": 5,
+   "generation": 1
+  },
+  "squirtle": {
+   "dex": 7,
+   "generation": 1
+  },
+  "wartortle": {
+   "dex": 8,
+   "generation": 1
+  },
+  "caterpie": {
+   "dex": 10,
+   "generation": 1
+  },
+  "metapod": {
+   "dex": 11,
+   "generation": 1
+  },
+  "weedle": {
+   "dex": 13,
+   "generation": 1
+  },
+  "kakuna": {
+   "dex": 14,
+   "generation": 1
+  },
+  "pidgey": {
+   "dex": 16,
+   "generation": 1
+  },
+  "pidgeotto": {
+   "dex": 17,
+   "generation": 1
+  },
+  "pidgeot": {
+   "dex": 18,
+   "generation": 1
+  },
+  "rattata": {
+   "dex": 19,
+   "generation": 1
+  },
+  "raticate": {
+   "dex": 20,
+   "generation": 1
+  },
+  "pikachu": {
+   "dex": 25,
+   "generation": 1
+  },
+  "raichu": {
+   "dex": 26,
+   "generation": 1
+  },
+  "zubat": {
+   "dex": 41,
+   "generation": 1
+  },
+  "golbat": {
+   "dex": 42,
+   "generation": 1
+  },
+  "oddish": {
+   "dex": 43,
+   "generation": 1
+  },
+  "gloom": {
+   "dex": 44,
+   "generation": 1
+  },
+  "arcanine": {
+   "dex": 59,
+   "generation": 1
+  },
+  "poliwag": {
+   "dex": 60,
+   "generation": 1
+  },
+  "poliwhirl": {
+   "dex": 61,
+   "generation": 1
+  },
+  "alakazam": {
+   "dex": 65,
+   "generation": 1
+  },
+  "machamp": {
+   "dex": 68,
+   "generation": 1
+  },
+  "geodude": {
+   "dex": 74,
+   "generation": 1
+  },
+  "graveler": {
+   "dex": 75,
+   "generation": 1
+  },
+  "muk": {
+   "dex": 89,
+   "generation": 1
+  },
+  "cloyster": {
+   "dex": 91,
+   "generation": 1
+  },
+  "haunter": {
+   "dex": 93,
+   "generation": 1
+  },
+  "gengar": {
+   "dex": 94,
+   "generation": 1
+  },
+  "onix": {
+   "dex": 95,
+   "generation": 1
+  },
+  "hitmonlee": {
+   "dex": 106,
+   "generation": 1
+  },
+  "hitmonchan": {
+   "dex": 107,
+   "generation": 1
+  },
+  "electabuzz": {
+   "dex": 125,
+   "generation": 1
+  },
+  "pinsir": {
+   "dex": 127,
+   "generation": 1
+  },
+  "lapras": {
+   "dex": 131,
+   "generation": 1
+  },
+  "vaporeon": {
+   "dex": 134,
+   "generation": 1
+  },
+  "snorlax": {
+   "dex": 143,
+   "generation": 1
+  },
+  "dragonair": {
+   "dex": 148,
+   "generation": 1
+  },
+  "dragonite": {
+   "dex": 149,
+   "generation": 1
+  },
+  "mewtwo": {
+   "dex": 150,
+   "generation": 1
+  },
+  "chikorita": {
+   "dex": 152,
+   "generation": 2
+  },
+  "bayleef": {
+   "dex": 153,
+   "generation": 2
+  },
+  "cyndaquil": {
+   "dex": 155,
+   "generation": 2
+  },
+  "quilava": {
+   "dex": 156,
+   "generation": 2
+  },
+  "totodile": {
+   "dex": 158,
+   "generation": 2
+  },
+  "croconaw": {
+   "dex": 159,
+   "generation": 2
+  },
+  "sentret": {
+   "dex": 161,
+   "generation": 2
+  },
+  "furret": {
+   "dex": 162,
+   "generation": 2
+  },
+  "hoothoot": {
+   "dex": 163,
+   "generation": 2
+  },
+  "noctowl": {
+   "dex": 164,
+   "generation": 2
+  },
+  "ledyba": {
+   "dex": 165,
+   "generation": 2
+  },
+  "ledian": {
+   "dex": 166,
+   "generation": 2
+  },
+  "xatu": {
+   "dex": 178,
+   "generation": 2
+  },
+  "espeon": {
+   "dex": 196,
+   "generation": 2
+  },
+  "umbreon": {
+   "dex": 197,
+   "generation": 2
+  },
+  "murkrow": {
+   "dex": 198,
+   "generation": 2
+  },
+  "scizor": {
+   "dex": 212,
+   "generation": 2
+  },
+  "houndoom": {
+   "dex": 229,
+   "generation": 2
+  },
+  "lugia": {
+   "dex": 249,
+   "generation": 2
+  },
+  "ho-oh": {
+   "dex": 250,
+   "generation": 2
+  },
+  "celebi": {
+   "dex": 251,
+   "generation": 2
+  },
+  "treecko": {
+   "dex": 252,
+   "generation": 3
+  },
+  "grovyle": {
+   "dex": 253,
+   "generation": 3
+  },
+  "torchic": {
+   "dex": 255,
+   "generation": 3
+  },
+  "combusken": {
+   "dex": 256,
+   "generation": 3
+  },
+  "mudkip": {
+   "dex": 258,
+   "generation": 3
+  },
+  "marshtomp": {
+   "dex": 259,
+   "generation": 3
+  },
+  "poochyena": {
+   "dex": 261,
+   "generation": 3
+  },
+  "mightyena": {
+   "dex": 262,
+   "generation": 3
+  },
+  "zigzagoon": {
+   "dex": 263,
+   "generation": 3
+  },
+  "linoone": {
+   "dex": 264,
+   "generation": 3
+  },
+  "wurmple": {
+   "dex": 265,
+   "generation": 3
+  },
+  "silcoon": {
+   "dex": 266,
+   "generation": 3
+  },
+  "seedot": {
+   "dex": 273,
+   "generation": 3
+  },
+  "nuzleaf": {
+   "dex": 274,
+   "generation": 3
+  },
+  "taillow": {
+   "dex": 276,
+   "generation": 3
+  },
+  "swellow": {
+   "dex": 277,
+   "generation": 3
+  },
+  "banette": {
+   "dex": 354,
+   "generation": 3
+  },
+  "salamence": {
+   "dex": 373,
+   "generation": 3
+  },
+  "rayquaza": {
+   "dex": 384,
+   "generation": 3
+  },
+  "turtwig": {
+   "dex": 387,
+   "generation": 4
+  },
+  "grotle": {
+   "dex": 388,
+   "generation": 4
+  },
+  "chimchar": {
+   "dex": 390,
+   "generation": 4
+  },
+  "monferno": {
+   "dex": 391,
+   "generation": 4
+  },
+  "piplup": {
+   "dex": 393,
+   "generation": 4
+  },
+  "prinplup": {
+   "dex": 394,
+   "generation": 4
+  },
+  "starly": {
+   "dex": 396,
+   "generation": 4
+  },
+  "staravia": {
+   "dex": 397,
+   "generation": 4
+  },
+  "bidoof": {
+   "dex": 399,
+   "generation": 4
+  },
+  "bibarel": {
+   "dex": 400,
+   "generation": 4
+  },
+  "kricketot": {
+   "dex": 401,
+   "generation": 4
+  },
+  "kricketune": {
+   "dex": 402,
+   "generation": 4
+  },
+  "shinx": {
+   "dex": 403,
+   "generation": 4
+  },
+  "luxio": {
+   "dex": 404,
+   "generation": 4
+  },
+  "glaceon": {
+   "dex": 471,
+   "generation": 4
+  },
+  "probopass": {
+   "dex": 476,
+   "generation": 4
+  },
+  "darkrai": {
+   "dex": 491,
+   "generation": 4
+  },
+  "snivy": {
+   "dex": 495,
+   "generation": 5
+  },
+  "servine": {
+   "dex": 496,
+   "generation": 5
+  },
+  "tepig": {
+   "dex": 498,
+   "generation": 5
+  },
+  "pignite": {
+   "dex": 499,
+   "generation": 5
+  },
+  "oshawott": {
+   "dex": 501,
+   "generation": 5
+  },
+  "dewott": {
+   "dex": 502,
+   "generation": 5
+  },
+  "patrat": {
+   "dex": 504,
+   "generation": 5
+  },
+  "watchog": {
+   "dex": 505,
+   "generation": 5
+  },
+  "lillipup": {
+   "dex": 506,
+   "generation": 5
+  },
+  "herdier": {
+   "dex": 507,
+   "generation": 5
+  },
+  "purrloin": {
+   "dex": 509,
+   "generation": 5
+  },
+  "liepard": {
+   "dex": 510,
+   "generation": 5
+  },
+  "pidove": {
+   "dex": 519,
+   "generation": 5
+  },
+  "tranquill": {
+   "dex": 520,
+   "generation": 5
+  },
+  "blitzle": {
+   "dex": 522,
+   "generation": 5
+  },
+  "zebstrika": {
+   "dex": 523,
+   "generation": 5
+  },
+  "roggenrola": {
+   "dex": 524,
+   "generation": 5
+  },
+  "boldore": {
+   "dex": 525,
+   "generation": 5
+  },
+  "sewaddle": {
+   "dex": 540,
+   "generation": 5
+  },
+  "swadloon": {
+   "dex": 541,
+   "generation": 5
+  },
+  "chespin": {
+   "dex": 650,
+   "generation": 6
+  },
+  "quilladin": {
+   "dex": 651,
+   "generation": 6
+  },
+  "fennekin": {
+   "dex": 653,
+   "generation": 6
+  },
+  "braixen": {
+   "dex": 654,
+   "generation": 6
+  },
+  "froakie": {
+   "dex": 656,
+   "generation": 6
+  },
+  "frogadier": {
+   "dex": 657,
+   "generation": 6
+  },
+  "bunnelby": {
+   "dex": 659,
+   "generation": 6
+  },
+  "diggersby": {
+   "dex": 660,
+   "generation": 6
+  },
+  "fletchling": {
+   "dex": 661,
+   "generation": 6
+  },
+  "fletchinder": {
+   "dex": 662,
+   "generation": 6
+  },
+  "scatterbug": {
+   "dex": 664,
+   "generation": 6
+  },
+  "spewpa": {
+   "dex": 665,
+   "generation": 6
+  },
+  "aegislash": {
+   "dex": 681,
+   "generation": 6
+  },
+  "rowlet": {
+   "dex": 722,
+   "generation": 7
+  },
+  "dartrix": {
+   "dex": 723,
+   "generation": 7
+  },
+  "litten": {
+   "dex": 725,
+   "generation": 7
+  },
+  "torracat": {
+   "dex": 726,
+   "generation": 7
+  },
+  "popplio": {
+   "dex": 728,
+   "generation": 7
+  },
+  "brionne": {
+   "dex": 729,
+   "generation": 7
+  },
+  "pikipek": {
+   "dex": 731,
+   "generation": 7
+  },
+  "trumbeak": {
+   "dex": 732,
+   "generation": 7
+  },
+  "yungoos": {
+   "dex": 734,
+   "generation": 7
+  },
+  "gumshoos": {
+   "dex": 735,
+   "generation": 7
+  },
+  "grubbin": {
+   "dex": 736,
+   "generation": 7
+  },
+  "charjabug": {
+   "dex": 737,
+   "generation": 7
+  },
+  "rockruff": {
+   "dex": 744,
+   "generation": 7
+  },
+  "lycanroc": {
+   "dex": 745,
+   "generation": 7
+  },
+  "grookey": {
+   "dex": 810,
+   "generation": 8
+  },
+  "thwackey": {
+   "dex": 811,
+   "generation": 8
+  },
+  "scorbunny": {
+   "dex": 813,
+   "generation": 8
+  },
+  "raboot": {
+   "dex": 814,
+   "generation": 8
+  },
+  "sobble": {
+   "dex": 816,
+   "generation": 8
+  },
+  "drizzile": {
+   "dex": 817,
+   "generation": 8
+  },
+  "skwovet": {
+   "dex": 819,
+   "generation": 8
+  },
+  "greedent": {
+   "dex": 820,
+   "generation": 8
+  },
+  "rookidee": {
+   "dex": 821,
+   "generation": 8
+  },
+  "corvisquire": {
+   "dex": 822,
+   "generation": 8
+  },
+  "wooloo": {
+   "dex": 831,
+   "generation": 8
+  },
+  "dubwool": {
+   "dex": 832,
+   "generation": 8
+  },
+  "eternatus": {
+   "dex": 890,
+   "generation": 8
+  },
+  "sprigatito": {
+   "dex": 906,
+   "generation": 9
+  },
+  "floragato": {
+   "dex": 907,
+   "generation": 9
+  },
+  "fuecoco": {
+   "dex": 909,
+   "generation": 9
+  },
+  "crocalor": {
+   "dex": 910,
+   "generation": 9
+  },
+  "quaxly": {
+   "dex": 912,
+   "generation": 9
+  },
+  "quaxwell": {
+   "dex": 913,
+   "generation": 9
+  },
+  "lechonk": {
+   "dex": 915,
+   "generation": 9
+  },
+  "oinkologne": {
+   "dex": 916,
+   "generation": 9
+  },
+  "tarountula": {
+   "dex": 917,
+   "generation": 9
+  },
+  "spidops": {
+   "dex": 918,
+   "generation": 9
+  },
+  "pawmi": {
+   "dex": 921,
+   "generation": 9
+  },
+  "pawmo": {
+   "dex": 922,
+   "generation": 9
+  }
+ }
+}
