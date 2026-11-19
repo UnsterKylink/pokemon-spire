@@ -395,6 +395,14 @@ func get_card(card_id: String) -> CardData:
 	return _cards[card_id]
 
 
+## Ids of every regular card (cards.json "cards", file order; junk cards excluded). Used by the title screen fan.
+func get_card_ids() -> Array[String]:
+	var out: Array[String] = []
+	for id: Variant in _cards.keys():
+		out.append(String(id))
+	return out
+
+
 ## Story 015 (save/resume): existence checks that do not push_error (get_card / get_item / get_potion do).
 func has_card(card_id: String) -> bool:
 	return _cards.has(card_id)
