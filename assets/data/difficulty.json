@@ -1,0 +1,56 @@
+{
+	"_doc": "Story 026 (story-026-niveaux-de-difficulte) : niveaux de difficulte facon Ascension. max_level = niveau le plus haut (les niveaux vont de 0 a max_level ; 0 = jeu normal, aucun modificateur). levels : un objet par niveau 1..max_level, dans l ordre, {level, name (FR, court), description (FR, une phrase), effects: [...]} ; un niveau N applique les effets de TOUS les niveaux 1..N (cumulatif). Vocabulaire des effets (src/run/difficulty.gd) : enemy_hp {rooms, value > 0} = PV max des ennemis x value (multiplie aux modificateurs de salle / zone / Ligue, arrondi au superieur) ; enemy_strength {rooms, value >= 0} = Force ajoutee aux ennemis ; rooms = categories de combat parmi wild (sauvages, carte et evenements), elite, boss (Champions d arene), rival (salle du rival), rival_final (rival avant la Ligue), legendary (legendaires des evenements), league_member (Conseil 4), league_champion (Maitre), league_final_boss (Ethernatos) ; money_gain {value > 0} = argent gagne (butin, rival, evenements, recompenses du Pokedex exclues car donnees avant le choix du niveau) x value, arrondi a l inferieur ; center_heal {value > 0} = soin du Centre Pokemon x value ; league_heal {value > 0} = soin entre deux combats de la Ligue x value ; shop_prices {value > 0} = tous les prix du Poke Mart (cartes, objets, potions, Balls, retrait de carte) x value, arrondi au superieur ; start_max_hp {value entier} = PV max de depart ajoutes (negatif = moins ; jamais sous 1) ; start_junk {value entier >= 0} = cartes Debris (field_rules.json enemy_mechanics.junk_card) ajoutees au deck de depart (injouables, epuisees a la fin du tour, retirables au Poke Mart) ; boss_phase_heal {value 0..100} = % des PV max qu Ethernatos recupere en plus a chaque changement de phase (league.json final_boss.phases[].heal_percent + value, max 100). Deblocage : une victoire complete au niveau N debloque N+1 (global, quel que soit le starter ; user://player_stats.json). cosmetics.card_frames : [{min_level, id, name (FR), color (#hex)}] = liseré de prestige des cartes, debloque quand le meilleur niveau GAGNE atteint min_level (le plus haut gagne) ; purement visuel, desactivable dans Options. cosmetics.badge_colors : [{min_level, color}] = couleur du badge de prestige de l ecran titre (meilleur niveau gagne ; la derniere entree dont min_level <= niveau gagne). Equilibrage : design/balance/report-difficulty.md.",
+	"max_level": 10,
+	"levels": [
+		{"level": 1, "name": "Élites aguerris", "description": "Les dresseurs d'élite ont plus de PV et frappent plus fort.", "effects": [
+			{"type": "enemy_hp", "rooms": ["elite"], "value": 1.15},
+			{"type": "enemy_strength", "rooms": ["elite"], "value": 1}
+		]},
+		{"level": 2, "name": "Champions motivés", "description": "Les Champions d'arène et ton rival ont plus de PV et frappent plus fort.", "effects": [
+			{"type": "enemy_hp", "rooms": ["boss", "rival", "rival_final"], "value": 1.12},
+			{"type": "enemy_strength", "rooms": ["boss", "rival", "rival_final"], "value": 1}
+		]},
+		{"level": 3, "name": "Bourse légère", "description": "Tu gagnes 25 % d'argent en moins.", "effects": [
+			{"type": "money_gain", "value": 0.75}
+		]},
+		{"level": 4, "name": "Infirmière débordée", "description": "Le Centre Pokémon et les pauses de la Ligue soignent 25 % de moins.", "effects": [
+			{"type": "center_heal", "value": 0.75},
+			{"type": "league_heal", "value": 0.75}
+		]},
+		{"level": 5, "name": "Hautes herbes", "description": "Les Pokémon sauvages et légendaires ont plus de PV et frappent plus fort.", "effects": [
+			{"type": "enemy_hp", "rooms": ["wild", "legendary"], "value": 1.12},
+			{"type": "enemy_strength", "rooms": ["wild", "legendary"], "value": 1}
+		]},
+		{"level": 6, "name": "Sac encombré", "description": "Ton deck de départ contient un « Débris » injouable.", "effects": [
+			{"type": "start_junk", "value": 1}
+		]},
+		{"level": 7, "name": "Départ fragile", "description": "Tu commences la partie avec 8 PV max de moins.", "effects": [
+			{"type": "start_max_hp", "value": -8}
+		]},
+		{"level": 8, "name": "Inflation", "description": "Les prix du Poké Mart augmentent de 25 %.", "effects": [
+			{"type": "shop_prices", "value": 1.25}
+		]},
+		{"level": 9, "name": "Ligue d'élite", "description": "Le Conseil 4 et le Maître ont plus de PV et frappent plus fort.", "effects": [
+			{"type": "enemy_hp", "rooms": ["league_member", "league_champion"], "value": 1.1},
+			{"type": "enemy_strength", "rooms": ["league_member", "league_champion"], "value": 1}
+		]},
+		{"level": 10, "name": "Éthernatos déchaîné", "description": "Éthernatos a plus de PV, frappe plus fort et récupère des PV à chaque changement de phase.", "effects": [
+			{"type": "enemy_hp", "rooms": ["league_final_boss"], "value": 1.1},
+			{"type": "enemy_strength", "rooms": ["league_final_boss"], "value": 1},
+			{"type": "boss_phase_heal", "value": 8}
+		]}
+	],
+	"cosmetics": {
+		"card_frames": [
+			{"min_level": 5, "id": "gold", "name": "Liseré or", "color": "#e8c04a"},
+			{"min_level": 10, "id": "platinum", "name": "Liseré platine", "color": "#cfe6f2"}
+		],
+		"badge_colors": [
+			{"min_level": 0, "color": "#c08a5a"},
+			{"min_level": 3, "color": "#c9ced6"},
+			{"min_level": 5, "color": "#e8c04a"},
+			{"min_level": 8, "color": "#7fe0c8"},
+			{"min_level": 10, "color": "#cfe6f2"}
+		]
+	}
+}

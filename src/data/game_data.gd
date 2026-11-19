@@ -36,6 +36,8 @@ const DEFAULT_ROSTER_PATH: String = "res://assets/data/roster.json"
 const DEFAULT_TALENTS_PATH: String = "res://assets/data/talents.json"
 ## Story 030: field rules of the gym Champions / league / Éthernatos phases + enemy mechanics (junk card, drain floor).
 const DEFAULT_FIELD_RULES_PATH: String = "res://assets/data/field_rules.json"
+## Story 026: difficulty levels.
+const DEFAULT_DIFFICULTY_PATH: String = "res://assets/data/difficulty.json"
 ## Prefix of an encounter id GENERATED from the roster: "roster:<id>,<id>,..." (wild / elite fights, auto gym teams).
 ## create_enemies / get_encounter_enemy_ids decode it; it is never stored in pokemon.json.
 const ROSTER_ENCOUNTER_PREFIX: String = "roster:"
@@ -101,6 +103,7 @@ var _legendary_cfg: Dictionary = {}  # validated events.json "legendary" (story 
 var _junk_cards: Dictionary = {}  # story 030: cards.json junk_cards (id -> CardData, kind junk)
 var _field_rules: Dictionary = {}  # story 030: rule id -> {id, name, description, effects}
 var _enemy_mechanics: Dictionary = {}  # story 030: field_rules.json enemy_mechanics (validated)
+var _difficulty: Difficulty = Difficulty.new()  # story 026
 var _legendary_events: Array[String] = []  # ids of the events flagged legendary: true (file order)
 
 
@@ -224,7 +227,37 @@ func load_all(cards_path: String = DEFAULT_CARDS_PATH, pokemon_path: String = DE
 	if not field_rules_path.is_empty():  # story 030: last (references zones, league, cards, statuses, types)
 		var fr_root: Dictionary = _read_json(field_rules_path)
 		ok = (not fr_root.is_empty() and _load_field_rules(fr_root)) and ok
+	# Story 026: difficulty levels (assets/data/difficulty.json; always the default file, tests may swap it: set_difficulty).
+	_difficulty = Difficulty.load_from(DEFAULT_DIFFICULTY_PATH)
+	ok = _difficulty != null and ok
+	if _difficulty == null:
+		_difficulty = Difficulty.new()  # level 0 only
 	return ok
+
+
+# --- Story 026: difficulty levels ------------------------------------------------------------------
+
+## The difficulty table (assets/data/difficulty.json; an empty table = level 0 only before load_all).
+func get_difficulty() -> Difficulty:
+	return _difficulty
+
+
+## Tests: replaces the difficulty table.
+func set_difficulty(table: Difficulty) -> void:
+	_difficulty = table if table != null else Difficulty.new()
+
+
+## Story 026: a card a saved deck may hold: a normal card (cards.json) or a junk card (cards.json junk_cards, start_junk).
+func has_deck_card(card_id: String) -> bool:
+	return _cards.has(card_id) or _junk_cards.has(card_id)
+
+
+## The card of has_deck_card (junk cards: a fresh copy). Null if unknown.
+func get_deck_card(card_id: String) -> CardData:
+	if _cards.has(card_id):
+		return _cards[card_id]
+	var j: CardData = _junk_cards.get(card_id, null)
+	return j.duplicate_card() if j != null else null
 
 
 # --- Story 030: field rules, boss phases, enemy mechanics ---------------------------------------------
