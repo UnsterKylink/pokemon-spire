@@ -19,8 +19,6 @@ const KEY_LEVEL_UNLOCKED: String = "difficulty_unlocked"
 const KEY_BEST_LEVEL_WON: String = "difficulty_best_won"
 ## Story 026: no level won yet.
 const NO_LEVEL: int = -1
-## Story 026: Options toggle of the prestige card frame (on by default).
-const KEY_PRESTIGE_FRAME: String = "prestige_frame"
 ## Result scores (higher = better): badges = 0..8, league = LEAGUE_BASE + fights won, final boss beaten = VICTORY_SCORE.
 const LEAGUE_BASE: int = 100
 const VICTORY_SCORE: int = 1000
@@ -44,8 +42,6 @@ var last_title_pokemon: String = ""
 ## Story 026: difficulty levels 0..level_unlocked may be chosen; best_level_won = highest level of a full victory.
 var level_unlocked: int = 0
 var best_level_won: int = NO_LEVEL
-## Story 026: show the prestige card frame (when one is unlocked).
-var prestige_frame: bool = true
 
 
 ## Loads the stats stored at `stats_path` (empty stats when the file is missing / unreadable).
@@ -70,7 +66,6 @@ static func load_from(stats_path: String = DEFAULT_PATH) -> PlayerStats:
 	s.last_title_pokemon = String(d.get(KEY_LAST_POKEMON, ""))
 	s.level_unlocked = maxi(0, int(d.get(KEY_LEVEL_UNLOCKED, 0)))
 	s.best_level_won = maxi(NO_LEVEL, int(d.get(KEY_BEST_LEVEL_WON, NO_LEVEL)))
-	s.prestige_frame = bool(d.get(KEY_PRESTIGE_FRAME, true))
 	return s
 
 
@@ -91,7 +86,7 @@ func save() -> bool:
 func to_dict() -> Dictionary:
 	return {KEY_PLAYED: runs_played, KEY_WON: runs_won, KEY_BEST_SCORE: best_score, KEY_BEST_TEXT: best_text,
 			KEY_TUTORIAL: tutorial_done, KEY_LAST_POKEMON: last_title_pokemon, KEY_LEVEL_UNLOCKED: level_unlocked,
-			KEY_BEST_LEVEL_WON: best_level_won, KEY_PRESTIGE_FRAME: prestige_frame}
+			KEY_BEST_LEVEL_WON: best_level_won}
 
 
 ## How far `run` went: {score: int, text: String} ("5 badges", "Conseil 4 — 2/4", "Éthernatos vaincu"...).

@@ -67,6 +67,12 @@ const HOLO_CALM: float = 0.2
 const HOLO_SHADER_PATH: String = "res://src/ui/shaders/card_holo.gdshader"
 
 static var _holo_shader: Shader
+## Story 026: prestige trim of every card face (difficulty.json cosmetics.card_frames, unlocked by the best level won and
+## switchable in Options); transparent = none. Purely visual. Set by Main (set_prestige_trim).
+static var prestige_trim: Color = Color(0, 0, 0, 0)
+## Story 026: trim line width and corner studs (reference px).
+const PRESTIGE_TRIM_W: float = 2.2
+const PRESTIGE_STUD_R: float = 2.6
 
 var card: CardData
 ## Story 029: cost paid in battle (-1 = the printed cost), see set_cost().
@@ -459,6 +465,14 @@ func _draw() -> void:
 	var body_outline: Color = UiStyle.LEGENDARY.darkened(0.25) if legendary else UiStyle.OUTLINE
 	_rrect(_body.grow(-OUTLINE_W * 0.5), RADIUS * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), body_outline,
 			(OUTLINE_W + (0.5 if legendary else 0.0)) * s)
+	if prestige_trim.a > 0.0:  # story 026: prestige trim along the middle of the frame band + corner studs
+		var trim: Rect2 = _body.grow(-band * 0.5)
+		_rrect(trim, (RADIUS - 1.2) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), prestige_trim.darkened(0.35), (PRESTIGE_TRIM_W + 1.2) * s)
+		_rrect(trim, (RADIUS - 1.2) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), prestige_trim, PRESTIGE_TRIM_W * s)
+		for corner: Vector2 in [trim.position, Vector2(trim.end.x, trim.position.y), Vector2(trim.position.x, trim.end.y), trim.end]:
+			var cc: Vector2 = corner + (trim.get_center() - corner).normalized() * 2.0 * s
+			draw_circle(cc, (PRESTIGE_STUD_R + 0.8) * s, UiStyle.OUTLINE, true, -1.0, true)
+			draw_circle(cc, PRESTIGE_STUD_R * s, prestige_trim.lightened(0.3), true, -1.0, true)
 	# Name banner: parchment (gold metal on legendary cards), then the cost gem on top of its left end.
 	if legendary:
 		_rrect_tex(_banner, _banner.size.y * 0.5, UiStyle.ui_texture("card_gold"), BANNER_GOLD_TOP, UiStyle.LEGENDARY)
@@ -495,6 +509,11 @@ func _draw() -> void:
 	if hovered and _glow:
 		_rrect(_body.grow(1.5 * s), (RADIUS + 1.5) * s, Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(1, 0.95, 0.75, 0.45), 3.0 * s)
 		_rrect(_body.grow(-1.0), RADIUS * s, Color(1, 1, 1, 0.05), Color(1, 1, 1, 0.0), HOVER_GLOW, 2.0 * s)
+
+
+## Story 026: sets the prestige trim of every card face drawn from now on (`color` alpha 0 = none).
+static func set_prestige_trim(color: Color) -> void:
+	prestige_trim = color
 
 
 ## Faceted diamond gem (`color`) with a dark outline and a white glint.

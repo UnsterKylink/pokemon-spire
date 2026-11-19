@@ -6,7 +6,9 @@ extends RefCounted
 const PATH: String = "user://settings.json"
 ## Show a light green / red tint on targets when the selected attack is super / not very effective.
 const KEY_TYPE_HINTS: String = "type_hints"
-const DEFAULTS: Dictionary = {KEY_TYPE_HINTS: true}
+## Story 026: show the prestige card trim once unlocked (difficulty.json cosmetics.card_frames).
+const KEY_PRESTIGE_FRAME: String = "prestige_frame"
+const DEFAULTS: Dictionary = {KEY_TYPE_HINTS: true, KEY_PRESTIGE_FRAME: true}
 
 
 ## All saved settings (empty when there is no valid file).
@@ -84,3 +86,8 @@ static func apply_window_mode(on: bool) -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	elif not on and is_full:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+
+
+## Story 026: true when the unlocked prestige card trim should be drawn (Options « Liseré de prestige », default on).
+static func prestige_frame_enabled() -> bool:
+	return get_bool(KEY_PRESTIGE_FRAME)

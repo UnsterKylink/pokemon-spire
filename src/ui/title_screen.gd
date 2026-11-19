@@ -68,6 +68,11 @@ const TEXT_PLAYED: String = "Parties jouées : %d"
 const TEXT_WON: String = "Parties gagnées : %d"
 const TEXT_BEST: String = "Meilleur résultat : %s"
 const TEXT_STATS_LINE: String = "Parties : %d  ·  Victoires : %d  ·  Meilleur : %s"
+## Story 026: the highest unlocked difficulty level (appended to the stats line) and the prestige badge (best level won).
+const TEXT_LEVEL_MAX: String = "  ·  Niveau max : %d"
+const TEXT_PRESTIGE: String = "★ Niveau %d vaincu"
+const TEXT_PRESTIGE_TIP: String = "Prestige : plus haut niveau de difficulté gagné (%d / %d)."
+const PRESTIGE_POS: Vector2 = Vector2(24, 20)
 const TEXT_SAVE_ERROR: String = "Sauvegarde illisible : %s (conservée en .bak)"
 const TEXT_CONFIRM_TITLE: String = "Nouvelle partie ?"
 const TEXT_CONFIRM_BODY: String = "Une partie est en cours. En commencer une nouvelle supprimera sa sauvegarde (elle ne comptera pas dans les statistiques)."
@@ -96,6 +101,8 @@ var _continue_caption: Label
 var _error_label: Label
 var _stats_label: Label
 var _stats_texts: PackedStringArray = PackedStringArray(["", "", ""])
+var _prestige: PanelContainer
+var _prestige_label: Label
 var _confirm: Control
 var _has_save: bool = false
 var _pokemon_sprite: String = ""
@@ -125,6 +132,16 @@ func setup(stats: PlayerStats, save_summary: String, save_error: String, pokemon
 	var best: String = s.best_result_text()
 	_stats_texts = PackedStringArray([TEXT_PLAYED % s.runs_played, TEXT_WON % s.runs_won, TEXT_BEST % best])
 	_stats_label.text = TEXT_STATS_LINE % [s.runs_played, s.runs_won, best]
+	var max_level: int = data.get_difficulty().max_level if data != null else 0
+	if max_level > 0:  # story 026
+		_stats_label.text += TEXT_LEVEL_MAX % s.highest_selectable_level(max_level)
+	_prestige.visible = s.best_level_won >= 0 and data != null
+	if _prestige.visible:
+		_prestige_label.text = TEXT_PRESTIGE % s.best_level_won
+		_prestige.tooltip_text = TEXT_PRESTIGE_TIP % [s.best_level_won, max_level]
+		var col: Color = data.get_difficulty().badge_color_for(s.best_level_won)
+		_prestige.add_theme_stylebox_override("panel", UiStyle.badge(col))
+		_prestige_label.add_theme_color_override("font_color", UiStyle.text_on(col))
 	_pokemon_sprite = pokemon_sprite
 	_data = data
 	if _data != null:
@@ -136,6 +153,11 @@ func setup(stats: PlayerStats, save_summary: String, save_error: String, pokemon
 ## True when « Continuer » is offered.
 func has_continue() -> bool:
 	return _continue_button != null and _continue_button.visible
+
+
+## Story 026: the prestige badge text ("" when hidden: no level won yet).
+func get_prestige_text() -> String:
+	return _prestige_label.text if _prestige != null and _prestige.visible else ""
 
 
 ## The three stats texts (parties jouées / gagnées / meilleur résultat), shown on one line (QA).
@@ -491,6 +513,15 @@ func _build_menu() -> void:
 	_stats_label.add_theme_color_override("font_outline_color", UiStyle.OUTLINE)
 	_stats_label.add_theme_constant_override("outline_size", 4)
 	bottom.add_child(_stats_label)
+	_prestige = PanelContainer.new()  # story 026: prestige badge, top-left
+	_prestige.name = "PrestigeBadge"
+	_prestige.visible = false
+	_prestige.position = PRESTIGE_POS
+	add_child(_prestige)
+	_prestige_label = CardView.make_label(20)
+	_prestige_label.name = "PrestigeText"
+	_prestige_label.add_theme_font_override("font", UiStyle.font_title())
+	_prestige.add_child(_prestige_label)
 
 
 ## Rebuilds the fan with these card ids (left to right; unknown ids skipped).

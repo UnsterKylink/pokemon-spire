@@ -185,6 +185,11 @@ var _pokedex_rewards: PokedexRewards
 var _pokedex_banner: PokedexBanner
 var _pending_milestones: Array[Dictionary] = []
 var _pokedex_screen: PokedexScreen
+## Story 026 (difficulty levels): the level of the run being started (starter screen selector; QA override), the QA
+## forced level (-1 = none: the stats decide what is unlocked) and the level a full victory just unlocked (-1 = none).
+var _chosen_level: int = 0
+var _qa_level: int = -1
+var _last_unlocked_level: int = -1
 
 
 func _ready() -> void:
@@ -263,6 +268,7 @@ func _ready() -> void:
 		_pokedex = Pokedex.load_from(_pokedex_path)
 		_tutorial_enabled = DisplayServer.get_name() != "headless"
 		GameSettings.apply_window_mode(GameSettings.fullscreen_enabled())
+		_refresh_prestige_trim()
 		_show_title()
 		return
 	start_new_run(forced_seed)
@@ -292,6 +298,8 @@ func start_new_run(act_seed: int = 0, starter_id: String = "") -> void:
 	_resume_result = {}
 	_sandbox = false
 	_run_recorded = false
+	_chosen_level = maxi(_qa_level, 0)  # story 026: the starter screen may change it
+	_last_unlocked_level = -1
 	var rngs: Array[RandomNumberGenerator] = _rng_list()
 	for i: int in rngs.size():
 		if act_seed != 0:
@@ -317,6 +325,7 @@ func _begin_run(starter_id: String, act_seed: int) -> void:
 	if run == null:
 		return
 	_pokedex_new_run(run)  # story 025: milestone rewards, starter seen + caught, capture / evolution hooks
+	run.apply_difficulty(_data, _chosen_level)  # story 026: after the Pokédex gifts (their money is not scaled)
 	run.set_zones(_data.draw_zones(_zone_rng))  # story 012: the 8 gym types, in zone order
 	var gym_types: Array[String] = []
 	for z: Dictionary in run.zones:
@@ -336,9 +345,37 @@ func _show_starter_screen() -> void:
 	_starter_screen.starter_chosen.connect(_on_starter_chosen)
 	_set_screen(_starter_screen, SCREEN_STARTER)
 	_starter_screen.setup(_data, _starter_choices)
+	_starter_screen.setup_difficulty(_data.get_difficulty(), max_selectable_level(), _qa_level)  # story 026
+
+
+## Story 026: the highest difficulty level the player may choose now (PlayerStats unlock; QA override with qa_set_difficulty_level).
+func max_selectable_level() -> int:
+	var max_level: int = _data.get_difficulty().max_level
+	return clampi(maxi(_stats.highest_selectable_level(max_level), _qa_level), 0, max_level)
+
+
+## Story 026: the difficulty level of the current run (0 without a run).
+func get_difficulty_level() -> int:
+	return _run.difficulty_level if _run != null else 0
+
+
+## QA-ONLY (story 026): forces the difficulty level of the next runs (also selectable on the starter screen); -1 = off.
+func qa_set_difficulty_level(level: int) -> void:
+	if not QaGate.enabled():
+		return
+	_qa_level = _data.get_difficulty().clamp_level(level) if level >= 0 else -1
+	_chosen_level = maxi(_qa_level, 0)
+
+
+## Story 026: the prestige trim of the cards = the unlocked card frame of the best level won, unless switched off in Options.
+func _refresh_prestige_trim() -> void:
+	var frame: Dictionary = _data.get_difficulty().card_frame_for(_stats.best_level_won)
+	var on: bool = not frame.is_empty() and GameSettings.prestige_frame_enabled()
+	CardFace.set_prestige_trim(frame["color"] if on else Color(0, 0, 0, 0))
 
 
 func _on_starter_chosen(pokemon_id: String) -> void:
+	_chosen_level = _starter_screen.get_level() if _starter_screen != null else _chosen_level  # story 026
 	_begin_run(pokemon_id, _pending_act_seed)
 
 
@@ -714,6 +751,7 @@ func get_options_panel() -> OptionsPanel:
 
 
 func _on_options_changed() -> void:
+	_refresh_prestige_trim()  # story 026
 	if _battle_screen != null and is_instance_valid(_battle_screen):
 		_battle_screen.apply_settings()
 
@@ -1669,6 +1707,7 @@ func _show_run_end(victory: bool) -> void:
 	_clear_screens()
 	_end_screen = RunEndScreen.new()
 	_end_screen.new_run_requested.connect(_on_new_run_requested)
+	_end_screen.unlocked_level = _last_unlocked_level if victory else -1  # story 026
 	_set_screen(_end_screen, SCREEN_VICTORY if victory else SCREEN_DEFEAT)
 	_end_screen.setup(_data, _run, victory)
 
@@ -1930,6 +1969,7 @@ func qa_set_stats_path(path: String) -> void:
 		return
 	_stats_path = path
 	_stats = PlayerStats.load_from(path)
+	_refresh_prestige_trim()  # story 026
 
 
 ## QA-ONLY: lets the first battle of a run show the tutorial while the stats say it was never seen.
@@ -2107,7 +2147,12 @@ func _record_run_end(victory: bool) -> void:
 	_run_recorded = true
 	_stats = PlayerStats.load_from(_stats_path)
 	_stats.record_run_end(PlayerStats.result_of(_run), victory)
+	# Story 026: a full victory at level N unlocks N + 1 (global) and may unlock a prestige card frame.
+	if victory and _run.final_boss_defeated:
+		if _stats.record_level_victory(_run.difficulty_level, _data.get_difficulty().max_level):
+			_last_unlocked_level = _stats.level_unlocked
 	_stats.save()
+	_refresh_prestige_trim()
 
 
 func _mark_tutorial_done() -> void:
@@ -2299,7 +2344,7 @@ func open_pokedex() -> void:
 	_pokedex_screen = PokedexScreen.new()
 	_pokedex_screen.back_requested.connect(close_pokedex)
 	_set_screen(_pokedex_screen, SCREEN_POKEDEX)
-	_pokedex_screen.setup(_data, get_pokedex_catalog(), _pokedex, _pokedex_rewards)
+	_pokedex_screen.setup(_data, get_pokedex_catalog(), _pokedex, _pokedex_rewards, _stats)
 
 
 ## Leaves the Pokédex screen (back to the title).

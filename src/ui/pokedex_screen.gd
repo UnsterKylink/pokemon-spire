@@ -21,6 +21,9 @@ const MINI_CARD: Vector2 = Vector2(120, 142)
 const TEXT_TITLE: String = "Pokédex"
 const TEXT_COUNTERS: String = "Vus : %d   /   Capturés : %d   /   Total : %d"
 const TEXT_BACK: String = "Retour"
+## Story 026: difficulty prestige in the header (highest unlocked level, best level won).
+const TEXT_LEVEL: String = "Niveau max : %d"
+const TEXT_LEVEL_WON: String = "Niveau max : %d  ·  ★ %d vaincu"
 const TEXT_GEN: String = "Gén. %d"
 const TEXT_MILESTONES: String = "Paliers"
 const TEXT_ALL_TYPES: String = "Tous les types"
@@ -50,6 +53,7 @@ var _type_id: String = ""
 var _status: String = STATUS_ALL
 var _built: bool = false
 var _counters: Label
+var _level_label: Label
 var _gen_buttons: Array[Button] = []
 var _ms_button: Button
 var _status_buttons: Array[Button] = []
@@ -76,8 +80,15 @@ func _ready() -> void:
 
 
 ## Fills the screen. `dex` null = an empty Pokédex. Starts on generation 1, no filter, the hint in the side window.
-func setup(data: GameData, catalog: PokedexCatalog, dex: Pokedex, rewards: PokedexRewards) -> void:
+## Story 026: `stats` (optional) adds the difficulty prestige to the header.
+func setup(data: GameData, catalog: PokedexCatalog, dex: Pokedex, rewards: PokedexRewards, stats: PlayerStats = null) -> void:
 	_build()
+	var max_level: int = data.get_difficulty().max_level if data != null else 0
+	_level_label.visible = stats != null and max_level > 0
+	if _level_label.visible:
+		var unlocked: int = stats.highest_selectable_level(max_level)
+		_level_label.text = TEXT_LEVEL_WON % [unlocked, stats.best_level_won] if stats.best_level_won >= 0 \
+				else TEXT_LEVEL % unlocked
 	_data = data
 	_catalog = catalog
 	_dex = dex if dex != null else Pokedex.new()
@@ -97,6 +108,11 @@ func setup(data: GameData, catalog: PokedexCatalog, dex: Pokedex, rewards: Poked
 	(func() -> void:
 		if is_instance_valid(_grid) and _grid.is_inside_tree():
 			_grid.grab_focus()).call_deferred()
+
+
+## Story 026: header difficulty text ("" when hidden).
+func get_level_text() -> String:
+	return _level_label.text if _level_label != null and _level_label.visible else ""
 
 
 ## Header counter text (QA).
@@ -381,6 +397,12 @@ func _build() -> void:
 	_counters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_counters.add_theme_color_override("font_color", UiStyle.TEXT_DARK)
 	head_row.add_child(_counters)
+	_level_label = CardView.make_label(18)  # story 026
+	_level_label.name = "Level"
+	_level_label.add_theme_font_override("font", UiStyle.font_bold())
+	_level_label.add_theme_color_override("font_color", UiStyle.INK_GOLD)
+	_level_label.visible = false
+	head_row.add_child(_level_label)
 	_back_button = Button.new()
 	_back_button.name = "Back"
 	_back_button.text = TEXT_BACK

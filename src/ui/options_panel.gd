@@ -21,11 +21,15 @@ const TEXT_MUSIC: String = "Musique"
 const TEXT_SFX: String = "Effets"
 const TEXT_PERCENT: String = "%d %%"
 const TEXT_FULLSCREEN: String = "Plein écran"
+## Story 026: prestige card trim toggle.
+const TEXT_PRESTIGE: String = "Liseré de prestige des cartes"
+const TEXT_PRESTIGE_TIP: String = "Affiche le liseré or / platine débloqué en gagnant aux niveaux de difficulté 5 et 10 (purement visuel)."
 const TEXT_FULLSCREEN_TIP: String = "Affiche le jeu en plein écran (mémorisé pour les prochains lancements)."
 
 ## Story 022: the game's AudioManager (set by Main); null = the sliders only save the values.
 var audio: AudioManager = null
 var _type_hints: CheckButton
+var _prestige: CheckButton
 var _fullscreen: CheckButton
 var _speed_button: Button
 var _music_slider: HSlider
@@ -75,6 +79,13 @@ func _ready() -> void:
 	_fullscreen.add_theme_font_size_override("font_size", 20)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	box.add_child(_fullscreen)
+	_prestige = CheckButton.new()  # story 026
+	_prestige.name = "PrestigeFrame"
+	_prestige.text = TEXT_PRESTIGE
+	_prestige.tooltip_text = TEXT_PRESTIGE_TIP
+	_prestige.add_theme_font_size_override("font_size", 20)
+	_prestige.toggled.connect(_on_prestige_toggled)
+	box.add_child(_prestige)
 	_speed_button = Button.new()
 	_speed_button.name = "Speed"
 	_speed_button.custom_minimum_size = Vector2(320, 44)
@@ -107,6 +118,7 @@ func open() -> void:
 	size = get_viewport_rect().size  # the parent (Main) may not be a sized Control
 	_type_hints.set_pressed_no_signal(GameSettings.type_hints_enabled())
 	_fullscreen.set_pressed_no_signal(GameSettings.fullscreen_enabled())
+	_prestige.set_pressed_no_signal(GameSettings.prestige_frame_enabled())
 	_refresh_speed()
 	_music_slider.set_value_no_signal(_volume("music") * 100.0)
 	_sfx_slider.set_value_no_signal(_volume("sfx") * 100.0)
@@ -164,6 +176,16 @@ func is_fullscreen_checked() -> bool:
 
 func _on_fullscreen_toggled(on: bool) -> void:
 	GameSettings.set_fullscreen(on)
+	changed.emit()
+
+
+## Story 026, QA: sets the prestige trim option as the checkbox does.
+func set_prestige_frame(on: bool) -> void:
+	_prestige.button_pressed = on
+
+
+func _on_prestige_toggled(on: bool) -> void:
+	GameSettings.set_value(GameSettings.KEY_PRESTIGE_FRAME, on)
 	changed.emit()
 
 
